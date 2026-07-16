@@ -84,8 +84,32 @@ the full math and settlement flow.
 Ship as one PWA with role-based views first, split into native later where
 background GPS is required (rider app).
 
+## Repository layout
+
+```
+docs/                     project spec (overview, flows, data model, decisions)
+supabase/migrations/      Postgres schema, RLS, settlement functions
+packages/shared/          @ebd/shared — pricing/commission logic, types (reused by all apps)
+apps/                     frontends (added per roadmap phase)
+```
+
+## Getting started
+
+```bash
+npm install          # workspace install (Node 22+)
+npm test             # run shared-layer tests (node:test, no build step)
+npm run typecheck    # type-check the workspace
+```
+
+For the backend, see [`supabase/README.md`](supabase/README.md).
+
 ## Status
 
-This repository currently contains the **project overview and specification**.
-No application code has been scaffolded yet — see
-[docs/roadmap.md](docs/roadmap.md) for the proposed build order.
+**Phase 0 (foundations) in progress.** Done so far:
+
+- ✅ Supabase schema — enums, core tables, unified order queue, commission
+  ledger + settlement functions, RLS policies (validated against Postgres 16).
+- ✅ `@ebd/shared` — commission formula, order-cost breakdown, settlement gate,
+  and order-status state machine, with passing unit tests.
+- ⬜ Frontends (`apps/*`) — not started; see [docs/roadmap.md](docs/roadmap.md)
+  for the Padala-first build order.
