@@ -50,3 +50,40 @@ export function generatesSettlementBalance(
 ): boolean {
   return paymentMethod === 'cod' || paymentMethod === 'rider_qr';
 }
+
+/** A rider and their ledger entries, for admin-side aggregation. */
+export interface RiderLedgerGroup {
+  riderId: string;
+  riderName?: string;
+  entries: readonly LedgerEntry[];
+}
+
+/** Per-rider balance summary for the admin settlement view. */
+export interface RiderBalance {
+  riderId: string;
+  riderName?: string;
+  owed: number;
+  overdue: number;
+  /** True when the rider should be locked (has an overdue previous-day balance). */
+  locked: boolean;
+}
+
+/**
+ * Summarize each rider's owed/overdue balance and lock state as of `today`.
+ * Riders with nothing owed are omitted so the admin view lists only who owes.
+ */
+export function summarizeRiderBalances(
+  groups: readonly RiderLedgerGroup[],
+  today: string,
+): RiderBalance[] {
+  return groups
+    .map((g) => ({
+      riderId: g.riderId,
+      riderName: g.riderName,
+      owed: owedBalance(g.entries),
+      overdue: overdueBalance(g.entries, today),
+      locked: isLockedOut(g.entries, today),
+    }))
+    .filter((b) => b.owed > 0)
+    .sort((a, b) => Number(b.locked) - Number(a.locked) || b.overdue - a.overdue);
+}

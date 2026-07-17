@@ -123,8 +123,10 @@ For the backend, see [`supabase/README.md`](supabase/README.md).
 - ✅ **Rider app** — settlement lock gate, order pool + accept, per-service
   status flow, Pabili actual-amount entry, amount-to-collect, and commission
   accrual on delivery.
+- ✅ **Admin settlement management** — who owes / who's locked, and mark-paid
+  confirmation that settles the ledger and reactivates the account.
 - ⬜ **Phase 4 (payments + live tracking)** — see [docs/roadmap.md](docs/roadmap.md).
 
 Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
-`VITE_SUPABASE_ANON_KEY` are set. **50 unit tests** pass; both apps build; the
-customer flows are browser-verified.
+`VITE_SUPABASE_ANON_KEY` are set. **54 unit tests** pass; all three apps build;
+the customer, rider, and admin flows are browser-verified.

@@ -5,6 +5,7 @@ import {
   overdueBalance,
   isLockedOut,
   generatesSettlementBalance,
+  summarizeRiderBalances,
   type LedgerEntry,
 } from './settlement.ts';
 
@@ -44,4 +45,26 @@ test('only COD and rider_qr generate a settlement balance', () => {
   assert.equal(generatesSettlementBalance('cod'), true);
   assert.equal(generatesSettlementBalance('rider_qr'), true);
   assert.equal(generatesSettlementBalance('online'), false);
+});
+
+test('summarizeRiderBalances lists only who owes, locked first', () => {
+  const groups = [
+    { riderId: 'settled', riderName: 'Ana', entries: [
+      { amount: 10, businessDay: '2026-07-15', settled: true },
+    ] },
+    { riderId: 'sameday', riderName: 'Ben', entries: [
+      { amount: 8, businessDay: '2026-07-16', settled: false },
+    ] },
+    { riderId: 'overdue', riderName: 'Cy', entries: [
+      { amount: 13.5, businessDay: '2026-07-15', settled: false },
+      { amount: 6, businessDay: '2026-07-16', settled: false },
+    ] },
+  ];
+  const out = summarizeRiderBalances(groups, '2026-07-16');
+  // 'settled' is dropped (owes nothing); locked 'overdue' sorts before 'sameday'
+  assert.deepEqual(out.map((b) => b.riderId), ['overdue', 'sameday']);
+  assert.equal(out[0]!.locked, true);
+  assert.equal(out[0]!.overdue, 13.5);
+  assert.equal(out[0]!.owed, 19.5);
+  assert.equal(out[1]!.locked, false);
 });

@@ -7,8 +7,9 @@ import {
 import type { RiderApplicationStatus } from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Stores } from './Stores.tsx';
+import { Settlements } from './Settlements.tsx';
 
-type Tab = 'riders' | 'orders' | 'stores';
+type Tab = 'riders' | 'orders' | 'stores' | 'settlements';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('riders');
@@ -37,10 +38,14 @@ export function App() {
           <TabButton active={tab === 'orders'} onClick={() => setTab('orders')}>
             Live orders
           </TabButton>
+          <TabButton active={tab === 'settlements'} onClick={() => setTab('settlements')}>
+            Settlements
+          </TabButton>
         </nav>
         {tab === 'stores' && <Stores />}
         {tab === 'riders' && <RiderApplications />}
         {tab === 'orders' && <LiveOrders />}
+        {tab === 'settlements' && <Settlements />}
       </main>
     </div>
   );

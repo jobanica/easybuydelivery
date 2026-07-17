@@ -5,3 +5,4 @@ export * from './food.ts';
 export * from './stores.ts';
 export * from './riders.ts';
 export * from './settlement.ts';
+export * from './adminSettlement.ts';
