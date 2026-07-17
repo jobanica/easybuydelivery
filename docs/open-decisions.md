@@ -12,7 +12,7 @@ Track these before / while building. Recommendations noted where the spec gives 
 | 6 | **Online payment provider** | PayMongo vs Xendit vs direct GCash/Maya | ⚙️ **STRUCTURE BUILT (provider still to pick):** three methods modelled — `cod` (rider collects full, generates settlement balance), `online` (platform/delivery portion prepaid to operator; rider collects only fronted goods; **no** settlement balance), `rider_qr` (paid to rider via QR; collects nothing at door but **still** holds commission). Real PayMongo/Xendit wiring needs API keys; the rider QR encodes a placeholder `ebd://pay` payload |
 | 7 | **Rider assignment** | First-come-accept (open pool), admin-assigned, or nearest-rider auto-dispatch | Open |
 | 8 | **Customer accounts** | Full signup, or phone + OTP lightweight | **Phone + OTP** likely better for a municipality audience |
-| 9 | **Live tracking transport** | Supabase Realtime (rider lat/lng every few sec) vs lightweight websocket | **Supabase Realtime**, **3–5s** update interval. Map: Google (best PH coverage, costs per load) vs **Mapbox / Leaflet + OSM** (near-zero cost for municipality scale). Track **only during active delivery** |
+| 9 | **Live tracking transport** | Supabase Realtime (rider lat/lng every few sec) vs lightweight websocket | ⚙️ **BUILT (map tiles still to pick):** Supabase Realtime broadcast on a per-order channel, **4s** interval (`TRACKING_INTERVAL_MS`); rider publishes only in transit (auto-start on pickup, stop on delivery). Customer map is a self-contained SVG for now — swap for **Mapbox / Leaflet + OSM** (near-zero cost) or Google (best PH coverage) via the same `useTracking` feed |
 
 ## Notes on the cash-risk decisions (#4)
 

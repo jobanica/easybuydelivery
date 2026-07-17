@@ -125,8 +125,12 @@ For the backend, see [`supabase/README.md`](supabase/README.md).
   accrual on delivery.
 - ✅ **Admin settlement management** — who owes / who's locked, and mark-paid
   confirmation that settles the ledger and reactivates the account.
-- ⬜ **Phase 4 (payments + live tracking)** — see [docs/roadmap.md](docs/roadmap.md).
+- ✅ **Phase 4 (payments + live tracking)** — COD / online / rider-QR payment
+  methods with the correct settlement impact, and per-order live rider tracking
+  (Supabase Realtime transport + a live-ETA map).
+- ⬜ **Real Supabase project wiring** and production map/payment providers —
+  see [docs/open-decisions.md](docs/open-decisions.md) (#6, #9).
 
 Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
-`VITE_SUPABASE_ANON_KEY` are set. **54 unit tests** pass; all three apps build;
+`VITE_SUPABASE_ANON_KEY` are set. **63 unit tests** pass; all three apps build;
 the customer, rider, and admin flows are browser-verified.

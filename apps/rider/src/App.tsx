@@ -11,6 +11,7 @@ import {
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
+import { useLocationPublisher } from './useLocationPublisher.ts';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -171,6 +172,9 @@ function ActiveCard({ order, data, onChange }:
   const next = nextStatus(order);
   const collect = amountToCollect(order);
   const needsActual = order.service_type === 'pabili' && order.actual_amount == null;
+
+  // Share GPS to the customer's map while in transit (live mode only).
+  useLocationPublisher(order.id, order.status);
 
   async function saveActual() {
     const val = Number(amount);
