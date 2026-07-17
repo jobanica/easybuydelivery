@@ -4,7 +4,6 @@ import {
   owedBalance,
   overdueBalance,
   isLockedOut,
-  generatesSettlementBalance,
   summarizeRiderBalances,
   type LedgerEntry,
 } from './settlement.ts';
@@ -39,12 +38,6 @@ test('rider with only same-day balance is NOT locked out', () => {
 test('fully settled rider is not locked out', () => {
   const settled: LedgerEntry[] = entries.map((e) => ({ ...e, settled: true }));
   assert.equal(isLockedOut(settled, '2026-07-16'), false);
-});
-
-test('only COD and rider_qr generate a settlement balance', () => {
-  assert.equal(generatesSettlementBalance('cod'), true);
-  assert.equal(generatesSettlementBalance('rider_qr'), true);
-  assert.equal(generatesSettlementBalance('online'), false);
 });
 
 test('summarizeRiderBalances lists only who owes, locked first', () => {

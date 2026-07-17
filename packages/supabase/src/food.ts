@@ -11,6 +11,7 @@ import {
   DEFAULT_FEE_CONFIG,
   type CartLine,
   type FeeConfig,
+  type PaymentMethod,
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -22,13 +23,16 @@ export interface FoodCheckoutInput {
   deliveryLat?: number;
   deliveryLng?: number;
   notes?: string;
+  paymentMethod?: PaymentMethod;
+  paid?: boolean;
 }
 
 export interface FoodOrderRow {
   customer_id: string;
   service_type: 'food';
   status: 'pending';
-  payment_method: 'cod';
+  payment_method: PaymentMethod;
+  payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   store_fee_total: number;
   goods_cost: number;
@@ -70,7 +74,8 @@ export function buildFoodOrder(
       customer_id: input.customerId,
       service_type: 'food',
       status: 'pending',
-      payment_method: 'cod',
+      payment_method: input.paymentMethod ?? 'cod',
+      payment_status: input.paid ? 'paid' : 'unpaid',
       delivery_fee: summary.deliveryFee,
       store_fee_total: summary.storeFeeTotal,
       goods_cost: summary.goodsCost,

@@ -10,6 +10,7 @@ import {
 } from '@ebd/shared';
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
+import { Qr } from './Qr.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -132,6 +133,14 @@ const STATUS_ACTION: Record<OrderStatus, string> = {
 };
 
 function amountToCollect(o: RiderOrder): number | null {
+  // Fees prepaid online → rider collects only the goods they fronted.
+  if (o.payment_method === 'online') {
+    if (o.service_type === 'pabili') return o.actual_amount; // null until bought
+    return o.goods_cost; // food goods; 0 for padala
+  }
+  // Paid to the rider via QR → nothing collected at the door.
+  if (o.payment_method === 'rider_qr') return 0;
+  // Cash on delivery.
   if (o.service_type === 'padala') return o.delivery_fee;
   if (o.service_type === 'pabili') {
     if (o.actual_amount == null) return null; // unknown until bought
@@ -196,11 +205,22 @@ function ActiveCard({ order, data, onChange }:
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>
       )}
 
+      {/* At drop-off, show the rider QR for unpaid COD orders so the customer
+          can pay online instead of cash. */}
+      {order.payment_status !== 'paid' && order.status === 'on_the_way' && (
+        <div className="mt-3 flex flex-col items-center rounded-lg bg-black/[0.02] p-3">
+          <p className="mb-2 text-xs font-medium text-black/60">Or let the customer scan to pay</p>
+          <Qr payload={`ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+        </div>
+      )}
+
       <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
         <span className="text-sm">
-          {collect == null
-            ? <span className="text-black/50">Collect: enter actual first</span>
-            : <>Collect <span className="font-bold">{peso(collect)}</span></>}
+          {order.payment_status === 'paid'
+            ? <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
+            : collect == null
+              ? <span className="text-black/50">Collect: enter actual first</span>
+              : <>Collect <span className="font-bold">{peso(collect)}</span></>}
         </span>
         {next && (
           <button
@@ -229,7 +249,14 @@ function CardHead({ order }: { order: RiderOrder }) {
           📞 {order.customer_contact}
         </a>
       </div>
-      <span className="text-right text-xs capitalize text-black/50">{order.status.replace('_', ' ')}</span>
+      <div className="text-right">
+        <span className="block text-xs capitalize text-black/50">{order.status.replace('_', ' ')}</span>
+        {order.payment_status === 'paid' && (
+          <span className="mt-1 inline-block rounded-full bg-brand-green/15 px-2 py-0.5 text-[10px] font-semibold text-green-800">
+            PAID online
+          </span>
+        )}
+      </div>
     </div>
   );
 }

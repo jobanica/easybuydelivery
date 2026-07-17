@@ -12,6 +12,7 @@ import {
   type FeeConfig,
   type FeePayer,
   type OrderStatus,
+  type PaymentMethod,
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -24,6 +25,9 @@ export interface PadalaRequestInput {
   pickup: { lat?: number; lng?: number; contact: string };
   dropoff: { lat?: number; lng?: number; contact: string };
   notes?: string;
+  paymentMethod?: PaymentMethod;
+  /** Set when an online payment has already completed at checkout. */
+  paid?: boolean;
 }
 
 /** The row inserted into `orders` for a Padala request. */
@@ -31,7 +35,8 @@ export interface PadalaOrderRow {
   customer_id: string;
   service_type: 'padala';
   status: 'pending';
-  payment_method: 'cod';
+  payment_method: PaymentMethod;
+  payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   store_fee_total: 0;
   goods_cost: 0;
@@ -66,7 +71,8 @@ export function buildPadalaOrderRow(
     customer_id: input.customerId,
     service_type: 'padala',
     status: 'pending',
-    payment_method: 'cod',
+    payment_method: input.paymentMethod ?? 'cod',
+    payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
     store_fee_total: 0,
     goods_cost: 0,

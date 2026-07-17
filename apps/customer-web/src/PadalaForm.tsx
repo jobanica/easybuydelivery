@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { commission, type FeePayer } from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
-import { Field, Row, inputCls, peso } from './ui.tsx';
+import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 
 const DEFAULT_DELIVERY_FEE = 50;
 
@@ -14,11 +14,12 @@ interface FormState {
   dropoffContact: string;
   customerContact: string;
   notes: string;
+  pay: PayChoice;
 }
 
 const initial: FormState = {
   itemDescription: '', deliveryFee: DEFAULT_DELIVERY_FEE, feePayer: 'sender',
-  pickupContact: '', dropoffContact: '', customerContact: '', notes: '',
+  pickupContact: '', dropoffContact: '', customerContact: '', notes: '', pay: 'cod',
 };
 
 export function PadalaForm() {
@@ -46,6 +47,8 @@ export function PadalaForm() {
       pickup: { contact: form.pickupContact },
       dropoff: { contact: form.dropoffContact },
       notes: form.notes,
+      paymentMethod: form.pay === 'online' ? 'online' : 'cod',
+      paid: form.pay === 'online',
     };
   }
 
@@ -125,6 +128,7 @@ export function PadalaForm() {
         <textarea className={inputCls} rows={2} value={form.notes}
           onChange={(e) => set('notes', e.target.value)} />
       </Field>
+      <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label="Delivery fee" value={peso(form.deliveryFee)} />
         <Row label="Operator commission (15%)" value={peso(operatorCut)} muted />

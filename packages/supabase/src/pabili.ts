@@ -11,6 +11,7 @@ import {
   pabiliCommission,
   needsOverBudgetConfirmation,
   type PabiliBudget,
+  type PaymentMethod,
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,13 +28,16 @@ export interface PabiliRequestInput {
   deliveryLat?: number;
   deliveryLng?: number;
   notes?: string;
+  paymentMethod?: PaymentMethod;
+  paid?: boolean;
 }
 
 export interface PabiliOrderRow {
   customer_id: string;
   service_type: 'pabili';
   status: 'pending';
-  payment_method: 'cod';
+  payment_method: PaymentMethod;
+  payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   store_fee_total: 0;
   goods_cost: 0;
@@ -62,7 +66,8 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     customer_id: input.customerId,
     service_type: 'pabili',
     status: 'pending',
-    payment_method: 'cod',
+    payment_method: input.paymentMethod ?? 'cod',
+    payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
     store_fee_total: 0,
     goods_cost: 0, // unknown until the rider buys

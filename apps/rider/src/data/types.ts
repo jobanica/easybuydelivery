@@ -1,10 +1,12 @@
-import type { OrderStatus, ServiceType, LedgerEntry } from '@ebd/shared';
+import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod } from '@ebd/shared';
 
 /** The order shape the rider UI works with (subset of the orders row). */
 export interface RiderOrder {
   id: string;
   service_type: ServiceType;
   status: OrderStatus;
+  payment_method: PaymentMethod;
+  payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   goods_cost: number;
   commission_amount: number;

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   summarizeCart,
   distinctStoreCount,
+  collectibleAtDoor,
   MAX_STORES_PER_ORDER,
   type CartLine,
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
-import { peso } from './ui.tsx';
+import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
 
 const DELIVERY_FEE = 50;
 
@@ -20,6 +21,7 @@ export function FoodFlow() {
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +84,8 @@ export function FoodFlow() {
       customerContact: '09171234567',
       deliveryFee: DELIVERY_FEE,
       lines: cart,
+      paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
+      paid: pay === 'online',
     };
     try {
       if (supabase && isSupabaseConfigured) {
@@ -175,12 +179,18 @@ export function FoodFlow() {
             <Row label="Delivery fee" value={peso(summary.deliveryFee)} />
             {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
             <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
-              <span>Pay on delivery</span><span>{peso(summary.customerTotal)}</span>
+              <span>Total</span><span>{peso(summary.customerTotal)}</span>
             </div>
+            {pay === 'online' && (
+              <div className="mt-1 flex justify-between text-xs text-black/50">
+                <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
+              </div>
+            )}
           </div>
+          <div className="mt-4"><PaymentChoice value={pay} onChange={setPay} /></div>
           <button onClick={checkout}
             className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95">
-            Place order (COD)
+            {pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
           </button>
         </section>
       )}

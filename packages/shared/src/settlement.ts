@@ -44,13 +44,6 @@ export function isLockedOut(entries: readonly LedgerEntry[], today: string): boo
   return overdueBalance(entries, today) > 0;
 }
 
-/** Only COD and rider-QR orders put commission on the rider's books. */
-export function generatesSettlementBalance(
-  paymentMethod: 'cod' | 'online' | 'rider_qr',
-): boolean {
-  return paymentMethod === 'cod' || paymentMethod === 'rider_qr';
-}
-
 /** A rider and their ledger entries, for admin-side aggregation. */
 export interface RiderLedgerGroup {
   riderId: string;

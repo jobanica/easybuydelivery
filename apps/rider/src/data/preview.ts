@@ -1,5 +1,5 @@
 import type { LedgerEntry, OrderStatus } from '@ebd/shared';
-import { needsOverBudgetConfirmation, canTransition } from '@ebd/shared';
+import { needsOverBudgetConfirmation, canTransition, generatesSettlementBalance } from '@ebd/shared';
 import type { RiderData, RiderOrder } from './types.ts';
 
 /** YYYY-MM-DD helpers for seeding a believable ledger. */
@@ -18,6 +18,7 @@ export function createPreviewData(): RiderData {
   let open: RiderOrder[] = [
     {
       id: 'ord-food-1', service_type: 'food', status: 'pending',
+      payment_method: 'cod', payment_status: 'unpaid',
       delivery_fee: 50, goods_cost: 280, commission_amount: 7.5,
       customer_contact: '0917 111 2222', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null,
@@ -25,6 +26,7 @@ export function createPreviewData(): RiderData {
     },
     {
       id: 'ord-pabili-1', service_type: 'pabili', status: 'pending',
+      payment_method: 'cod', payment_status: 'unpaid',
       delivery_fee: 60, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
@@ -32,8 +34,9 @@ export function createPreviewData(): RiderData {
     },
     {
       id: 'ord-padala-1', service_type: 'padala', status: 'pending',
+      payment_method: 'online', payment_status: 'paid',
       delivery_fee: 40, goods_cost: 0, commission_amount: 6,
-      customer_contact: '0917 555 6666', item_description: 'Documents envelope',
+      customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null,
       store_contact: null,
     },
@@ -61,7 +64,11 @@ export function createPreviewData(): RiderData {
       }
       if (next === 'delivered') {
         active = active.filter((x) => x.id !== order.id);
-        ledger.push({ amount: order.commission_amount, businessDay: isoDay(0), settled: false });
+        // Online-paid orders don't add to the rider's books — the operator
+        // already holds its commission.
+        if (generatesSettlementBalance(order.payment_method)) {
+          ledger.push({ amount: order.commission_amount, businessDay: isoDay(0), settled: false });
+        }
       } else {
         active = active.map((x) => (x.id === order.id ? { ...x, status: next } : x));
       }

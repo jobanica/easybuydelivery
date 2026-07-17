@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { pabiliCommission, validateBudget } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
-import { Field, Row, inputCls, peso } from './ui.tsx';
+import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 
 interface FormState {
   itemsDescription: string;
@@ -12,11 +12,12 @@ interface FormState {
   deliveryFee: number;
   customerContact: string;
   notes: string;
+  pay: PayChoice;
 }
 
 const initial: FormState = {
   itemsDescription: '', where: '', estimate: 300, cap: 400,
-  deliveryFee: 50, customerContact: '', notes: '',
+  deliveryFee: 50, customerContact: '', notes: '', pay: 'cod',
 };
 
 export function PabiliForm() {
@@ -42,6 +43,8 @@ export function PabiliForm() {
       cap: form.cap,
       where: form.where,
       notes: form.notes,
+      paymentMethod: form.pay === 'online' ? 'online' : 'cod',
+      paid: form.pay === 'online',
     };
   }
 
@@ -125,6 +128,7 @@ export function PabiliForm() {
         <textarea className={inputCls} rows={2} value={form.notes}
           onChange={(e) => set('notes', e.target.value)} />
       </Field>
+      <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
 
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label="Estimated goods" value={peso(form.estimate)} />
