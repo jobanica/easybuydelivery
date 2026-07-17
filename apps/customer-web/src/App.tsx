@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { isSupabaseConfigured } from './lib/supabase.ts';
 import { PadalaForm } from './PadalaForm.tsx';
+import { PabiliForm } from './PabiliForm.tsx';
 import { FoodFlow } from './FoodFlow.tsx';
 
-type Service = 'food' | 'padala';
+type Service = 'food' | 'pabili' | 'padala';
 
 export function App() {
   const [service, setService] = useState<Service>('food');
@@ -19,6 +20,7 @@ export function App() {
       <div className="mx-auto max-w-xl px-5">
         <nav className="mt-4 flex gap-2">
           <ServiceTab active={service === 'food'} onClick={() => setService('food')}>Order Food</ServiceTab>
+          <ServiceTab active={service === 'pabili'} onClick={() => setService('pabili')}>Pabili</ServiceTab>
           <ServiceTab active={service === 'padala'} onClick={() => setService('padala')}>Send Padala</ServiceTab>
         </nav>
       </div>
@@ -29,7 +31,9 @@ export function App() {
             Preview mode — set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to place real orders.
           </p>
         )}
-        {service === 'food' ? <FoodFlow /> : <PadalaForm />}
+        {service === 'food' && <FoodFlow />}
+        {service === 'pabili' && <PabiliForm />}
+        {service === 'padala' && <PadalaForm />}
       </main>
     </div>
   );

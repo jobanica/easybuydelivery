@@ -115,9 +115,11 @@ For the backend, see [`supabase/README.md`](supabase/README.md).
   form + admin rider-approval / live-orders.
 - ✅ **Phase 2 (Food)** — admin store/menu management with per-merchant on/off
   toggle, and the customer multi-store cart with ₱25/store fee math.
-- ⬜ **Rider app** and **Phase 3 (Pabili)** / payments — see
+- ✅ **Phase 3 (Pabili)** — buy-anything request with estimate + spending cap,
+  the rider actual-amount update, and confirm-at-cap over-budget handling.
+- ⬜ **Rider app** and **Phase 4 (payments + live tracking)** — see
   [docs/roadmap.md](docs/roadmap.md).
 
 Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
-`VITE_SUPABASE_ANON_KEY` are set. **39 unit tests** pass; both apps build; the
+`VITE_SUPABASE_ANON_KEY` are set. **50 unit tests** pass; both apps build; the
 customer flows are browser-verified.

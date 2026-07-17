@@ -8,7 +8,7 @@ Track these before / while building. Recommendations noted where the spec gives 
 | 2 | **Convenience fee treatment** | Inside the 15% base, or flat pass-through to admin | **Flat pass-through** (simpler, more common) unless operator says otherwise |
 | 3 | **Delivery fee model** | Flat, per-km, or per-zone | Open — affects both the customer quote and the 15% math |
 | 4 | **Rider float / cash risk** | — | Define: **daily cutoff time** for settlement; **settlement method** (GCash/cash/bank) + manual-confirm vs auto-verify; **cancellation/no-show policy** (rider out real cash if customer cancels after pickup or refuses at door) |
-| 5 | **Pabili over-budget** | — | Define the rule when actual cost exceeds the customer's cap (confirm with customer / buffer / rider absorbs) |
+| 5 | **Pabili over-budget** | — | ✅ **IMPLEMENTED (confirm at cap):** the estimate→cap gap is the buffer; the rider may spend up to the **cap** without asking. Actual **over the cap** flags `overCap` so the app prompts for customer confirmation before collecting. Confirm the exact confirmation UX with the operator |
 | 6 | **Online payment provider** | PayMongo vs Xendit vs direct GCash/Maya | Also: rider QR — personal GCash/Maya QR **or** platform-generated QR routing to operator? Big difference — **decides who the money lands on first** and whether commission stays off the rider's books |
 | 7 | **Rider assignment** | First-come-accept (open pool), admin-assigned, or nearest-rider auto-dispatch | Open |
 | 8 | **Customer accounts** | Full signup, or phone + OTP lightweight | **Phone + OTP** likely better for a municipality audience |
