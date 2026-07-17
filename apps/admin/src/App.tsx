@@ -6,8 +6,9 @@ import {
 } from '@ebd/supabase';
 import type { RiderApplicationStatus } from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { Stores } from './Stores.tsx';
 
-type Tab = 'riders' | 'orders';
+type Tab = 'riders' | 'orders' | 'stores';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('riders');
@@ -27,6 +28,9 @@ export function App() {
           </p>
         )}
         <nav className="mb-5 flex gap-2">
+          <TabButton active={tab === 'stores'} onClick={() => setTab('stores')}>
+            Stores &amp; menus
+          </TabButton>
           <TabButton active={tab === 'riders'} onClick={() => setTab('riders')}>
             Rider applications
           </TabButton>
@@ -34,7 +38,9 @@ export function App() {
             Live orders
           </TabButton>
         </nav>
-        {tab === 'riders' ? <RiderApplications /> : <LiveOrders />}
+        {tab === 'stores' && <Stores />}
+        {tab === 'riders' && <RiderApplications />}
+        {tab === 'orders' && <LiveOrders />}
       </main>
     </div>
   );

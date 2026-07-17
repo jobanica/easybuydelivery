@@ -105,11 +105,19 @@ For the backend, see [`supabase/README.md`](supabase/README.md).
 
 ## Status
 
-**Phase 0 (foundations) in progress.** Done so far:
+**Phases 0–2 landed.** Done so far:
 
-- ✅ Supabase schema — enums, core tables, unified order queue, commission
-  ledger + settlement functions, RLS policies (validated against Postgres 16).
-- ✅ `@ebd/shared` — commission formula, order-cost breakdown, settlement gate,
-  and order-status state machine, with passing unit tests.
-- ⬜ Frontends (`apps/*`) — not started; see [docs/roadmap.md](docs/roadmap.md)
-  for the Padala-first build order.
+- ✅ **Phase 0** — Supabase schema (enums, core tables, unified order queue,
+  commission ledger + settlement functions, RLS; validated against Postgres 16)
+  and `@ebd/shared` (commission formula, order-cost + cart math, settlement
+  gate, order-status state machine).
+- ✅ **Phase 1 (Padala)** — `@ebd/supabase` data layer + customer web request
+  form + admin rider-approval / live-orders.
+- ✅ **Phase 2 (Food)** — admin store/menu management with per-merchant on/off
+  toggle, and the customer multi-store cart with ₱25/store fee math.
+- ⬜ **Rider app** and **Phase 3 (Pabili)** / payments — see
+  [docs/roadmap.md](docs/roadmap.md).
+
+Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
+`VITE_SUPABASE_ANON_KEY` are set. **39 unit tests** pass; both apps build; the
+customer flows are browser-verified.

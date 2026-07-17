@@ -1,0 +1,151 @@
+import { useEffect, useState } from 'react';
+import {
+  listAllStores,
+  createStore,
+  setStoreAvailability,
+  listMenu,
+  createMenuItem,
+  setMenuItemAvailability,
+} from '@ebd/supabase';
+import { supabase } from './lib/supabase.ts';
+
+interface StoreRow {
+  id: string;
+  name: string;
+  category: string | null;
+  contact_number: string | null;
+  is_available: boolean;
+}
+interface ItemRow { id: string; name: string; price: number; is_available: boolean }
+
+export function Stores() {
+  const [rows, setRows] = useState<StoreRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  // New-store form
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [contact, setContact] = useState('');
+
+  async function load() {
+    if (!supabase) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      setRows((await listAllStores(supabase)) as StoreRow[]);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function addStore(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !name.trim()) return;
+    await createStore(supabase, { name: name.trim(), category: category.trim() || undefined, contactNumber: contact.trim() || undefined });
+    setName(''); setCategory(''); setContact('');
+    await load();
+  }
+
+  async function toggle(id: string, available: boolean) {
+    if (!supabase) return;
+    await setStoreAvailability(supabase, id, available);
+    await load();
+  }
+
+  if (loading) return <Muted>Loading…</Muted>;
+
+  return (
+    <div className="space-y-5">
+      <form onSubmit={addStore} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <h3 className="mb-3 font-semibold">Add a store</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <input className={inp} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input className={inp} placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <input className={inp} placeholder="Contact #" value={contact} onChange={(e) => setContact(e.target.value)} />
+        </div>
+        <button className="mt-3 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white" disabled={!supabase}>
+          Add store
+        </button>
+        {!supabase && <span className="ml-3 text-xs text-black/40">Connect Supabase to add stores.</span>}
+      </form>
+
+      {error && <ErrorNote msg={error} />}
+      {rows.length === 0 && !error && <Muted>No stores yet.</Muted>}
+
+      <div className="space-y-3">
+        {rows.map((s) => (
+          <div key={s.id} className="rounded-xl bg-white shadow-sm ring-1 ring-black/5">
+            <div className="flex items-center justify-between p-4">
+              <button className="text-left" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
+                <span className="font-medium">{s.name}</span>
+                <span className="ml-2 text-xs text-black/40">{s.category ?? '—'}</span>
+              </button>
+              <label className="flex items-center gap-2 text-sm">
+                <span className={s.is_available ? 'text-green-700' : 'text-black/40'}>
+                  {s.is_available ? 'Open' : 'Off'}
+                </span>
+                <input type="checkbox" checked={s.is_available} onChange={(e) => toggle(s.id, e.target.checked)} />
+              </label>
+            </div>
+            {openId === s.id && <MenuEditor storeId={s.id} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MenuEditor({ storeId }: { storeId: string }) {
+  const [items, setItems] = useState<ItemRow[]>([]);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+
+  async function load() {
+    if (!supabase) return;
+    const menu = await listMenu(supabase, storeId, false);
+    setItems(menu.items as ItemRow[]);
+  }
+  useEffect(() => { void load(); }, [storeId]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !name.trim()) return;
+    await createMenuItem(supabase, { storeId, name: name.trim(), price: Number(price) || 0 });
+    setName(''); setPrice('');
+    await load();
+  }
+
+  return (
+    <div className="border-t border-black/5 bg-black/[0.015] p-4">
+      <ul className="mb-3 divide-y divide-black/5">
+        {items.map((it) => (
+          <li key={it.id} className="flex items-center justify-between py-1.5 text-sm">
+            <span>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
+            <label className="flex items-center gap-1 text-xs text-black/50">
+              available
+              <input type="checkbox" checked={it.is_available}
+                onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
+            </label>
+          </li>
+        ))}
+        {items.length === 0 && <li className="py-1.5 text-xs text-black/40">No items yet.</li>}
+      </ul>
+      <form onSubmit={add} className="flex gap-2">
+        <input className={inp + ' flex-1'} placeholder="Item name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className={inp + ' w-24'} placeholder="Price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
+        <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add item</button>
+      </form>
+    </div>
+  );
+}
+
+const inp = 'rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green';
+const Muted = ({ children }: { children: React.ReactNode }) =>
+  <p className="rounded-xl bg-white p-6 text-sm text-black/50 shadow-sm ring-1 ring-black/5">{children}</p>;
+const ErrorNote = ({ msg }: { msg: string }) =>
+  <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-200">{msg}</p>;
