@@ -1,0 +1,29 @@
+import type { OrderStatus, ServiceType, LedgerEntry } from '@ebd/shared';
+
+/** The order shape the rider UI works with (subset of the orders row). */
+export interface RiderOrder {
+  id: string;
+  service_type: ServiceType;
+  status: OrderStatus;
+  delivery_fee: number;
+  goods_cost: number;
+  commission_amount: number;
+  customer_contact: string;
+  item_description: string | null;
+  estimated_amount: number | null;
+  budget_cap: number | null;
+  actual_amount: number | null;
+  store_contact: string | null;
+}
+
+/** Abstraction the UI depends on — implemented for live Supabase and preview. */
+export interface RiderData {
+  readonly live: boolean;
+  getOpenOrders(): Promise<RiderOrder[]>;
+  getActiveOrders(): Promise<RiderOrder[]>;
+  getLedger(): Promise<LedgerEntry[]>;
+  accept(orderId: string): Promise<void>;
+  advance(order: RiderOrder, next: OrderStatus): Promise<void>;
+  setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
+  settle(businessDay: string, amount: number): Promise<void>;
+}

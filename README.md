@@ -89,8 +89,11 @@ background GPS is required (rider app).
 ```
 docs/                     project spec (overview, flows, data model, decisions)
 supabase/migrations/      Postgres schema, RLS, settlement functions
-packages/shared/          @ebd/shared — pricing/commission logic, types (reused by all apps)
-apps/                     frontends (added per roadmap phase)
+packages/shared/          @ebd/shared — pricing/commission/cart/settlement logic + types
+packages/supabase/        @ebd/supabase — data-access layer over supabase-js
+apps/customer-web/        customer ordering (Food / Pabili / Padala)
+apps/rider/               rider app (pool, delivery flow, settlement gate)
+apps/admin/               operator dashboard (stores, riders, orders)
 ```
 
 ## Getting started
@@ -117,8 +120,10 @@ For the backend, see [`supabase/README.md`](supabase/README.md).
   toggle, and the customer multi-store cart with ₱25/store fee math.
 - ✅ **Phase 3 (Pabili)** — buy-anything request with estimate + spending cap,
   the rider actual-amount update, and confirm-at-cap over-budget handling.
-- ⬜ **Rider app** and **Phase 4 (payments + live tracking)** — see
-  [docs/roadmap.md](docs/roadmap.md).
+- ✅ **Rider app** — settlement lock gate, order pool + accept, per-service
+  status flow, Pabili actual-amount entry, amount-to-collect, and commission
+  accrual on delivery.
+- ⬜ **Phase 4 (payments + live tracking)** — see [docs/roadmap.md](docs/roadmap.md).
 
 Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
 `VITE_SUPABASE_ANON_KEY` are set. **50 unit tests** pass; both apps build; the
