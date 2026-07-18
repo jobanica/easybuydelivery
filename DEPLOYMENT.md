@@ -43,7 +43,61 @@ cd apps/<app>/dist && vercel deploy --prod --yes
 
 `vercel.json` in each app adds an SPA rewrite so any path serves `index.html`.
 
-### Notes / current limits
+## Google Play Store (Android)
+
+The Play Store only accepts signed Android App Bundles (`.aab`) — you wrap each
+web app in a native shell. Two shells, matched to each app's needs.
+
+### Prerequisites (one-time, account-bound)
+
+- **Google Play Developer account** — $25 one-time at play.google.com/console.
+- **Signing key** — generate a keystore (or use Play App Signing); keep it safe.
+- **Privacy policy URL**, Data safety form (location + phone), content rating.
+
+### Customer app → TWA (wraps the installable PWA)
+
+The customer app is a full PWA (manifest + service worker + icons). Wrap it with
+[Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap):
+
+```bash
+npm i -g @bubblewrap/cli
+bubblewrap init --manifest https://ebd-customer-web.vercel.app/manifest.webmanifest
+bubblewrap build          # produces app-release-signed.aab
+```
+
+Then publish `/.well-known/assetlinks.json` on the domain with the **SHA-256
+fingerprint** of your signing key (template committed at
+`apps/customer-web/public/.well-known/assetlinks.json` — replace the placeholder,
+package `com.easybuydelivery.customer`). This removes the browser URL bar.
+
+### Rider app → Capacitor (native, background GPS)
+
+The rider app is wrapped with Capacitor (`apps/rider/android/`), appId
+`com.easybuydelivery.rider`. It needs background location, which a TWA can't do.
+
+```bash
+cd apps/rider
+npm run build && npx cap sync android
+npx cap open android      # Android Studio: Build > Generate Signed Bundle / AAB
+```
+
+The manifest already declares `ACCESS_FINE_LOCATION`,
+`ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION`, and
+`POST_NOTIFICATIONS`. **`useLocationPublisher`** uses the Capacitor Geolocation
+plugin on native and the browser API on web.
+
+- ⚠️ **Background location review:** Google reviews `ACCESS_BACKGROUND_LOCATION`
+  strictly — justify it with the live delivery-tracking use case and usually
+  submit a short screen recording. Budget extra review time.
+- For app-closed tracking (not just backgrounded), add a foreground-service
+  background-geolocation plugin; the current setup covers foreground/backgrounded.
+
+### Upload
+
+Play Console → create app → complete the forms → upload the `.aab` to an internal
+testing track → promote to production after review.
+
+## Notes / current limits
 
 - The apps are browsable (public store/menu reads) but **placing orders needs an
   authenticated customer** — the signup/OTP flow (open decision #8) is not built
