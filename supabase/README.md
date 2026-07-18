@@ -12,15 +12,25 @@ RLS, and helper functions described in [`../docs/data-model.md`](../docs/data-mo
 | `0003_orders.sql` | Unified order queue, items, status events, payments, rider locations, 3-store trigger |
 | `0004_settlement.sql` | Commission ledger, settlements, owed/overdue balance functions |
 | `0005_rls.sql` | Row Level Security policies + `is_admin()` / `current_rider_id()` / `current_customer_id()` helpers |
+| `0006_grants.sql` | Table/sequence/routine GRANTs to the Supabase API roles (`anon`, `authenticated`, `service_role`) so PostgREST can reach the tables (RLS still governs which rows) |
 
 ## Applying
 
 With the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
 ```bash
-supabase start          # local stack
-supabase db reset       # apply all migrations to the local db
+supabase start          # local stack (Docker); applies all migrations
+supabase db reset       # re-apply all migrations to the local db
 ```
+
+In a constrained/CI environment you can skip the services you don't need:
+
+```bash
+supabase start -x edge-runtime,studio,imgproxy,inbucket,vector,supavisor
+```
+
+After `supabase start`, point the apps at the printed `API_URL` and `ANON_KEY`
+via each app's `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
 
 Against a linked remote project:
 
