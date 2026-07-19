@@ -42,3 +42,16 @@ export function composeStoreOrderSms(order: StoreOrderSms): string {
 export function smsSegments(body: string): number {
   return Math.max(1, Math.ceil(body.length / 160));
 }
+
+/**
+ * Normalize a PH mobile number to MSISDN form `639XXXXXXXXX` (digits only, no
+ * '+') — what most PH SMS gateways (iSMS/BulkSMS PH, Semaphore) expect.
+ * Accepts `09xx…`, `+639xx…`, `639xx…`, or `9xx…`.
+ */
+export function normalizePhMobile(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('63')) return digits;
+  if (digits.startsWith('0')) return '63' + digits.slice(1);
+  if (digits.startsWith('9') && digits.length === 10) return '63' + digits;
+  return digits;
+}

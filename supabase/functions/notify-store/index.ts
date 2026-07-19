@@ -4,18 +4,19 @@
 // app_settings.sms_notify_stores and only fires for food orders where the store
 // has a contact number.
 //
-// Wire as a Database Webhook on `orders` INSERT. Secrets:
-//   supabase secrets set SEMAPHORE_API_KEY=...      # https://semaphore.co
-//   supabase secrets set SEMAPHORE_SENDER_NAME=EasyBuy   # optional
+// Wire as a Database Webhook on `orders` INSERT. Secrets depend on SMS_PROVIDER
+// (see _shared/sms.ts) — e.g. for BulkSMS Philippines (iSMS):
+//   supabase secrets set SMS_PROVIDER=bulksms_ph
+//   supabase secrets set BULKSMS_PH_USERNAME=... BULKSMS_PH_PASSWORD=... BULKSMS_PH_SENDER=EasyBuy
 //   SUPABASE_SERVICE_ROLE_KEY is injected automatically.
 //
 // Deploy:  supabase functions deploy notify-store
 //
 // Runs on Supabase's edge runtime (Deno) — not the local dev stack used for this
-// repo's verification. Message text comes from @ebd/shared composeStoreOrderSms;
-// this file inlines the same format to stay dependency-free in Deno.
+// repo's verification. Message text mirrors @ebd/shared composeStoreOrderSms.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { sendSms } from '../_shared/sms.ts';
 
 function composeStoreOrderSms(storeName: string, items: { name: string; qty: number }[], customerContact?: string, notes?: string) {
   const parts = [`Easy Buy Delivery order for ${storeName}:`, ...items.map((i) => `${i.qty}x ${i.name}`)];
@@ -35,9 +36,6 @@ Deno.serve(async (req) => {
   // Respect the admin toggle.
   const { data: settings } = await db.from('app_settings').select('sms_notify_stores').single();
   if (!settings?.sms_notify_stores) return new Response('disabled', { status: 200 });
-
-  const apiKey = Deno.env.get('SEMAPHORE_API_KEY');
-  if (!apiKey) return new Response('SEMAPHORE_API_KEY not set', { status: 500 });
 
   // Line items tagged with their store.
   const { data: items } = await db
@@ -67,17 +65,8 @@ Deno.serve(async (req) => {
       order.customer_contact,
       order.notes,
     );
-    const res = await fetch('https://api.semaphore.co/api/v4/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apikey: apiKey,
-        number: store.contact_number,
-        message: body,
-        sendername: Deno.env.get('SEMAPHORE_SENDER_NAME') ?? undefined,
-      }),
-    });
-    if (res.ok) sent++;
+    const result = await sendSms([store.contact_number], body);
+    if (result.ok) sent++;
   }
 
   return new Response(JSON.stringify({ sent }), { headers: { 'Content-Type': 'application/json' } });

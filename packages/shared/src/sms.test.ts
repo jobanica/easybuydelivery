@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { composeStoreOrderSms, smsSegments } from './sms.ts';
+import { composeStoreOrderSms, smsSegments, normalizePhMobile } from './sms.ts';
 
 test('composes a store order SMS with items', () => {
   const body = composeStoreOrderSms({
@@ -35,4 +35,11 @@ test('smsSegments counts 160-char segments', () => {
   assert.equal(smsSegments('short'), 1);
   assert.equal(smsSegments('a'.repeat(160)), 1);
   assert.equal(smsSegments('a'.repeat(161)), 2);
+});
+
+test('normalizePhMobile produces 639XXXXXXXXX', () => {
+  assert.equal(normalizePhMobile('0917 123 4567'), '639171234567');
+  assert.equal(normalizePhMobile('+639171234567'), '639171234567');
+  assert.equal(normalizePhMobile('639171234567'), '639171234567');
+  assert.equal(normalizePhMobile('9171234567'), '639171234567');
 });

@@ -141,9 +141,46 @@ supabase functions deploy notify-store
 ```
 
 `supabase/functions/notify-store` groups `order_items` by `store_id`, composes
-the message (`composeStoreOrderSms` in `@ebd/shared`), and sends via Semaphore to
-each store's `contact_number` (stores without a number are skipped — the rider
-still calls). Only fires for food orders when the toggle is on.
+the message (`composeStoreOrderSms` in `@ebd/shared`), and sends to each store's
+`contact_number` via the configured provider (stores without a number are skipped
+— the rider still calls). Only fires for food orders when the toggle is on.
+
+## SMS provider (bulk-capable)
+
+SMS goes through a provider-agnostic sender (`supabase/functions/_shared/sms.ts`)
+selected by `SMS_PROVIDER`. Both providers support bulk (many recipients per
+request), and numbers are normalized to `639XXXXXXXXX`.
+
+**BulkSMS Philippines (iSMS gateway)** — up to 300 numbers/request:
+
+```bash
+supabase secrets set SMS_PROVIDER=bulksms_ph
+supabase secrets set BULKSMS_PH_USERNAME=<user> BULKSMS_PH_PASSWORD=<pass>
+supabase secrets set BULKSMS_PH_SENDER=EasyBuy   # optional, ≤11 chars, must be registered
+```
+
+**Semaphore** — comma-separated bulk:
+
+```bash
+supabase secrets set SMS_PROVIDER=semaphore SEMAPHORE_API_KEY=<key> SEMAPHORE_SENDER_NAME=EasyBuy
+```
+
+### Bulk broadcast (announcements / promos)
+
+`supabase/functions/broadcast-sms` sends one message to an audience in bulk,
+protected by a shared secret:
+
+```bash
+supabase secrets set BROADCAST_SECRET=<random>
+supabase functions deploy broadcast-sms
+# send:
+curl -X POST "$SUPABASE_URL/functions/v1/broadcast-sms" \
+  -H "x-broadcast-secret: <secret>" -H "Content-Type: application/json" \
+  -d '{"message":"We are open! Order now.","audience":"customers"}'
+```
+
+Audience can be `customers`, `riders`, `stores`, or an explicit `numbers` array.
+Respect consent/opt-out before broadcasting to customers.
 
 ## Authentication (phone OTP)
 
