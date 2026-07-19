@@ -47,6 +47,7 @@ export interface BuiltFoodOrder {
   order: FoodOrderRow;
   storeIds: string[];
   items: {
+    store_id: string;
     menu_item_id: string | null;
     name: string;
     qty: number;
@@ -87,6 +88,7 @@ export function buildFoodOrder(
     },
     storeIds: [...new Set(input.lines.map((l) => l.storeId))],
     items: input.lines.map((l) => ({
+      store_id: l.storeId,
       menu_item_id: l.menuItemId ?? null,
       name: l.name,
       qty: l.qty,

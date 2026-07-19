@@ -29,6 +29,12 @@ test('collects distinct store links', () => {
   assert.deepEqual(built.storeIds.sort(), ['A', 'B']);
 });
 
+test('tags each line item with its store for per-store SMS', () => {
+  const built = buildFoodOrder(base);
+  assert.equal(built.items.find((i) => i.name === 'Burger')!.store_id, 'A');
+  assert.equal(built.items.find((i) => i.name === 'Milk tea')!.store_id, 'B');
+});
+
 test('line items carry option-adjusted unit price', () => {
   const built = buildFoodOrder(base);
   const burger = built.items.find((i) => i.name === 'Burger')!;

@@ -125,6 +125,26 @@ The function (`supabase/functions/notify-riders`) reads approved/unlocked riders
 tokens and pushes the order summary. Adjust the audience query to your
 rider-assignment model (open decision #7).
 
+## Store SMS on a new order (optional)
+
+Text each store its items when a food order comes in — complements the rider
+call, off by default (preserves the no-merchant-onboarding model).
+
+```bash
+# enable the toggle
+update app_settings set sms_notify_stores = true;
+# secrets
+supabase secrets set SEMAPHORE_API_KEY=<key>       # https://semaphore.co
+supabase secrets set SEMAPHORE_SENDER_NAME=EasyBuy # optional, must be registered
+supabase functions deploy notify-store
+# Dashboard → Database → Webhooks: on orders INSERT → call notify-store
+```
+
+`supabase/functions/notify-store` groups `order_items` by `store_id`, composes
+the message (`composeStoreOrderSms` in `@ebd/shared`), and sends via Semaphore to
+each store's `contact_number` (stores without a number are skipped — the rider
+still calls). Only fires for food orders when the toggle is on.
+
 ## Authentication (phone OTP)
 
 Both apps gate real actions behind Supabase Auth phone OTP:
