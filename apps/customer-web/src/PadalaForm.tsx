@@ -3,6 +3,7 @@ import { commission, type FeePayer } from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { useAuth } from './auth/AuthContext.tsx';
 
 const DEFAULT_DELIVERY_FEE = 50;
 
@@ -23,6 +24,7 @@ const initial: FormState = {
 };
 
 export function PadalaForm() {
+  const { customerId } = useAuth();
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export function PadalaForm() {
 
   function toInput(): PadalaRequestInput {
     return {
-      customerId: 'preview-customer',
+      customerId: customerId ?? 'preview-customer',
       customerContact: form.customerContact,
       deliveryFee: form.deliveryFee,
       feePayer: form.feePayer,

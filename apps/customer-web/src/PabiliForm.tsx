@@ -3,6 +3,7 @@ import { pabiliCommission, validateBudget } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { useAuth } from './auth/AuthContext.tsx';
 
 interface FormState {
   itemsDescription: string;
@@ -21,6 +22,7 @@ const initial: FormState = {
 };
 
 export function PabiliForm() {
+  const { customerId } = useAuth();
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function PabiliForm() {
 
   function toInput(): PabiliRequestInput {
     return {
-      customerId: 'preview-customer',
+      customerId: customerId ?? 'preview-customer',
       customerContact: form.customerContact,
       deliveryFee: form.deliveryFee,
       itemsDescription: form.itemsDescription,

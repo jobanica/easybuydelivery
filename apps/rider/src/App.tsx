@@ -17,10 +17,9 @@ import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
 
 const today = new Date().toISOString().slice(0, 10);
-const RIDER_ID = import.meta.env.VITE_RIDER_ID as string | undefined;
 
-export function App() {
-  const [data] = useState<RiderData>(() => makeRiderData());
+export function App({ riderId }: { riderId?: string } = {}) {
+  const [data] = useState<RiderData>(() => makeRiderData(riderId));
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [open, setOpen] = useState<RiderOrder[]>([]);
   const [active, setActive] = useState<RiderOrder[]>([]);
@@ -40,7 +39,7 @@ export function App() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   // Register for push (native) so incoming orders reach the rider app-closed.
-  usePushRegistration(RIDER_ID);
+  usePushRegistration(riderId);
 
   // Live: new orders entering the pool while the app is open.
   useEffect(() => {

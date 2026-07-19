@@ -125,6 +125,23 @@ The function (`supabase/functions/notify-riders`) reads approved/unlocked riders
 tokens and pushes the order summary. Adjust the audience query to your
 rider-assignment model (open decision #7).
 
+## Authentication (phone OTP)
+
+Both apps gate real actions behind Supabase Auth phone OTP:
+
+- Customer: `AuthGate` → sign in → `ensureCustomer` → orders use the authenticated
+  customer id (RLS-permitted).
+- Rider: `RiderGate` → sign in → `ensureRider` (application `pending`) → the app
+  unlocks once an admin approves; the pool is RLS-filtered to the signed-in rider.
+
+**Enable it in production:** configure an SMS provider (Dashboard → Authentication
+→ Providers → Phone; e.g. Twilio). Without a provider, OTP codes can't be
+delivered. Email OTP works with the built-in mailer if you prefer email sign-in.
+
+> The public customer deploy currently runs the **pre-auth build** (browsable
+> without sign-in) so it's demoable before an SMS provider is set up. Redeploy the
+> auth build once the provider is configured.
+
 ## Notes / current limits
 
 - The apps are browsable (public store/menu reads) but **placing orders needs an

@@ -10,6 +10,7 @@ import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder } from '
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
 
@@ -17,6 +18,7 @@ interface MenuItem { id: string; name: string; price: number; description?: stri
 interface Store { id: string; name: string; category: string; items: MenuItem[] }
 
 export function FoodFlow() {
+  const { customerId, mobile } = useAuth();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
@@ -80,8 +82,8 @@ export function FoodFlow() {
   async function checkout() {
     setError(null);
     const input = {
-      customerId: 'preview-customer',
-      customerContact: '09171234567',
+      customerId: customerId ?? 'preview-customer',
+      customerContact: mobile || '09171234567',
       deliveryFee: DELIVERY_FEE,
       lines: cart,
       paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
