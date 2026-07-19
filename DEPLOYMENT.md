@@ -89,8 +89,12 @@ plugin on native and the browser API on web.
 - ⚠️ **Background location review:** Google reviews `ACCESS_BACKGROUND_LOCATION`
   strictly — justify it with the live delivery-tracking use case and usually
   submit a short screen recording. Budget extra review time.
-- For app-closed tracking (not just backgrounded), add a foreground-service
-  background-geolocation plugin; the current setup covers foreground/backgrounded.
+- **App-closed tracking is wired** via `@capacitor-community/background-geolocation`.
+  On native, `useLocationPublisher` starts a foreground-service watcher (persistent
+  notification) that keeps streaming location to the order's Realtime channel even
+  when the app is backgrounded or closed; the web build polls in the foreground.
+  The watcher auto-starts on pickup and stops on delivery, so location is never
+  shared while idle.
 
 ### Upload
 

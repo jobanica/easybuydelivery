@@ -35,25 +35,48 @@ export function subscribeRiderLocation(
  * provided position source (e.g. navigator.geolocation). Returns a stop fn.
  * Auto-start on pickup, stop on delivery.
  */
+export interface LocationChannel {
+  /** Broadcast one location ping to subscribers. */
+  publish(pos: LatLng): Promise<void>;
+  /** Close the channel. */
+  close(): void;
+}
+
+/**
+ * Open a per-order broadcast channel to publish rider locations on. Use this
+ * directly when locations arrive as a stream (e.g. a native background-location
+ * watcher); use startPublishingLocation for interval polling.
+ */
+export function openLocationChannel(db: SupabaseClient, orderId: string): LocationChannel {
+  const channel = db.channel(channelName(orderId));
+  channel.subscribe();
+  return {
+    async publish(pos: LatLng) {
+      await channel.send({
+        type: 'broadcast',
+        event: EVENT,
+        payload: { ...pos, at: Date.now() } satisfies LocationPing,
+      });
+    },
+    close() {
+      void db.removeChannel(channel);
+    },
+  };
+}
+
 export function startPublishingLocation(
   db: SupabaseClient,
   orderId: string,
   getPosition: () => Promise<LatLng>,
   intervalMs: number = TRACKING_INTERVAL_MS,
 ): () => void {
-  const channel = db.channel(channelName(orderId));
-  channel.subscribe();
+  const chan = openLocationChannel(db, orderId);
   let stopped = false;
 
   const tick = async () => {
     if (stopped) return;
     try {
-      const pos = await getPosition();
-      await channel.send({
-        type: 'broadcast',
-        event: EVENT,
-        payload: { ...pos, at: Date.now() } satisfies LocationPing,
-      });
+      await chan.publish(await getPosition());
     } catch {
       // transient position/broadcast error — skip this tick
     }
@@ -64,7 +87,7 @@ export function startPublishingLocation(
   return () => {
     stopped = true;
     clearInterval(timer);
-    void db.removeChannel(channel);
+    chan.close();
   };
 }
 

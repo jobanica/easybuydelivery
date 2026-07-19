@@ -1,44 +1,86 @@
 import { useEffect } from 'react';
-import type { LatLng, OrderStatus } from '@ebd/shared';
-import { startPublishingLocation } from '@ebd/supabase';
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
+import type { OrderStatus } from '@ebd/shared';
+import { startPublishingLocation, openLocationChannel } from '@ebd/supabase';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { supabase } from './lib/supabase.ts';
 
-/**
- * One-shot current position. Uses the Capacitor Geolocation plugin on a native
- * build (Android/iOS) and the browser API on the web. On native, background
- * updates require the ACCESS_BACKGROUND_LOCATION permission (declared in the
- * Android manifest) plus a foreground service for app-closed tracking.
- */
-async function currentPosition(): Promise<LatLng> {
-  if (Capacitor.isNativePlatform()) {
-    const perm = await Geolocation.checkPermissions();
-    if (perm.location !== 'granted') await Geolocation.requestPermissions();
-    const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-  }
-  return new Promise((resolve, reject) => {
-    if (!('geolocation' in navigator)) return reject(new Error('no geolocation'));
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      reject,
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
-    );
-  });
+// ---------------------------------------------------------------------------
+// @capacitor-community/background-geolocation — minimal typed surface.
+// On Android it runs a foreground service (persistent notification), so
+// location keeps streaming while the app is backgrounded OR fully closed.
+// ---------------------------------------------------------------------------
+interface BgLocation {
+  latitude: number;
+  longitude: number;
+}
+interface AddWatcherOptions {
+  backgroundMessage?: string;
+  backgroundTitle?: string;
+  requestPermissions?: boolean;
+  stale?: boolean;
+  distanceFilter?: number;
+}
+interface BackgroundGeolocationPlugin {
+  addWatcher(
+    options: AddWatcherOptions,
+    callback: (location?: BgLocation, error?: { code: string }) => void,
+  ): Promise<string>;
+  removeWatcher(options: { id: string }): Promise<void>;
+}
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation');
+
+/** Browser poll fallback (foreground only) via navigator.geolocation. */
+function webPoll(orderId: string): () => void {
+  return startPublishingLocation(supabase!, orderId, () =>
+    new Promise((resolve, reject) => {
+      if (!('geolocation' in navigator)) return reject(new Error('no geolocation'));
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        reject,
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
+      );
+    }),
+  );
 }
 
 /**
- * Share the rider's GPS on a per-order channel while the delivery is in transit
- * (picked_up / on_the_way). Auto-starts on pickup and stops on delivery or
- * unmount, so location is never shared while idle — saving battery and data.
- * Only active in live mode (Supabase configured); a no-op in preview.
+ * Native background watcher: a foreground service streams locations even when
+ * the app is closed. Each fix is broadcast on the order's Realtime channel.
+ */
+function nativeWatch(orderId: string): () => void {
+  const chan = openLocationChannel(supabase!, orderId);
+  let watcherId: string | null = null;
+
+  void BackgroundGeolocation.addWatcher(
+    {
+      backgroundTitle: 'Easy Buy Rider — delivering',
+      backgroundMessage: 'Sharing your location so the customer can track the delivery.',
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: 15, // metres between updates
+    },
+    (location, error) => {
+      if (error || !location) return;
+      void chan.publish({ lat: location.latitude, lng: location.longitude });
+    },
+  ).then((id) => { watcherId = id; });
+
+  return () => {
+    if (watcherId) void BackgroundGeolocation.removeWatcher({ id: watcherId });
+    chan.close();
+  };
+}
+
+/**
+ * Share the rider's GPS on the order's channel while the delivery is in transit
+ * (picked_up / on_the_way). Auto-starts on pickup, stops on delivery/unmount —
+ * never shared while idle. Native builds use a foreground-service watcher
+ * (works app-closed); the web build polls in the foreground.
  */
 export function useLocationPublisher(orderId: string, status: OrderStatus) {
   const inTransit = status === 'picked_up' || status === 'on_the_way';
   useEffect(() => {
     if (!supabase || !inTransit) return;
-    const stop = startPublishingLocation(supabase, orderId, currentPosition);
-    return stop;
+    return Capacitor.isNativePlatform() ? nativeWatch(orderId) : webPoll(orderId);
   }, [orderId, inTransit]);
 }
