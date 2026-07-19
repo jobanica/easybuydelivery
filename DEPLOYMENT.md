@@ -101,6 +101,30 @@ plugin on native and the browser API on web.
 Play Console → create app → complete the forms → upload the `.aab` to an internal
 testing track → promote to production after review.
 
+## Incoming-order notifications (rider)
+
+Two layers:
+
+1. **Live (app open)** — the rider app subscribes to Supabase Realtime
+   (`subscribeToNewOrders`, `postgres_changes` on `orders` INSERT). A banner shows
+   and the pool refreshes instantly. `orders` is in the `supabase_realtime`
+   publication (migration `0007`). Note: Realtime honours RLS, so the rider must
+   be signed in for pool visibility.
+2. **App closed** — FCM push. The native app registers on launch
+   (`usePushRegistration`) and stores its token in `rider_push_tokens`. A server
+   Edge Function sends the push:
+
+```bash
+# one-time: create a Firebase project, get the FCM server key
+supabase secrets set FCM_SERVER_KEY=<key>
+supabase functions deploy notify-riders
+# Dashboard → Database → Webhooks: on orders INSERT → call notify-riders
+```
+
+The function (`supabase/functions/notify-riders`) reads approved/unlocked riders'
+tokens and pushes the order summary. Adjust the audience query to your
+rider-assignment model (open decision #7).
+
 ## Notes / current limits
 
 - The apps are browsable (public store/menu reads) but **placing orders needs an

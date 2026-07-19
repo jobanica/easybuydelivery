@@ -7,3 +7,4 @@ export * from './riders.ts';
 export * from './settlement.ts';
 export * from './adminSettlement.ts';
 export * from './tracking.ts';
+export * from './notifications.ts';

@@ -8,12 +8,16 @@ import {
   type LedgerEntry,
   type OrderStatus,
 } from '@ebd/shared';
+import { subscribeToNewOrders } from '@ebd/supabase';
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
+import { usePushRegistration } from './usePushRegistration.ts';
+import { supabase } from './lib/supabase.ts';
 
 const today = new Date().toISOString().slice(0, 10);
+const RIDER_ID = import.meta.env.VITE_RIDER_ID as string | undefined;
 
 export function App() {
   const [data] = useState<RiderData>(() => makeRiderData());
@@ -22,6 +26,7 @@ export function App() {
   const [active, setActive] = useState<RiderOrder[]>([]);
   const [tab, setTab] = useState<'available' | 'active'>('available');
   const [error, setError] = useState<string | null>(null);
+  const [incoming, setIncoming] = useState<number>(0);
 
   const refresh = useCallback(async () => {
     try {
@@ -33,6 +38,18 @@ export function App() {
   }, [data]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  // Register for push (native) so incoming orders reach the rider app-closed.
+  usePushRegistration(RIDER_ID);
+
+  // Live: new orders entering the pool while the app is open.
+  useEffect(() => {
+    if (!supabase) return;
+    return subscribeToNewOrders(supabase, () => {
+      setIncoming((n) => n + 1);
+      void refresh();
+    });
+  }, [refresh]);
 
   const locked = isLockedOut(ledger, today);
   const overdue = overdueBalance(ledger, today);
@@ -58,6 +75,15 @@ export function App() {
 
       <main className="mx-auto max-w-lg px-5 py-5">
         {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        {incoming > 0 && !locked && (
+          <button
+            onClick={() => { setIncoming(0); setTab('available'); }}
+            className="mb-4 flex w-full items-center justify-between rounded-lg bg-brand-green px-4 py-3 text-sm font-semibold text-white shadow">
+            <span>🔔 {incoming} new order{incoming > 1 ? 's' : ''} in the pool</span>
+            <span className="text-xs opacity-90">View →</span>
+          </button>
+        )}
 
         {locked ? (
           <LockScreen overdue={overdue} onSettle={settleNow} />
