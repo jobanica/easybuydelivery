@@ -1,210 +1,105 @@
-import { useEffect, useState } from 'react';
-import {
-  listRiders,
-  setRiderApplicationStatus,
-  listOpenOrders,
-} from '@ebd/supabase';
-import type { RiderApplicationStatus } from '@ebd/shared';
-import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { useState } from 'react';
+import { isSupabaseConfigured } from './lib/supabase.ts';
+import { Dashboard } from './Dashboard.tsx';
 import { Stores } from './Stores.tsx';
+import { RiderApplications } from './RiderApplications.tsx';
+import { LiveOrders } from './LiveOrders.tsx';
 import { Settlements } from './Settlements.tsx';
+import {
+  IconDashboard, IconStore, IconRiders, IconOrders, IconWallet,
+  IconSearch, IconMenu, IconScooter,
+} from './icons.tsx';
 
-type Tab = 'riders' | 'orders' | 'stores' | 'settlements';
+type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'settlements';
+
+const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: IconDashboard },
+  { key: 'stores', label: 'Stores & menus', icon: IconStore },
+  { key: 'riders', label: 'Rider applications', icon: IconRiders },
+  { key: 'orders', label: 'Live orders', icon: IconOrders },
+  { key: 'settlements', label: 'Settlements', icon: IconWallet },
+];
+
+const TITLES: Record<Tab, string> = {
+  dashboard: 'Dashboard', stores: 'Stores & menus', riders: 'Rider applications',
+  orders: 'Live orders', settlements: 'Settlements',
+};
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('riders');
+  const [tab, setTab] = useState<Tab>('dashboard');
+  const [open, setOpen] = useState(false); // mobile sidebar
+
   return (
-    <div className="min-h-screen">
-      <header className="bg-brand-purple text-white">
-        <div className="mx-auto max-w-4xl px-6 py-4">
-          <h1 className="text-xl font-bold">Easy Buy Delivery — Admin</h1>
-          <p className="text-sm opacity-90">Riders &amp; live orders</p>
+    <div className="min-h-screen bg-[#f4f5f2] text-brand-ink">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 bg-brand-green text-white">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <button onClick={() => setOpen((o) => !o)} className="rounded-lg p-1.5 hover:bg-white/15 lg:hidden">
+            <IconMenu />
+          </button>
+          <div className="flex items-center gap-2 font-extrabold text-lg">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20"><IconScooter /></span>
+            Easy Buy
+          </div>
+          <div className="mx-auto hidden max-w-md flex-1 items-center gap-2 rounded-xl bg-white/15 px-3 py-2 md:flex">
+            <span className="opacity-90"><IconSearch /></span>
+            <input placeholder="Search orders, riders, stores"
+              className="w-full bg-transparent text-sm text-white placeholder-white/70 outline-none" />
+          </div>
+          <div className="ml-auto flex items-center gap-2 rounded-xl bg-white/15 py-1 pl-1 pr-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple text-xs font-bold">EB</span>
+            <span className="text-sm font-semibold">Admin</span>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-6 py-6">
-        {!isSupabaseConfigured && (
-          <p className="mb-4 rounded-lg border border-brand-yellow bg-brand-yellow/20 px-3 py-2 text-sm">
-            Preview mode — set <code>VITE_SUPABASE_URL</code> and{' '}
-            <code>VITE_SUPABASE_ANON_KEY</code> to load live data.
-          </p>
-        )}
-        <nav className="mb-5 flex gap-2">
-          <TabButton active={tab === 'stores'} onClick={() => setTab('stores')}>
-            Stores &amp; menus
-          </TabButton>
-          <TabButton active={tab === 'riders'} onClick={() => setTab('riders')}>
-            Rider applications
-          </TabButton>
-          <TabButton active={tab === 'orders'} onClick={() => setTab('orders')}>
-            Live orders
-          </TabButton>
-          <TabButton active={tab === 'settlements'} onClick={() => setTab('settlements')}>
-            Settlements
-          </TabButton>
-        </nav>
-        {tab === 'stores' && <Stores />}
-        {tab === 'riders' && <RiderApplications />}
-        {tab === 'orders' && <LiveOrders />}
-        {tab === 'settlements' && <Settlements />}
-      </main>
-    </div>
-  );
-}
 
-interface RiderRow {
-  id: string;
-  name: string;
-  mobile_number: string;
-  vehicle: string | null;
-  application_status: RiderApplicationStatus;
-}
-
-function RiderApplications() {
-  const [rows, setRows] = useState<RiderRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    if (!supabase) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      setRows((await listRiders(supabase)) as RiderRow[]);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  async function decide(id: string, status: RiderApplicationStatus) {
-    if (!supabase) return;
-    await setRiderApplicationStatus(supabase, id, status);
-    await load();
-  }
-
-  if (loading) return <Muted>Loading…</Muted>;
-  if (error) return <ErrorNote msg={error} />;
-  if (rows.length === 0) return <Muted>No rider applications yet.</Muted>;
-
-  return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
-      <table className="w-full text-sm">
-        <thead className="bg-black/[0.03] text-left text-black/60">
-          <tr>
-            <Th>Name</Th><Th>Mobile</Th><Th>Vehicle</Th><Th>Status</Th><Th> </Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-t border-black/5">
-              <Td className="font-medium">{r.name}</Td>
-              <Td>{r.mobile_number}</Td>
-              <Td>{r.vehicle ?? '—'}</Td>
-              <Td><StatusPill status={r.application_status} /></Td>
-              <Td>
-                {r.application_status === 'pending' && (
-                  <span className="flex gap-2">
-                    <button onClick={() => decide(r.id, 'approved')}
-                      className="rounded bg-brand-green px-2 py-1 text-xs font-medium text-white">
-                      Approve
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className={`fixed inset-y-0 left-0 z-20 w-60 transform bg-white pt-16 shadow-lg transition-transform lg:static lg:translate-x-0 lg:pt-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+          <nav className="p-4">
+            <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wide text-black/40">Main Menu</p>
+            <ul className="space-y-1">
+              {NAV.map(({ key, label, icon: Icon }) => {
+                const active = tab === key;
+                return (
+                  <li key={key}>
+                    <button onClick={() => { setTab(key); setOpen(false); }}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                        active ? 'bg-brand-green text-white shadow-sm' : 'text-black/60 hover:bg-black/[0.04]'
+                      }`}>
+                      <Icon />
+                      {label}
                     </button>
-                    <button onClick={() => decide(r.id, 'rejected')}
-                      className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600">
-                      Reject
-                    </button>
-                  </span>
-                )}
-              </Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </aside>
+
+        {/* Backdrop for mobile */}
+        {open && <div onClick={() => setOpen(false)} className="fixed inset-0 z-10 bg-black/30 lg:hidden" />}
+
+        {/* Content */}
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
+          <div className="mb-5">
+            <h1 className="text-2xl font-extrabold">{TITLES[tab]}</h1>
+            <p className="text-sm text-black/50">Easy Buy Delivery — operator console</p>
+          </div>
+
+          {!isSupabaseConfigured && (
+            <p className="mb-4 rounded-xl border border-brand-yellow bg-brand-yellow/20 px-3 py-2 text-sm">
+              Preview mode — set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to load live data.
+            </p>
+          )}
+
+          {tab === 'dashboard' && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
+          {tab === 'stores' && <Stores />}
+          {tab === 'riders' && <RiderApplications />}
+          {tab === 'orders' && <LiveOrders />}
+          {tab === 'settlements' && <Settlements />}
+        </main>
+      </div>
     </div>
   );
 }
-
-interface OrderRow {
-  id: string;
-  service_type: string;
-  status: string;
-  delivery_fee: number;
-  commission_amount: number;
-  customer_contact: string;
-}
-
-function LiveOrders() {
-  const [rows, setRows] = useState<OrderRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      if (!supabase) { setLoading(false); return; }
-      try {
-        setRows((await listOpenOrders(supabase)) as OrderRow[]);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  if (loading) return <Muted>Loading…</Muted>;
-  if (error) return <ErrorNote msg={error} />;
-  if (rows.length === 0) return <Muted>No open orders right now.</Muted>;
-
-  return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
-      <table className="w-full text-sm">
-        <thead className="bg-black/[0.03] text-left text-black/60">
-          <tr><Th>Service</Th><Th>Status</Th><Th>Contact</Th><Th>Fee</Th><Th>Commission</Th></tr>
-        </thead>
-        <tbody>
-          {rows.map((o) => (
-            <tr key={o.id} className="border-t border-black/5">
-              <Td className="capitalize font-medium">{o.service_type}</Td>
-              <Td className="capitalize">{o.status.replace('_', ' ')}</Td>
-              <Td>{o.customer_contact}</Td>
-              <Td>₱{Number(o.delivery_fee).toFixed(2)}</Td>
-              <Td>₱{Number(o.commission_amount).toFixed(2)}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TabButton({ active, onClick, children }:
-  { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-        active ? 'bg-brand-green text-white' : 'bg-white text-black/60 ring-1 ring-black/10'
-      }`}>
-      {children}
-    </button>
-  );
-}
-
-function StatusPill({ status }: { status: RiderApplicationStatus }) {
-  const cls = {
-    pending: 'bg-brand-yellow/30 text-yellow-800',
-    approved: 'bg-brand-green/15 text-green-800',
-    rejected: 'bg-red-100 text-red-700',
-  }[status];
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>{status}</span>;
-}
-
-const Th = ({ children }: { children: React.ReactNode }) =>
-  <th className="px-4 py-2 font-medium">{children}</th>;
-const Td = ({ children, className = '' }: { children: React.ReactNode; className?: string }) =>
-  <td className={`px-4 py-3 ${className}`}>{children}</td>;
-const Muted = ({ children }: { children: React.ReactNode }) =>
-  <p className="rounded-xl bg-white p-6 text-sm text-black/50 shadow-sm ring-1 ring-black/5">{children}</p>;
-const ErrorNote = ({ msg }: { msg: string }) =>
-  <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-200">{msg}</p>;
