@@ -9,3 +9,4 @@ export * from './settlement.ts';
 export * from './adminSettlement.ts';
 export * from './tracking.ts';
 export * from './notifications.ts';
+export * from './settings.ts';

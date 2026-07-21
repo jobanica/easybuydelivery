@@ -5,12 +5,14 @@ import { Stores } from './Stores.tsx';
 import { RiderApplications } from './RiderApplications.tsx';
 import { LiveOrders } from './LiveOrders.tsx';
 import { Settlements } from './Settlements.tsx';
+import { Settings } from './Settings.tsx';
+import { Broadcast } from './Broadcast.tsx';
 import {
   IconDashboard, IconStore, IconRiders, IconOrders, IconWallet,
-  IconSearch, IconMenu, IconScooter,
+  IconSettings, IconMegaphone, IconSearch, IconMenu, IconScooter,
 } from './icons.tsx';
 
-type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'settlements';
+type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'settlements' | 'settings' | 'broadcast';
 
 const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: IconDashboard },
@@ -18,11 +20,13 @@ const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'riders', label: 'Rider applications', icon: IconRiders },
   { key: 'orders', label: 'Live orders', icon: IconOrders },
   { key: 'settlements', label: 'Settlements', icon: IconWallet },
+  { key: 'broadcast', label: 'Broadcast SMS', icon: IconMegaphone },
+  { key: 'settings', label: 'Settings', icon: IconSettings },
 ];
 
 const TITLES: Record<Tab, string> = {
   dashboard: 'Dashboard', stores: 'Stores & menus', riders: 'Rider applications',
-  orders: 'Live orders', settlements: 'Settlements',
+  orders: 'Live orders', settlements: 'Settlements', broadcast: 'Broadcast SMS', settings: 'Settings',
 };
 
 export function App() {
@@ -98,6 +102,8 @@ export function App() {
           {tab === 'riders' && <RiderApplications />}
           {tab === 'orders' && <LiveOrders />}
           {tab === 'settlements' && <Settlements />}
+          {tab === 'broadcast' && <Broadcast />}
+          {tab === 'settings' && <Settings />}
         </main>
       </div>
     </div>

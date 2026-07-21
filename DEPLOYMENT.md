@@ -180,7 +180,10 @@ curl -X POST "$SUPABASE_URL/functions/v1/broadcast-sms" \
 ```
 
 Audience can be `customers`, `riders`, `stores`, or an explicit `numbers` array.
-Respect consent/opt-out before broadcasting to customers.
+The admin **Broadcast SMS** screen calls this function with the admin's session,
+so it also authorizes an authenticated **admin** caller (verifies
+`profiles.role = 'admin'`) — the shared secret is only needed for server-to-server
+use. Respect consent/opt-out before broadcasting to customers.
 
 ## Authentication (phone OTP)
 

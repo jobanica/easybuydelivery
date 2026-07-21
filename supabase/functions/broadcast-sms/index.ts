@@ -1,45 +1,61 @@
 // Supabase Edge Function: bulk SMS broadcast to an audience.
 //
-// True bulk send (announcements / promos). Protected by a shared secret so it
-// can't be called anonymously. Uses the same provider adapter as notify-store.
+// True bulk send (announcements / promos). Two ways to authorize:
+//   1. An authenticated ADMIN calling from the admin app (supabase.functions
+//      .invoke sends their JWT) — the function verifies profiles.role = 'admin'.
+//   2. Server-to-server with the x-broadcast-secret header.
 //
-//   supabase secrets set BROADCAST_SECRET=<random>
+//   supabase secrets set BROADCAST_SECRET=<random>   # optional, for #2
 //   supabase secrets set SMS_PROVIDER=bulksms_ph BULKSMS_PH_USERNAME=... BULKSMS_PH_PASSWORD=...
 //   supabase functions deploy broadcast-sms
 //
-// Call:
-//   POST /functions/v1/broadcast-sms
-//   Header: x-broadcast-secret: <secret>
-//   Body:   { "message": "...", "audience": "customers" | "riders" | "stores",
-//             "numbers": ["09..."] }   // audience OR explicit numbers
+// Body: { "message": "...", "audience": "customers"|"riders"|"stores",
+//         "numbers": ["09..."] }   // audience OR explicit numbers
 //
 // Respect consent/opt-out before broadcasting to customers.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { sendSms } from '../_shared/sms.ts';
 
+const db = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+/** Authorize either an admin JWT or the shared secret. */
+async function authorize(req: Request): Promise<boolean> {
+  const secret = Deno.env.get('BROADCAST_SECRET');
+  if (secret && req.headers.get('x-broadcast-secret') === secret) return true;
+
+  const auth = req.headers.get('Authorization');
+  if (!auth) return false;
+  const { data } = await createClient(
+    Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: auth } } },
+  ).auth.getUser();
+  if (!data.user) return false;
+  const { data: profile } = await db()
+    .from('profiles').select('role').eq('id', data.user.id).single();
+  return profile?.role === 'admin';
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('POST only', { status: 405 });
-  if (req.headers.get('x-broadcast-secret') !== Deno.env.get('BROADCAST_SECRET')) {
-    return new Response('forbidden', { status: 403 });
-  }
+  if (!(await authorize(req))) return new Response('forbidden', { status: 403 });
 
   const { message, audience, numbers } = await req.json().catch(() => ({}));
   if (!message || typeof message !== 'string') {
     return new Response('message required', { status: 400 });
   }
 
-  const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const db2 = db();
 
   let recipients: string[] = Array.isArray(numbers) ? numbers : [];
   if (audience === 'customers') {
-    const { data } = await db.from('customers').select('mobile_number');
+    const { data } = await db2.from('customers').select('mobile_number');
     recipients = (data ?? []).map((r) => r.mobile_number).filter(Boolean);
   } else if (audience === 'riders') {
-    const { data } = await db.from('riders').select('mobile_number').eq('application_status', 'approved');
+    const { data } = await db2.from('riders').select('mobile_number').eq('application_status', 'approved');
     recipients = (data ?? []).map((r) => r.mobile_number).filter(Boolean);
   } else if (audience === 'stores') {
-    const { data } = await db.from('stores').select('contact_number').not('contact_number', 'is', null);
+    const { data } = await db2.from('stores').select('contact_number').not('contact_number', 'is', null);
     recipients = (data ?? []).map((r) => r.contact_number).filter(Boolean);
   }
 
