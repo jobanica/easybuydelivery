@@ -1,0 +1,97 @@
+import { useEffect, useState, type ReactNode } from 'react';
+import { onAuthChange, signOut } from '@ebd/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { IconScooter } from './icons.tsx';
+
+/**
+ * Admin sign-in gate. The admin console writes to RLS-protected tables, so it
+ * needs an authenticated user whose profiles.role = 'admin'. Email + password
+ * (no SMS provider needed). In preview mode the gate is bypassed.
+ *
+ * Provision the first admin once (see DEPLOYMENT.md):
+ *   create the user (Dashboard → Auth), then
+ *   update profiles set role='admin' where id = '<user-uuid>';
+ */
+export function AdminGate({ children }: { children: ReactNode }) {
+  if (!isSupabaseConfigured || !supabase) return <>{children}</>;
+  return <Gate>{children}</Gate>;
+}
+
+function Gate({ children }: { children: ReactNode }) {
+  const [userId, setUserId] = useState<string | null | undefined>(undefined);
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
+  useEffect(() => {
+    if (!userId) { setRole(null); return; }
+    supabase!.from('profiles').select('role').eq('id', userId).maybeSingle()
+      .then(({ data }) => setRole(data?.role ?? 'customer'));
+  }, [userId]);
+
+  if (userId === undefined) return <Center>Loading…</Center>;
+  if (!userId) return <SignIn />;
+  if (role === null) return <Center>Checking access…</Center>;
+  if (role !== 'admin') return <NotAuthorized />;
+  return <>{children}</>;
+}
+
+function SignIn() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    const { error } = await supabase!.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
+    setBusy(false);
+  }
+
+  return (
+    <Shell>
+      <form onSubmit={submit} className="space-y-3">
+        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email" className={inp} />
+        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password" className={inp} />
+        <button disabled={busy} className="w-full rounded-lg bg-brand-green py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </form>
+    </Shell>
+  );
+}
+
+function NotAuthorized() {
+  return (
+    <Shell>
+      <p className="text-sm text-black/60">This account is not an admin. Ask the operator to grant access, then sign in again.</p>
+      <button onClick={() => void signOut(supabase!)}
+        className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple">
+        Sign out
+      </button>
+    </Shell>
+  );
+}
+
+const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
+
+function Shell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f5f2] p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+        <div className="mb-4 flex items-center gap-2 font-extrabold text-lg text-brand-green">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green text-white"><IconScooter /></span>
+          Easy Buy Admin
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const Center = ({ children }: { children: ReactNode }) =>
+  <div className="flex min-h-screen items-center justify-center text-sm text-black/50">{children}</div>;

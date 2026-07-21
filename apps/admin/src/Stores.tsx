@@ -49,9 +49,16 @@ export function Stores() {
   async function addStore(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !name.trim()) return;
-    await createStore(supabase, { name: name.trim(), category: category.trim() || undefined, contactNumber: contact.trim() || undefined });
-    setName(''); setCategory(''); setContact('');
-    await load();
+    try {
+      await createStore(supabase, { name: name.trim(), category: category.trim() || undefined, contactNumber: contact.trim() || undefined });
+      setName(''); setCategory(''); setContact(''); setError(null);
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(/row-level security|42501/.test(msg)
+        ? 'Not authorized — sign in with an admin account to add stores.'
+        : msg);
+    }
   }
 
   async function toggle(id: string, available: boolean) {

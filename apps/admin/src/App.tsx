@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { isSupabaseConfigured } from './lib/supabase.ts';
+import { signOut } from '@ebd/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Dashboard } from './Dashboard.tsx';
 import { Stores } from './Stores.tsx';
 import { RiderApplications } from './RiderApplications.tsx';
@@ -58,9 +59,15 @@ export function App() {
             <input placeholder="Search orders, riders, stores"
               className="w-full bg-transparent text-sm text-white placeholder-white/70 outline-none" />
           </div>
-          <div className="ml-auto flex items-center gap-2 rounded-xl bg-white/15 py-1 pl-1 pr-3">
+          <div className="ml-auto flex items-center gap-2 rounded-xl bg-white/15 py-1 pl-1 pr-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple text-xs font-bold">EB</span>
-            <span className="text-sm font-semibold">Admin</span>
+            <span className="hidden text-sm font-semibold sm:inline">Admin</span>
+            {isSupabaseConfigured && supabase && (
+              <button onClick={() => void signOut(supabase!)}
+                className="ml-1 rounded-lg bg-white/20 px-2 py-1 text-xs font-medium hover:bg-white/30">
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       </header>

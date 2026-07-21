@@ -185,6 +185,27 @@ so it also authorizes an authenticated **admin** caller (verifies
 `profiles.role = 'admin'`) — the shared secret is only needed for server-to-server
 use. Respect consent/opt-out before broadcasting to customers.
 
+## Admin sign-in & provisioning
+
+The admin console writes to RLS-protected tables, so it requires a signed-in user
+whose `profiles.role = 'admin'` (email + password — no SMS needed). Provision the
+first admin **once**:
+
+1. Supabase Dashboard → **Authentication → Users → Add user** (set a password,
+   tick "auto-confirm").
+2. SQL editor — grant the role (works with or without the `0008` trigger):
+
+```sql
+insert into profiles (id, role)
+values ('<the-new-user-uuid>', 'admin')
+on conflict (id) do update set role = 'admin';
+```
+
+3. Open `ebd-admin.vercel.app` and sign in with that email/password.
+
+Without this, the admin app runs as the anonymous key and every write is blocked
+by RLS (`42501`) — e.g. "Add store" silently does nothing.
+
 ## Authentication (phone OTP)
 
 Both apps gate real actions behind Supabase Auth phone OTP:
