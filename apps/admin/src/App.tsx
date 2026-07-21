@@ -8,15 +8,17 @@ import { Settlements } from './Settlements.tsx';
 import { Settings } from './Settings.tsx';
 import { Broadcast } from './Broadcast.tsx';
 import { OrderHistory } from './OrderHistory.tsx';
+import { Analytics } from './Analytics.tsx';
 import {
-  IconDashboard, IconStore, IconRiders, IconOrders, IconHistory, IconWallet,
+  IconDashboard, IconChart, IconStore, IconRiders, IconOrders, IconHistory, IconWallet,
   IconSettings, IconMegaphone, IconSearch, IconMenu, IconScooter,
 } from './icons.tsx';
 
-type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'history' | 'settlements' | 'settings' | 'broadcast';
+type Tab = 'dashboard' | 'analytics' | 'stores' | 'riders' | 'orders' | 'history' | 'settlements' | 'settings' | 'broadcast';
 
 const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: IconDashboard },
+  { key: 'analytics', label: 'Analytics', icon: IconChart },
   { key: 'stores', label: 'Stores & menus', icon: IconStore },
   { key: 'riders', label: 'Rider applications', icon: IconRiders },
   { key: 'orders', label: 'Live orders', icon: IconOrders },
@@ -27,7 +29,7 @@ const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
 ];
 
 const TITLES: Record<Tab, string> = {
-  dashboard: 'Dashboard', stores: 'Stores & menus', riders: 'Rider applications',
+  dashboard: 'Dashboard', analytics: 'Analytics', stores: 'Stores & menus', riders: 'Rider applications',
   orders: 'Live orders', history: 'Order history', settlements: 'Settlements',
   broadcast: 'Broadcast SMS', settings: 'Settings',
 };
@@ -101,6 +103,7 @@ export function App() {
           )}
 
           {tab === 'dashboard' && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
+          {tab === 'analytics' && <Analytics />}
           {tab === 'stores' && <Stores />}
           {tab === 'riders' && <RiderApplications />}
           {tab === 'orders' && <LiveOrders />}
