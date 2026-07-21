@@ -1,0 +1,64 @@
+/**
+ * Order queries for the admin console: filtered history and per-order detail.
+ * Admin reads all orders (RLS `orders_admin_all`).
+ */
+
+import type { OrderStatus, ServiceType } from '@ebd/shared';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export interface OrderListFilters {
+  serviceType?: ServiceType;
+  status?: OrderStatus;
+  /** Matches customer_contact (partial). */
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface OrderListResult<T = Record<string, unknown>> {
+  rows: T[];
+  count: number;
+}
+
+/** Filtered, paginated order list, newest first. */
+export async function listOrders(
+  db: SupabaseClient,
+  filters: OrderListFilters = {},
+): Promise<OrderListResult> {
+  const limit = filters.limit ?? 20;
+  const offset = filters.offset ?? 0;
+  let q = db
+    .from('orders')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (filters.serviceType) q = q.eq('service_type', filters.serviceType);
+  if (filters.status) q = q.eq('status', filters.status);
+  if (filters.search?.trim()) q = q.ilike('customer_contact', `%${filters.search.trim()}%`);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: data ?? [], count: count ?? 0 };
+}
+
+export interface OrderDetail {
+  order: Record<string, unknown>;
+  items: Record<string, unknown>[];
+  events: Record<string, unknown>[];
+}
+
+/** One order with its line items and status timeline. */
+export async function getOrderDetail(db: SupabaseClient, orderId: string): Promise<OrderDetail> {
+  const [order, items, events] = await Promise.all([
+    db.from('orders').select('*').eq('id', orderId).single(),
+    db.from('order_items').select('*').eq('order_id', orderId),
+    db.from('order_status_events').select('*').eq('order_id', orderId).order('created_at'),
+  ]);
+  if (order.error) throw order.error;
+  return {
+    order: order.data as Record<string, unknown>,
+    items: (items.data ?? []) as Record<string, unknown>[],
+    events: (events.data ?? []) as Record<string, unknown>[],
+  };
+}

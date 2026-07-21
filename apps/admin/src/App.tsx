@@ -7,18 +7,20 @@ import { LiveOrders } from './LiveOrders.tsx';
 import { Settlements } from './Settlements.tsx';
 import { Settings } from './Settings.tsx';
 import { Broadcast } from './Broadcast.tsx';
+import { OrderHistory } from './OrderHistory.tsx';
 import {
-  IconDashboard, IconStore, IconRiders, IconOrders, IconWallet,
+  IconDashboard, IconStore, IconRiders, IconOrders, IconHistory, IconWallet,
   IconSettings, IconMegaphone, IconSearch, IconMenu, IconScooter,
 } from './icons.tsx';
 
-type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'settlements' | 'settings' | 'broadcast';
+type Tab = 'dashboard' | 'stores' | 'riders' | 'orders' | 'history' | 'settlements' | 'settings' | 'broadcast';
 
 const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { key: 'stores', label: 'Stores & menus', icon: IconStore },
   { key: 'riders', label: 'Rider applications', icon: IconRiders },
   { key: 'orders', label: 'Live orders', icon: IconOrders },
+  { key: 'history', label: 'Order history', icon: IconHistory },
   { key: 'settlements', label: 'Settlements', icon: IconWallet },
   { key: 'broadcast', label: 'Broadcast SMS', icon: IconMegaphone },
   { key: 'settings', label: 'Settings', icon: IconSettings },
@@ -26,7 +28,8 @@ const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
 
 const TITLES: Record<Tab, string> = {
   dashboard: 'Dashboard', stores: 'Stores & menus', riders: 'Rider applications',
-  orders: 'Live orders', settlements: 'Settlements', broadcast: 'Broadcast SMS', settings: 'Settings',
+  orders: 'Live orders', history: 'Order history', settlements: 'Settlements',
+  broadcast: 'Broadcast SMS', settings: 'Settings',
 };
 
 export function App() {
@@ -101,6 +104,7 @@ export function App() {
           {tab === 'stores' && <Stores />}
           {tab === 'riders' && <RiderApplications />}
           {tab === 'orders' && <LiveOrders />}
+          {tab === 'history' && <OrderHistory />}
           {tab === 'settlements' && <Settlements />}
           {tab === 'broadcast' && <Broadcast />}
           {tab === 'settings' && <Settings />}
