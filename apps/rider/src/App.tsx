@@ -279,7 +279,7 @@ function CardHead({ order }: { order: RiderOrder }) {
         </a>
       </div>
       <div className="text-right">
-        <span className="block text-xs capitalize text-black/50">{order.status.replace('_', ' ')}</span>
+        <span className="block text-xs capitalize text-black/50">{order.status.replaceAll('_', ' ')}</span>
         {order.payment_status === 'paid' && (
           <span className="mt-1 inline-block rounded-full bg-brand-green/15 px-2 py-0.5 text-[10px] font-semibold text-green-800">
             PAID online

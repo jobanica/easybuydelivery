@@ -91,7 +91,7 @@ export function OrderHistory() {
           </div>
           <select value={status} onChange={(e) => { setStatus(e.target.value as OrderStatus | 'all'); setPage(0); }}
             className="rounded-lg border border-black/10 px-3 py-1.5 text-sm capitalize outline-none focus:border-brand-green">
-            {STATUSES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s.replace('_', ' ')}</option>)}
+            {STATUSES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s.replaceAll('_', ' ')}</option>)}
           </select>
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             placeholder="Search customer #"
@@ -118,13 +118,13 @@ export function OrderHistory() {
                     className="cursor-pointer border-b border-black/[0.04] hover:bg-black/[0.02]">
                     <Td className="whitespace-nowrap text-black/60">{fmtDate(o.created_at)}</Td>
                     <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${serviceChip[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span></Td>
-                    <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusChip(o.status)}`}>{o.status.replace('_', ' ')}</span></Td>
+                    <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusChip(o.status)}`}>{o.status.replaceAll('_', ' ')}</span></Td>
                     <Td>{o.customer_contact}</Td>
                     <Td>{peso(o.goods_cost)}</Td>
                     <Td>{peso(o.delivery_fee)}</Td>
                     <Td className="font-medium">{peso(o.commission_amount)}</Td>
                     <Td className="capitalize">
-                      {o.payment_method.replace('_', ' ')}
+                      {o.payment_method.replaceAll('_', ' ')}
                       {o.payment_status === 'paid' && <span className="ml-1 text-green-700">✓</span>}
                     </Td>
                   </tr>
@@ -176,7 +176,7 @@ function OrderDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
           <div className="space-y-4 text-sm">
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-black/70">
               <span className="capitalize"><b className="text-brand-ink">{detail.order.service_type}</b></span>
-              <span className="capitalize">Status: {String(detail.order.status ?? '').replace('_', ' ')}</span>
+              <span className="capitalize">Status: {String(detail.order.status ?? '').replaceAll('_', ' ')}</span>
               <span>Contact: {detail.order.customer_contact}</span>
             </div>
             {detail.items.length > 0 && (
@@ -196,14 +196,14 @@ function OrderDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               <Line label="Goods" value={peso(detail.order.goods_cost ?? 0)} />
               <Line label="Delivery fee" value={peso(detail.order.delivery_fee ?? 0)} />
               <Line label="Commission" value={peso(detail.order.commission_amount ?? 0)} />
-              <Line label="Payment" value={`${String(detail.order.payment_method ?? '').replace('_', ' ')}${detail.order.payment_status === 'paid' ? ' ✓' : ''}`} />
+              <Line label="Payment" value={`${String(detail.order.payment_method ?? '').replaceAll('_', ' ')}${detail.order.payment_status === 'paid' ? ' ✓' : ''}`} />
             </div>
             {detail.events.length > 0 && (
               <div>
                 <p className="mb-1 font-medium">Timeline</p>
                 <ul className="space-y-1 text-black/60">
                   {detail.events.map((e, i) => (
-                    <li key={i} className="capitalize">• {String(e.status).replace('_', ' ')} — {fmtDate(e.created_at)}</li>
+                    <li key={i} className="capitalize">• {String(e.status).replaceAll('_', ' ')} — {fmtDate(e.created_at)}</li>
                   ))}
                 </ul>
               </div>

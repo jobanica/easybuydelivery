@@ -52,7 +52,7 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
           {rows.map((o) => (
             <tr key={o.id} className="border-b border-black/[0.04]">
               <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${serviceColor[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span></Td>
-              <Td className="capitalize">{o.status.replace('_', ' ')}</Td>
+              <Td className="capitalize">{o.status.replaceAll('_', ' ')}</Td>
               <Td>{o.customer_contact}</Td>
               <Td>{peso(o.delivery_fee)}</Td>
               <Td className="font-medium">{peso(o.commission_amount)}</Td>
