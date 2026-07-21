@@ -5,6 +5,7 @@ export * from './pabili.ts';
 export * from './food.ts';
 export * from './orders.ts';
 export * from './stores.ts';
+export * from './import.ts';
 export * from './riders.ts';
 export * from './adminRiders.ts';
 export * from './settlement.ts';

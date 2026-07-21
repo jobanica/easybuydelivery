@@ -8,6 +8,7 @@ import {
   setMenuItemAvailability,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
+import { ImportMenu } from './ImportMenu.tsx';
 
 interface StoreRow {
   id: string;
@@ -23,6 +24,8 @@ export function Stores() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  const [importing, setImporting] = useState(false);
 
   // New-store form
   const [name, setName] = useState('');
@@ -61,6 +64,17 @@ export function Stores() {
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <button onClick={() => setImporting((v) => !v)}
+          className="rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ring-black/10 hover:bg-black/[0.03]">
+          {importing ? '← Add manually' : '⇪ Bulk import CSV'}
+        </button>
+      </div>
+
+      {importing ? (
+        <ImportMenu onDone={load} />
+      ) : (
+      <>
       <form onSubmit={addStore} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
         <h3 className="mb-3 font-semibold">Add a store</h3>
         <div className="grid grid-cols-3 gap-3">
@@ -96,6 +110,8 @@ export function Stores() {
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }
