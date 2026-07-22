@@ -147,7 +147,68 @@ export async function listMenu(db: SupabaseClient, storeId: string, availableOnl
   const items = await itemsQuery;
   if (items.error) throw items.error;
 
-  return { categories: cats.data ?? [], items: items.data ?? [] };
+  // Variations (e.g. sizes) for every item in this store.
+  const itemIds = (items.data ?? []).map((i) => (i as { id: string }).id);
+  let options: unknown[] = [];
+  if (itemIds.length) {
+    const opts = await db.from('menu_item_options').select('*').in('menu_item_id', itemIds);
+    if (opts.error) throw opts.error;
+    options = opts.data ?? [];
+  }
+
+  return { categories: cats.data ?? [], items: items.data ?? [], options };
+}
+
+export interface MenuItemPatch {
+  name?: string;
+  description?: string | null;
+  price?: number;
+  categoryId?: string | null;
+}
+
+/** Update an existing menu item's editable fields. */
+export async function updateMenuItem(db: SupabaseClient, itemId: string, patch: MenuItemPatch) {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.description !== undefined) row.description = patch.description;
+  if (patch.price !== undefined) {
+    if (patch.price < 0) throw new Error('price must be non-negative');
+    row.price = patch.price;
+  }
+  if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await db.from('menu_items').update(row).eq('id', itemId);
+  if (error) throw error;
+}
+
+export interface MenuItemOptionInput {
+  itemId: string;
+  groupName?: string;   // defaults to 'Size'
+  optionName: string;
+  priceDelta?: number;  // extra added to the base price (may be negative)
+}
+
+/** Add a variation (e.g. a size) to a menu item. */
+export async function createMenuItemOption(db: SupabaseClient, input: MenuItemOptionInput) {
+  const name = input.optionName.trim();
+  if (!name) throw new Error('option name is required');
+  const { data, error } = await db
+    .from('menu_item_options')
+    .insert({
+      menu_item_id: input.itemId,
+      group_name: input.groupName?.trim() || 'Size',
+      option_name: name,
+      price_delta: input.priceDelta ?? 0,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function deleteMenuItemOption(db: SupabaseClient, optionId: string) {
+  const { error } = await db.from('menu_item_options').delete().eq('id', optionId);
+  if (error) throw error;
 }
 
 export async function createMenuItem(db: SupabaseClient, input: MenuItemInput) {

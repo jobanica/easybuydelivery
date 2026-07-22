@@ -11,6 +11,9 @@ import {
   deleteMenuCategory,
   uploadStoreLogo,
   uploadMenuItemImage,
+  updateMenuItem,
+  createMenuItemOption,
+  deleteMenuItemOption,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
@@ -28,8 +31,9 @@ interface StoreRow {
   lng: number | null;
   logo_url: string | null;
 }
-interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null }
+interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null; description: string | null }
 interface CatRow { id: string; title: string; sort_order: number }
+interface OptRow { id: string; menu_item_id: string; group_name: string; option_name: string; price_delta: number }
 
 export function Stores() {
   const [rows, setRows] = useState<StoreRow[]>([]);
@@ -208,6 +212,8 @@ function LocationEditor({ store, onSaved }: { store: StoreRow; onSaved: () => vo
 function MenuEditor({ storeId }: { storeId: string }) {
   const [cats, setCats] = useState<CatRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [opts, setOpts] = useState<OptRow[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [catTitle, setCatTitle] = useState('');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -218,6 +224,7 @@ function MenuEditor({ storeId }: { storeId: string }) {
     const menu = await listMenu(supabase, storeId, false);
     setCats((menu.categories as CatRow[]).sort((a, b) => a.sort_order - b.sort_order));
     setItems(menu.items as ItemRow[]);
+    setOpts((menu.options as OptRow[]) ?? []);
   }
   useEffect(() => { void load(); }, [storeId]);
 
@@ -281,28 +288,36 @@ function MenuEditor({ storeId }: { storeId: string }) {
               <p className="mb-1 text-xs font-semibold text-black/50">{cat ? cat.title : 'Uncategorised'}</p>
               <ul className="divide-y divide-black/5">
                 {rows.map((it) => (
-                  <li key={it.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.04] ring-1 ring-black/10">
-                        {it.image_url ? <img src={it.image_url} alt="" className="h-full w-full object-cover" /> : <span className="text-black/25">🍽️</span>}
+                  <li key={it.id} className="py-2">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.04] ring-1 ring-black/10">
+                          {it.image_url ? <img src={it.image_url} alt="" className={`h-full w-full object-cover ${it.is_available ? '' : 'opacity-40'}`} /> : <span className="text-black/25">🍽️</span>}
+                        </span>
+                        <span className="min-w-0">
+                          <span className={`block truncate ${it.is_available ? '' : 'text-black/40'}`}>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
+                          {!it.is_available && <span className="text-[11px] font-semibold text-red-600">SOLD OUT</span>}
+                          {opts.some((o) => o.menu_item_id === it.id) && (
+                            <span className="ml-0 block text-[11px] text-black/40">{opts.filter((o) => o.menu_item_id === it.id).length} size(s)</span>
+                          )}
+                        </span>
                       </span>
-                      <span className="truncate">{it.name} · ₱{Number(it.price).toFixed(2)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-3">
-                      <label className="cursor-pointer text-xs font-medium text-brand-purple hover:underline">
-                        {it.image_url ? 'Change photo' : 'Add photo'}
-                        <input type="file" accept="image/*" className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0]; e.target.value = '';
-                            if (file && supabase) { await uploadMenuItemImage(supabase, it.id, file); await load(); }
-                          }} />
-                      </label>
-                      <label className="flex items-center gap-1 text-xs text-black/50">
-                        available
-                        <input type="checkbox" checked={it.is_available}
-                          onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
-                      </label>
-                    </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <button onClick={() => setEditingId(editingId === it.id ? null : it.id)}
+                          className="rounded-lg px-2.5 py-1 text-xs font-medium text-brand-purple ring-1 ring-brand-purple/40 hover:bg-brand-purple/5">
+                          {editingId === it.id ? 'Close' : 'Edit'}
+                        </button>
+                        <button onClick={async () => { if (supabase) { await setMenuItemAvailability(supabase, it.id, !it.is_available); await load(); } }}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
+                            it.is_available ? 'text-red-600 ring-red-300 hover:bg-red-50' : 'text-green-700 ring-green-300 hover:bg-green-50'
+                          }`}>
+                          {it.is_available ? 'Mark as Out' : 'Mark In'}
+                        </button>
+                      </span>
+                    </div>
+                    {editingId === it.id && (
+                      <ItemEditor item={it} options={opts.filter((o) => o.menu_item_id === it.id)} cats={cats} onSaved={load} />
+                    )}
                   </li>
                 ))}
                 {rows.length === 0 && <li className="py-1.5 text-xs text-black/30">No items in this category.</li>}
@@ -323,6 +338,89 @@ function MenuEditor({ storeId }: { storeId: string }) {
         </select>
         <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add item</button>
       </form>
+    </div>
+  );
+}
+
+/** Expanded editor for a single menu item: photo, price, category, sizes. */
+function ItemEditor({ item, options, cats, onSaved }:
+  { item: ItemRow; options: OptRow[]; cats: CatRow[]; onSaved: () => void }) {
+  const [name, setName] = useState(item.name);
+  const [price, setPrice] = useState(String(item.price));
+  const [desc, setDesc] = useState(item.description ?? '');
+  const [cat, setCat] = useState(item.category_id ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [sizeName, setSizeName] = useState('');
+  const [sizeExtra, setSizeExtra] = useState('');
+  const base = Number(price) || 0;
+
+  async function saveMeta() {
+    if (!supabase) return;
+    setSaving(true); setSaved(false);
+    try {
+      await updateMenuItem(supabase, item.id, {
+        name: name.trim() || item.name,
+        price: Number(price) || 0,
+        description: desc.trim() || null,
+        categoryId: cat || null,
+      });
+      setSaved(true); onSaved();
+    } finally { setSaving(false); }
+  }
+  async function addSize(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !sizeName.trim()) return;
+    await createMenuItemOption(supabase, { itemId: item.id, groupName: 'Size', optionName: sizeName.trim(), priceDelta: Number(sizeExtra) || 0 });
+    setSizeName(''); setSizeExtra(''); onSaved();
+  }
+  async function removeSize(id: string) { if (supabase) { await deleteMenuItemOption(supabase, id); onSaved(); } }
+
+  return (
+    <div className="mt-2 space-y-3 rounded-lg bg-white p-3 ring-1 ring-black/10">
+      <div>
+        <p className="mb-1 text-xs font-medium text-black/60">Photo</p>
+        <ImageUpload url={item.image_url} rounded="rounded-md"
+          onUpload={async (f) => { if (supabase) { await uploadMenuItemImage(supabase, item.id, f); onSaved(); } }} />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="text-xs font-medium text-black/60">Name
+          <input className={inp + ' mt-1 w-full'} value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="text-xs font-medium text-black/60">Price (₱)
+          <input className={inp + ' mt-1 w-full'} type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+        <label className="text-xs font-medium text-black/60 sm:col-span-2">Description
+          <input className={inp + ' mt-1 w-full'} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Optional" /></label>
+        <label className="text-xs font-medium text-black/60">Category
+          <select className={inp + ' mt-1 w-full'} value={cat} onChange={(e) => setCat(e.target.value)}>
+            <option value="">No category</option>
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select></label>
+      </div>
+      <button onClick={saveMeta} disabled={saving || !supabase}
+        className="rounded-lg bg-brand-green px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+      </button>
+
+      {/* Sizes / variations */}
+      <div className="border-t border-black/5 pt-3">
+        <p className="mb-1.5 text-xs font-semibold text-black/60">Sizes / variations</p>
+        <div className="mb-2 flex flex-wrap gap-2">
+          {options.map((o) => (
+            <span key={o.id} className="inline-flex items-center gap-1 rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs text-brand-purple">
+              {o.option_name} · ₱{(base + Number(o.price_delta)).toFixed(2)}
+              {Number(o.price_delta) !== 0 && <span className="text-black/40">({Number(o.price_delta) > 0 ? '+' : ''}{Number(o.price_delta)})</span>}
+              <button onClick={() => removeSize(o.id)} title="Remove" className="text-brand-purple/60 hover:text-red-600">×</button>
+            </span>
+          ))}
+          {options.length === 0 && <span className="text-xs text-black/40">No sizes — item is sold at its base price.</span>}
+        </div>
+        <form onSubmit={addSize} className="flex flex-wrap gap-2">
+          <input className={inp + ' w-32'} placeholder="Size (e.g. Large)" value={sizeName} onChange={(e) => setSizeName(e.target.value)} />
+          <input className={inp + ' w-28'} type="number" placeholder="Extra ₱" value={sizeExtra} onChange={(e) => setSizeExtra(e.target.value)} />
+          <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add size</button>
+        </form>
+        <p className="mt-1 text-xs text-black/40">“Extra” is added to the base price (can be negative). Leave sizes empty to sell at one price.</p>
+      </div>
     </div>
   );
 }

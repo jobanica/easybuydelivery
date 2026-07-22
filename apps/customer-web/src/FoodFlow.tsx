@@ -4,10 +4,12 @@ import {
   distinctStoreCount,
   collectibleAtDoor,
   resolveDeliveryFee,
+  lineUnitPrice,
   DEFAULT_DISTANCE_FEE_CONFIG,
   DEFAULT_FEE_CONFIG,
   MAX_STORES_PER_ORDER,
   type CartLine,
+  type CartOption,
   type DeliveryFeeModel,
   type DistanceFeeConfig,
   type FeeConfig,
@@ -21,8 +23,12 @@ import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
 
-interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null }
+interface Size { name: string; priceDelta: number }
+interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; sizes: Size[] }
 interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null; logo_url?: string | null }
+
+/** Unique cart key for an item + chosen size (different sizes are separate lines). */
+const lineKey = (l: CartLine) => `${l.menuItemId ?? l.name}|${(l.options ?? []).map((o) => o.name).join(',')}`;
 
 interface FeeSettings {
   model: DeliveryFeeModel;
@@ -74,15 +80,25 @@ export function FoodFlow() {
           const withMenus: Store[] = [];
           for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[]) {
             const menu = await listMenu(supabase, s.id);
+            const optsByItem = new Map<string, Size[]>();
+            for (const o of (menu.options ?? []) as { menu_item_id: string; option_name: string; price_delta: number }[]) {
+              const arr = optsByItem.get(o.menu_item_id) ?? [];
+              arr.push({ name: o.option_name, priceDelta: Number(o.price_delta) });
+              optsByItem.set(o.menu_item_id, arr);
+            }
             withMenus.push({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
-              items: (menu.items as MenuItem[]),
+              items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null }[])
+                .map((it) => ({ ...it, sizes: optsByItem.get(it.id) ?? [] })),
             });
           }
           setStores(withMenus);
         } else {
-          setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({ ...s, lat: null, lng: null })));
+          setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({
+            ...s, lat: null, lng: null,
+            items: s.items.map((it) => ({ ...it, sizes: [] })),
+          })));
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -121,15 +137,19 @@ export function FoodFlow() {
   }, [cart, stores]);
   const canAddStore = storeCount < MAX_STORES_PER_ORDER;
 
-  function addToCart(store: Store, item: MenuItem) {
+  function addToCart(store: Store, item: MenuItem, size?: Size) {
     setError(null);
-    const existing = cart.find((l) => l.menuItemId === item.id);
-    let next: CartLine[];
-    if (existing) {
-      next = cart.map((l) => (l.menuItemId === item.id ? { ...l, qty: l.qty + 1 } : l));
-    } else {
-      next = [...cart, { storeId: store.id, menuItemId: item.id, name: item.name, unitPrice: item.price, qty: 1 }];
-    }
+    const options: CartOption[] | undefined = size ? [{ name: size.name, priceDelta: size.priceDelta }] : undefined;
+    const newLine: CartLine = {
+      storeId: store.id, menuItemId: item.id,
+      name: size ? `${item.name} — ${size.name}` : item.name,
+      unitPrice: item.price, qty: 1, options,
+    };
+    const key = lineKey(newLine);
+    const existing = cart.find((l) => lineKey(l) === key);
+    const next = existing
+      ? cart.map((l) => (lineKey(l) === key ? { ...l, qty: l.qty + 1 } : l))
+      : [...cart, newLine];
     if (new Set(next.map((l) => l.storeId)).size > MAX_STORES_PER_ORDER) {
       setError(`An order can span at most ${MAX_STORES_PER_ORDER} stores.`);
       return;
@@ -137,9 +157,9 @@ export function FoodFlow() {
     setCart(next);
   }
 
-  function changeQty(menuItemId: string, delta: number) {
+  function changeQty(key: string, delta: number) {
     setCart((c) =>
-      c.map((l) => (l.menuItemId === menuItemId ? { ...l, qty: l.qty + delta } : l))
+      c.map((l) => (lineKey(l) === key ? { ...l, qty: l.qty + delta } : l))
         .filter((l) => l.qty > 0),
     );
   }
@@ -218,11 +238,22 @@ export function FoodFlow() {
                     {it.description && <span className="block truncate text-xs text-black/40">{it.description}</span>}
                   </span>
                 </span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm">{peso(it.price)}</span>
-                  <button onClick={() => addToCart(openStore, it)}
-                    className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
-                </span>
+                {it.sizes.length === 0 ? (
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm">{peso(it.price)}</span>
+                    <button onClick={() => addToCart(openStore, it)}
+                      className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
+                  </span>
+                ) : (
+                  <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {it.sizes.map((sz) => (
+                      <button key={sz.name} onClick={() => addToCart(openStore, it, sz)}
+                        className="rounded-md bg-brand-green px-2 py-1 text-xs font-semibold text-white hover:brightness-95">
+                        {sz.name} · {peso(it.price + sz.priceDelta)}
+                      </button>
+                    ))}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -261,13 +292,13 @@ export function FoodFlow() {
                 {storeCount > 1 && <p className="mb-1 text-xs font-semibold text-brand-purple">🏪 {grp.name}</p>}
                 <ul className="divide-y divide-black/5">
                   {grp.lines.map((l) => (
-                    <li key={l.menuItemId} className="flex items-center justify-between py-2 text-sm">
+                    <li key={lineKey(l)} className="flex items-center justify-between py-2 text-sm">
                       <span>{l.name}</span>
                       <span className="flex items-center gap-2">
-                        <button onClick={() => changeQty(l.menuItemId!, -1)} className="h-6 w-6 rounded bg-black/5">−</button>
+                        <button onClick={() => changeQty(lineKey(l), -1)} className="h-6 w-6 rounded bg-black/5">−</button>
                         <span className="w-4 text-center">{l.qty}</span>
-                        <button onClick={() => changeQty(l.menuItemId!, +1)} className="h-6 w-6 rounded bg-black/5">+</button>
-                        <span className="w-16 text-right font-medium">{peso(l.unitPrice * l.qty)}</span>
+                        <button onClick={() => changeQty(lineKey(l), +1)} className="h-6 w-6 rounded bg-black/5">+</button>
+                        <span className="w-16 text-right font-medium">{peso(lineUnitPrice(l) * l.qty)}</span>
                       </span>
                     </li>
                   ))}
