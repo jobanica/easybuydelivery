@@ -1,7 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthChange, signOut } from '@ebd/supabase';
+import { isStaffRole, type StaffRole } from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { IconScooter } from './icons.tsx';
+
+const RoleContext = createContext<StaffRole>('admin');
+/** The signed-in staff member's role (defaults to admin in preview mode). */
+export const useAdminRole = () => useContext(RoleContext);
 
 /**
  * Admin sign-in gate. The admin console writes to RLS-protected tables, so it
@@ -13,7 +18,9 @@ import { IconScooter } from './icons.tsx';
  *   update profiles set role='admin' where id = '<user-uuid>';
  */
 export function AdminGate({ children }: { children: ReactNode }) {
-  if (!isSupabaseConfigured || !supabase) return <>{children}</>;
+  if (!isSupabaseConfigured || !supabase) {
+    return <RoleContext.Provider value="admin">{children}</RoleContext.Provider>;
+  }
   return <Gate>{children}</Gate>;
 }
 
@@ -31,8 +38,8 @@ function Gate({ children }: { children: ReactNode }) {
   if (userId === undefined) return <Center>Loading…</Center>;
   if (!userId) return <SignIn />;
   if (role === null) return <Center>Checking access…</Center>;
-  if (role !== 'admin') return <NotAuthorized />;
-  return <>{children}</>;
+  if (!isStaffRole(role)) return <NotAuthorized />;
+  return <RoleContext.Provider value={role}>{children}</RoleContext.Provider>;
 }
 
 function SignIn() {

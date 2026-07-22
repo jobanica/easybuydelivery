@@ -11,12 +11,15 @@ import { Broadcast } from './Broadcast.tsx';
 import { OrderHistory } from './OrderHistory.tsx';
 import { Analytics } from './Analytics.tsx';
 import { Riders } from './Riders.tsx';
+import { Staff } from './Staff.tsx';
+import { useAdminRole } from './AdminGate.tsx';
+import { can, ROLE_LABEL, type AdminSection } from '@ebd/shared';
 import {
   IconDashboard, IconChart, IconStore, IconRiders, IconScooter, IconOrders, IconHistory, IconWallet,
-  IconSettings, IconMegaphone, IconSearch, IconMenu,
+  IconSettings, IconMegaphone, IconUsers, IconSearch, IconMenu,
 } from './icons.tsx';
 
-type Tab = 'dashboard' | 'analytics' | 'stores' | 'ridersActive' | 'riders' | 'orders' | 'history' | 'settlements' | 'settings' | 'broadcast';
+type Tab = AdminSection;
 
 const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: IconDashboard },
@@ -28,6 +31,7 @@ const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'history', label: 'Order history', icon: IconHistory },
   { key: 'settlements', label: 'Settlements', icon: IconWallet },
   { key: 'broadcast', label: 'Broadcast SMS', icon: IconMegaphone },
+  { key: 'staff', label: 'Staff', icon: IconUsers },
   { key: 'settings', label: 'Settings', icon: IconSettings },
 ];
 
@@ -35,10 +39,12 @@ const TITLES: Record<Tab, string> = {
   dashboard: 'Dashboard', analytics: 'Analytics', stores: 'Stores & menus',
   ridersActive: 'Riders', riders: 'Rider applications',
   orders: 'Live orders', history: 'Order history', settlements: 'Settlements',
-  broadcast: 'Broadcast SMS', settings: 'Settings',
+  broadcast: 'Broadcast SMS', staff: 'Staff', settings: 'Settings',
 };
 
 export function App() {
+  const role = useAdminRole();
+  const nav = NAV.filter((n) => can(role, n.key));
   const [tab, setTab] = useState<Tab>('dashboard');
   const [open, setOpen] = useState(false); // mobile sidebar
 
@@ -61,7 +67,7 @@ export function App() {
           </div>
           <div className="ml-auto flex items-center gap-2 rounded-xl bg-white/15 py-1 pl-1 pr-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple text-xs font-bold">EB</span>
-            <span className="hidden text-sm font-semibold sm:inline">Admin</span>
+            <span className="hidden text-sm font-semibold sm:inline">{ROLE_LABEL[role]}</span>
             {isSupabaseConfigured && supabase && (
               <button onClick={() => void signOut(supabase!)}
                 className="ml-1 rounded-lg bg-white/20 px-2 py-1 text-xs font-medium hover:bg-white/30">
@@ -78,7 +84,7 @@ export function App() {
           <nav className="p-4">
             <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wide text-black/40">Main Menu</p>
             <ul className="space-y-1">
-              {NAV.map(({ key, label, icon: Icon }) => {
+              {nav.map(({ key, label, icon: Icon }) => {
                 const active = tab === key;
                 return (
                   <li key={key}>
@@ -112,16 +118,25 @@ export function App() {
             </p>
           )}
 
-          {tab === 'dashboard' && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
-          {tab === 'analytics' && <Analytics />}
-          {tab === 'stores' && <Stores />}
-          {tab === 'ridersActive' && <Riders />}
-          {tab === 'riders' && <RiderApplications />}
-          {tab === 'orders' && <LiveOrders />}
-          {tab === 'history' && <OrderHistory />}
-          {tab === 'settlements' && <Settlements />}
-          {tab === 'broadcast' && <Broadcast />}
-          {tab === 'settings' && <Settings />}
+          {!can(role, tab) ? (
+            <p className="rounded-xl bg-white p-6 text-sm text-black/50 shadow-sm ring-1 ring-black/5">
+              Your role ({ROLE_LABEL[role]}) doesn't have access to this section.
+            </p>
+          ) : (
+            <>
+              {tab === 'dashboard' && <Dashboard onNavigate={(t) => can(role, t as Tab) && setTab(t as Tab)} />}
+              {tab === 'analytics' && <Analytics />}
+              {tab === 'stores' && <Stores />}
+              {tab === 'ridersActive' && <Riders />}
+              {tab === 'riders' && <RiderApplications />}
+              {tab === 'orders' && <LiveOrders />}
+              {tab === 'history' && <OrderHistory />}
+              {tab === 'settlements' && <Settlements />}
+              {tab === 'broadcast' && <Broadcast />}
+              {tab === 'staff' && <Staff />}
+              {tab === 'settings' && <Settings />}
+            </>
+          )}
         </main>
       </div>
     </div>
