@@ -20,6 +20,10 @@ export interface AppSettings {
   delivery_base_fare: number;
   delivery_base_km: number;
   delivery_per_km: number;
+  /** Per-service on/off switches. */
+  service_food: boolean;
+  service_pabili: boolean;
+  service_padala: boolean;
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {

@@ -11,6 +11,7 @@ import {
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
+import { Toggle } from './ui.tsx';
 
 interface StoreRow {
   id: string;
@@ -130,12 +131,12 @@ export function Stores() {
                   {s.lat != null && s.lng != null ? '📍 Pinned' : 'No location'}
                 </span>
               </button>
-              <label className="flex items-center gap-2 text-sm">
-                <span className={s.is_available ? 'text-green-700' : 'text-black/40'}>
-                  {s.is_available ? 'Open' : 'Off'}
+              <div className="flex items-center gap-2 text-sm">
+                <span className={`text-xs font-medium ${s.is_available ? 'text-green-700' : 'text-black/40'}`}>
+                  {s.is_available ? 'Open' : 'Closed'}
                 </span>
-                <input type="checkbox" checked={s.is_available} onChange={(e) => toggle(s.id, e.target.checked)} />
-              </label>
+                <Toggle on={s.is_available} onChange={(v) => toggle(s.id, v)} />
+              </div>
             </div>
             {openId === s.id && (
               <>

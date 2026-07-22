@@ -9,6 +9,7 @@ const SAMPLE: AppSettings = {
   convenience_fee: 0, commission_rate: 0.15, delivery_fee_model: 'flat',
   convenience_fee_mode: 'pass_through', settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
+  service_food: true, service_pabili: true, service_padala: true,
 };
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -62,6 +63,21 @@ export function Settings() {
           </span>
           <Toggle on={s.is_open} onChange={(v) => set('is_open', v)} />
         </label>
+      </Card>
+
+      {/* Services */}
+      <Card title="Services">
+        <p className="mb-3 text-sm text-black/60">
+          Turn a whole service on or off. When off, customers see it greyed out and can’t order it.
+        </p>
+        <div className="divide-y divide-black/5">
+          <ServiceRow label="Food / Restaurants" desc="Browse stores and order food."
+            on={s.service_food} onChange={(v) => set('service_food', v)} />
+          <ServiceRow label="Pabili" desc="Buy-anything errand service."
+            on={s.service_pabili} onChange={(v) => set('service_pabili', v)} />
+          <ServiceRow label="Padala" desc="Point-to-point courier."
+            on={s.service_padala} onChange={(v) => set('service_padala', v)} />
+        </div>
       </Card>
 
       {/* Fees & commission */}
@@ -174,6 +190,19 @@ export function Settings() {
         {!supabase && <span className="text-xs text-black/40">Connect Supabase to save.</span>}
       </div>
     </div>
+  );
+}
+
+function ServiceRow({ label, desc, on, onChange }:
+  { label: string; desc: string; on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between py-3">
+      <span>
+        <span className="block text-sm font-medium">{label} <span className={`ml-1 text-xs font-normal ${on ? 'text-green-700' : 'text-black/40'}`}>{on ? 'On' : 'Off'}</span></span>
+        <span className="block text-xs text-black/50">{desc}</span>
+      </span>
+      <Toggle on={on} onChange={onChange} />
+    </label>
   );
 }
 

@@ -20,6 +20,18 @@ export function StatusPill({ status }: { status: RiderApplicationStatus }) {
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>{status}</span>;
 }
 
+/** On/off switch. */
+export function Toggle({ on, onChange, disabled = false }:
+  { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button type="button" onClick={() => !disabled && onChange(!on)} disabled={disabled}
+      aria-pressed={on}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${on ? 'bg-brand-green' : 'bg-black/20'}`}>
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${on ? 'left-[22px]' : 'left-0.5'}`} />
+    </button>
+  );
+}
+
 /** Panel card wrapper used across sections. */
 export function Card({ title, action, children }:
   { title?: string; action?: React.ReactNode; children: React.ReactNode }) {
