@@ -3,12 +3,14 @@ import {
   listAllStores,
   createStore,
   setStoreAvailability,
+  setStoreLocation,
   listMenu,
   createMenuItem,
   setMenuItemAvailability,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
+import { MapPicker, type MapValue } from './MapPicker.tsx';
 
 interface StoreRow {
   id: string;
@@ -16,6 +18,9 @@ interface StoreRow {
   category: string | null;
   contact_number: string | null;
   is_available: boolean;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 interface ItemRow { id: string; name: string; price: number; is_available: boolean }
 
@@ -31,6 +36,8 @@ export function Stores() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [contact, setContact] = useState('');
+  const [address, setAddress] = useState('');
+  const [pin, setPin] = useState<MapValue | null>(null);
 
   async function load() {
     if (!supabase) { setLoading(false); return; }
@@ -50,8 +57,15 @@ export function Stores() {
     e.preventDefault();
     if (!supabase || !name.trim()) return;
     try {
-      await createStore(supabase, { name: name.trim(), category: category.trim() || undefined, contactNumber: contact.trim() || undefined });
-      setName(''); setCategory(''); setContact(''); setError(null);
+      await createStore(supabase, {
+        name: name.trim(),
+        category: category.trim() || undefined,
+        contactNumber: contact.trim() || undefined,
+        address: address.trim() || undefined,
+        lat: pin?.lat,
+        lng: pin?.lng,
+      });
+      setName(''); setCategory(''); setContact(''); setAddress(''); setPin(null); setError(null);
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -89,6 +103,11 @@ export function Stores() {
           <input className={inp} placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
           <input className={inp} placeholder="Contact #" value={contact} onChange={(e) => setContact(e.target.value)} />
         </div>
+        <input className={inp + ' mt-3 w-full'} placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <div className="mt-3">
+          <p className="mb-1.5 text-sm font-medium text-black/70">Store location</p>
+          <MapPicker value={pin} onChange={setPin} />
+        </div>
         <button className="mt-3 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white" disabled={!supabase}>
           Add store
         </button>
@@ -105,6 +124,11 @@ export function Stores() {
               <button className="text-left" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
                 <span className="font-medium">{s.name}</span>
                 <span className="ml-2 text-xs text-black/40">{s.category ?? '—'}</span>
+                <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  s.lat != null && s.lng != null ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'
+                }`}>
+                  {s.lat != null && s.lng != null ? '📍 Pinned' : 'No location'}
+                </span>
               </button>
               <label className="flex items-center gap-2 text-sm">
                 <span className={s.is_available ? 'text-green-700' : 'text-black/40'}>
@@ -113,12 +137,53 @@ export function Stores() {
                 <input type="checkbox" checked={s.is_available} onChange={(e) => toggle(s.id, e.target.checked)} />
               </label>
             </div>
-            {openId === s.id && <MenuEditor storeId={s.id} />}
+            {openId === s.id && (
+              <>
+                <LocationEditor store={s} onSaved={load} />
+                <MenuEditor storeId={s.id} />
+              </>
+            )}
           </div>
         ))}
       </div>
       </>
       )}
+    </div>
+  );
+}
+
+function LocationEditor({ store, onSaved }: { store: StoreRow; onSaved: () => void }) {
+  const initial: MapValue | null =
+    store.lat != null && store.lng != null ? { lat: store.lat, lng: store.lng } : null;
+  const [pin, setPin] = useState<MapValue | null>(initial);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const dirty = pin?.lat !== initial?.lat || pin?.lng !== initial?.lng;
+
+  async function save() {
+    if (!supabase || !pin) return;
+    setSaving(true); setSaved(false);
+    try {
+      await setStoreLocation(supabase, store.id, pin);
+      setSaved(true);
+      onSaved();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="border-t border-black/5 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Store location</h4>
+        <button onClick={save} disabled={!supabase || !pin || !dirty || saving}
+          className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+          {saving ? 'Saving…' : dirty ? 'Save location' : saved ? '✓ Saved' : 'Saved'}
+        </button>
+      </div>
+      <MapPicker value={pin} onChange={(v) => { setPin(v); setSaved(false); }} height={220} />
+      <p className="mt-1 text-xs text-black/40">
+        The delivery fee is computed from this pin to the customer’s drop-off, so place it precisely.
+      </p>
     </div>
   );
 }

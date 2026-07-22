@@ -66,6 +66,40 @@ export async function setStoreAvailability(db: SupabaseClient, storeId: string, 
   if (error) throw error;
 }
 
+export interface StorePatch {
+  name?: string;
+  category?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  contactNumber?: string | null;
+}
+
+/** Update editable fields of an existing store (e.g. pinning its map location). */
+export async function updateStore(db: SupabaseClient, storeId: string, patch: StorePatch) {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.category !== undefined) row.category = patch.category;
+  if (patch.address !== undefined) row.address = patch.address;
+  if (patch.lat !== undefined) row.lat = patch.lat;
+  if (patch.lng !== undefined) row.lng = patch.lng;
+  if (patch.contactNumber !== undefined) row.contact_number = patch.contactNumber;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await db.from('stores').update(row).eq('id', storeId);
+  if (error) throw error;
+}
+
+/** Set (or clear) a store's map pin. */
+export async function setStoreLocation(
+  db: SupabaseClient, storeId: string, loc: { lat: number; lng: number } | null,
+) {
+  const { error } = await db
+    .from('stores')
+    .update({ lat: loc?.lat ?? null, lng: loc?.lng ?? null })
+    .eq('id', storeId);
+  if (error) throw error;
+}
+
 /** A store's menu: categories with their items (available items only for customers). */
 export async function listMenu(db: SupabaseClient, storeId: string, availableOnly = true) {
   const cats = await db
