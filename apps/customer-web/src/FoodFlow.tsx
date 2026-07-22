@@ -30,7 +30,7 @@ interface FeeSettings {
 const DEFAULT_FEE_SETTINGS: FeeSettings = { model: 'flat', flatFee: DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG };
 
 export function FoodFlow() {
-  const { customerId, mobile } = useAuth();
+  const { ensureContact } = useAuth();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
@@ -40,6 +40,7 @@ export function FoodFlow() {
   const [error, setError] = useState<string | null>(null);
   const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
+  const [contact, setContact] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -125,21 +126,25 @@ export function FoodFlow() {
   async function checkout() {
     setError(null);
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
-    const input = {
-      customerId: customerId ?? 'preview-customer',
-      customerContact: mobile || '09171234567',
-      deliveryFee,
-      lines: cart,
-      deliveryLat: dropoff?.lat,
-      deliveryLng: dropoff?.lng,
-      paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
-      paid: pay === 'online',
-    };
+    if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     try {
       if (supabase && isSupabaseConfigured) {
-        setCreatedId(await createFoodOrder(supabase, input));
+        const customerId = await ensureContact(contact.trim());
+        setCreatedId(await createFoodOrder(supabase, {
+          customerId,
+          customerContact: contact.trim(),
+          deliveryFee,
+          lines: cart,
+          deliveryLat: dropoff?.lat,
+          deliveryLng: dropoff?.lng,
+          paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
+          paid: pay === 'online',
+        }));
       } else {
-        buildFoodOrder(input); // validates the cart locally
+        buildFoodOrder({
+          customerId: 'preview-customer', customerContact: contact.trim() || '09171234567',
+          deliveryFee, lines: cart, paymentMethod: pay === 'online' ? 'online' : 'cod', paid: pay === 'online',
+        });
         setCreatedId('preview-only');
       }
     } catch (e) {
@@ -158,7 +163,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -227,6 +232,13 @@ export function FoodFlow() {
               <LocationPicker value={dropoff} onChange={setDropoff} />
             </div>
           )}
+          <div className="mb-3 border-t border-black/5 pt-3">
+            <label className="mb-1 block text-sm font-medium">Your mobile number</label>
+            <input value={contact} onChange={(e) => setContact(e.target.value)}
+              inputMode="tel" placeholder="0917 123 4567"
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+            <p className="mt-1 text-xs text-black/40">So the rider can reach you. No account needed.</p>
+          </div>
           <div className="border-t border-black/5 pt-2">
             <Row label="Goods" value={peso(summary.goodsCost)} />
             <Row
@@ -244,9 +256,11 @@ export function FoodFlow() {
             )}
           </div>
           <div className="mt-4"><PaymentChoice value={pay} onChange={setPay} /></div>
-          <button onClick={checkout} disabled={needsDropoff}
+          <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
             className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
-            {needsDropoff ? 'Set delivery location to continue' : pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
+            {needsDropoff ? 'Set delivery location to continue'
+              : !contact.trim() ? 'Enter your mobile number'
+              : pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
           </button>
         </section>
       )}

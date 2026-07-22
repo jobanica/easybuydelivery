@@ -24,7 +24,7 @@ const initial: FormState = {
 };
 
 export function PadalaForm() {
-  const { customerId } = useAuth();
+  const { ensureContact } = useAuth();
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -39,9 +39,9 @@ export function PadalaForm() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function toInput(): PadalaRequestInput {
+  function toInput(customerId: string): PadalaRequestInput {
     return {
-      customerId: customerId ?? 'preview-customer',
+      customerId,
       customerContact: form.customerContact,
       deliveryFee: form.deliveryFee,
       feePayer: form.feePayer,
@@ -60,9 +60,10 @@ export function PadalaForm() {
     setSubmitting(true);
     try {
       if (supabase && isSupabaseConfigured) {
-        setCreatedId(await createPadalaOrder(supabase, toInput()));
+        const customerId = await ensureContact(form.customerContact);
+        setCreatedId(await createPadalaOrder(supabase, toInput(customerId)));
       } else {
-        buildPadalaOrderRow(toInput());
+        buildPadalaOrderRow(toInput('preview-customer'));
         setCreatedId('preview-only');
       }
     } catch (err) {

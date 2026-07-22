@@ -22,7 +22,7 @@ const initial: FormState = {
 };
 
 export function PabiliForm() {
-  const { customerId } = useAuth();
+  const { ensureContact } = useAuth();
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -35,9 +35,9 @@ export function PabiliForm() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function toInput(): PabiliRequestInput {
+  function toInput(customerId: string): PabiliRequestInput {
     return {
-      customerId: customerId ?? 'preview-customer',
+      customerId,
       customerContact: form.customerContact,
       deliveryFee: form.deliveryFee,
       itemsDescription: form.itemsDescription,
@@ -62,9 +62,10 @@ export function PabiliForm() {
     setSubmitting(true);
     try {
       if (supabase && isSupabaseConfigured) {
-        setCreatedId(await createPabiliOrder(supabase, toInput()));
+        const customerId = await ensureContact(form.customerContact);
+        setCreatedId(await createPabiliOrder(supabase, toInput(customerId)));
       } else {
-        buildPabiliOrderRow(toInput());
+        buildPabiliOrderRow(toInput('preview-customer'));
         setCreatedId('preview-only');
       }
     } catch (err) {
