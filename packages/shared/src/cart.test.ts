@@ -49,8 +49,8 @@ test('summarizeCart: 2 stores => 1 added store fee, commission on fees only', ()
   assert.equal(b.goodsCost, 600);
   assert.equal(b.storeFeeTotal, 25);
   assert.equal(b.customerTotal, 600 + 50 + 25 + 0);
-  // commission base = 50 + 25 = 75 ; * 0.15 = 11.25
-  assert.equal(b.commission, 11.25);
+  // commission = 50 * 0.15 + 25*1 = 7.5 + 25 = 32.5
+  assert.equal(b.commission, 32.5);
 });
 
 test('summarizeCart single-store cart has no store fee', () => {

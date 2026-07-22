@@ -1,13 +1,18 @@
 /**
  * Pricing & commission math for Easy Buy Delivery.
  *
- * Locked commission formula (confirmed by operator):
+ * Commission formula (confirmed by operator):
  *
- *   Commission = (Delivery Fee + perStoreFee × addedStores) × rate
+ *   Commission = Delivery Fee × rate + perStoreFee × addedStores
  *
- * where addedStores = max(0, storeCount - 1), perStoreFee defaults to ₱25,
- * and rate defaults to 0.15. Commission is charged on the delivery fee and
- * per-store fees ONLY — never on the cost of goods, which is a pass-through.
+ * The operator takes a `rate` cut of the delivery fee PLUS the full per-store
+ * fee for each added store (the per-store fee is not rated — it is the app's in
+ * whole). addedStores = max(0, storeCount - 1), perStoreFee defaults to ₱25,
+ * and rate defaults to 0.15. Commission never touches the cost of goods, which
+ * is a pass-through.
+ *
+ * @example
+ * // DF ₱50, 3 stores → 50 × 0.15 + 25 × 2 = 7.5 + 50 = ₱57.50
  */
 
 import { roundPeso } from './money.ts';
@@ -115,18 +120,20 @@ export interface CommissionInput {
 }
 
 /**
- * Operator commission for an order.
+ * Operator commission for an order:
+ *   rate × (delivery fee [+ convenience fee if folded in]) + full per-store fees.
  *
  * @example
- * // DF ₱50, 3 stores → base = 50 + 25×2 = 100 → commission = ₱15
- * commission({ deliveryFee: 50, storeCount: 3 }, DEFAULT_FEE_CONFIG) // 15
+ * // DF ₱50, 3 stores → 50 × 0.15 + 25 × 2 = 7.5 + 50 = ₱57.50
+ * commission({ deliveryFee: 50, storeCount: 3 }, DEFAULT_FEE_CONFIG) // 57.5
  */
 export function commission(input: CommissionInput, config: FeeConfig = DEFAULT_FEE_CONFIG): number {
-  let base = input.deliveryFee + addedStores(input.storeCount) * config.perStoreFee;
+  let ratedBase = input.deliveryFee;
   if (config.convenienceFeeMode === 'in_base') {
-    base += config.convenienceFee;
+    ratedBase += config.convenienceFee;
   }
-  return roundPeso(base * config.commissionRate);
+  const storeFees = addedStores(input.storeCount) * config.perStoreFee;
+  return roundPeso(ratedBase * config.commissionRate + storeFees);
 }
 
 export interface OrderCostInput extends CommissionInput {
