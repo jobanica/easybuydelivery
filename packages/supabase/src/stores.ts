@@ -138,3 +138,28 @@ export async function setMenuItemAvailability(db: SupabaseClient, itemId: string
   const { error } = await db.from('menu_items').update({ is_available: available }).eq('id', itemId);
   if (error) throw error;
 }
+
+export interface MenuCategoryInput {
+  storeId: string;
+  title: string;
+  sortOrder?: number;
+}
+
+/** Create a menu category (section) for a store, e.g. "Rice Meals", "Drinks". */
+export async function createMenuCategory(db: SupabaseClient, input: MenuCategoryInput) {
+  const title = input.title.trim();
+  if (!title) throw new Error('category title is required');
+  const { data, error } = await db
+    .from('menu_categories')
+    .insert({ store_id: input.storeId, title, sort_order: input.sortOrder ?? 0 })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+/** Remove a menu category; its items are kept but become uncategorised. */
+export async function deleteMenuCategory(db: SupabaseClient, categoryId: string) {
+  const { error } = await db.from('menu_categories').delete().eq('id', categoryId);
+  if (error) throw error;
+}

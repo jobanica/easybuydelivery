@@ -7,6 +7,8 @@ import {
   listMenu,
   createMenuItem,
   setMenuItemAvailability,
+  createMenuCategory,
+  deleteMenuCategory,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
@@ -23,7 +25,8 @@ interface StoreRow {
   lat: number | null;
   lng: number | null;
 }
-interface ItemRow { id: string; name: string; price: number; is_available: boolean }
+interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null }
+interface CatRow { id: string; title: string; sort_order: number }
 
 export function Stores() {
   const [rows, setRows] = useState<StoreRow[]>([]);
@@ -190,43 +193,106 @@ function LocationEditor({ store, onSaved }: { store: StoreRow; onSaved: () => vo
 }
 
 function MenuEditor({ storeId }: { storeId: string }) {
+  const [cats, setCats] = useState<CatRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [catTitle, setCatTitle] = useState('');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  const [catId, setCatId] = useState(''); // category for the new item ('' = uncategorised)
 
   async function load() {
     if (!supabase) return;
     const menu = await listMenu(supabase, storeId, false);
+    setCats((menu.categories as CatRow[]).sort((a, b) => a.sort_order - b.sort_order));
     setItems(menu.items as ItemRow[]);
   }
   useEffect(() => { void load(); }, [storeId]);
 
+  async function addCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !catTitle.trim()) return;
+    await createMenuCategory(supabase, { storeId, title: catTitle.trim(), sortOrder: cats.length });
+    setCatTitle('');
+    await load();
+  }
+
+  async function removeCategory(id: string) {
+    if (!supabase) return;
+    await deleteMenuCategory(supabase, id);
+    if (catId === id) setCatId('');
+    await load();
+  }
+
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !name.trim()) return;
-    await createMenuItem(supabase, { storeId, name: name.trim(), price: Number(price) || 0 });
+    await createMenuItem(supabase, { storeId, name: name.trim(), price: Number(price) || 0, categoryId: catId || undefined });
     setName(''); setPrice('');
     await load();
   }
 
+  // Group items under their category, with an "Uncategorised" bucket last.
+  const knownCat = new Set(cats.map((c) => c.id));
+  const groups: { cat: CatRow | null; rows: ItemRow[] }[] = [
+    ...cats.map((c) => ({ cat: c, rows: items.filter((i) => i.category_id === c.id) })),
+    { cat: null, rows: items.filter((i) => !i.category_id || !knownCat.has(i.category_id)) },
+  ];
+
   return (
     <div className="border-t border-black/5 bg-black/[0.015] p-4">
-      <ul className="mb-3 divide-y divide-black/5">
-        {items.map((it) => (
-          <li key={it.id} className="flex items-center justify-between py-1.5 text-sm">
-            <span>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
-            <label className="flex items-center gap-1 text-xs text-black/50">
-              available
-              <input type="checkbox" checked={it.is_available}
-                onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
-            </label>
-          </li>
+      {/* Categories */}
+      <div className="mb-4">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/40">Categories</p>
+        <div className="mb-2 flex flex-wrap gap-2">
+          {cats.map((c) => (
+            <span key={c.id} className="inline-flex items-center gap-1 rounded-full bg-brand-green/15 px-2.5 py-1 text-xs font-medium text-green-800">
+              {c.title}
+              <button onClick={() => removeCategory(c.id)} title="Delete category"
+                className="text-green-800/60 hover:text-red-600">×</button>
+            </span>
+          ))}
+          {cats.length === 0 && <span className="text-xs text-black/40">No categories yet.</span>}
+        </div>
+        <form onSubmit={addCategory} className="flex gap-2">
+          <input className={inp + ' flex-1'} placeholder="New category (e.g. Rice Meals, Drinks)"
+            value={catTitle} onChange={(e) => setCatTitle(e.target.value)} />
+          <button className="rounded-lg bg-brand-green px-3 py-2 text-sm font-medium text-white">Add category</button>
+        </form>
+      </div>
+
+      {/* Items grouped by category */}
+      <div className="mb-3 space-y-3">
+        {groups.map(({ cat, rows }) => (
+          (cat || rows.length > 0) && (
+            <div key={cat?.id ?? 'uncat'}>
+              <p className="mb-1 text-xs font-semibold text-black/50">{cat ? cat.title : 'Uncategorised'}</p>
+              <ul className="divide-y divide-black/5">
+                {rows.map((it) => (
+                  <li key={it.id} className="flex items-center justify-between py-1.5 text-sm">
+                    <span>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
+                    <label className="flex items-center gap-1 text-xs text-black/50">
+                      available
+                      <input type="checkbox" checked={it.is_available}
+                        onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
+                    </label>
+                  </li>
+                ))}
+                {rows.length === 0 && <li className="py-1.5 text-xs text-black/30">No items in this category.</li>}
+              </ul>
+            </div>
+          )
         ))}
-        {items.length === 0 && <li className="py-1.5 text-xs text-black/40">No items yet.</li>}
-      </ul>
-      <form onSubmit={add} className="flex gap-2">
-        <input className={inp + ' flex-1'} placeholder="Item name" value={name} onChange={(e) => setName(e.target.value)} />
+        {items.length === 0 && <p className="text-xs text-black/40">No items yet.</p>}
+      </div>
+
+      {/* Add item */}
+      <form onSubmit={add} className="flex flex-wrap gap-2">
+        <input className={inp + ' min-w-[8rem] flex-1'} placeholder="Item name" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={inp + ' w-24'} placeholder="Price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
+        <select className={inp} value={catId} onChange={(e) => setCatId(e.target.value)}>
+          <option value="">No category</option>
+          {cats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+        </select>
         <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add item</button>
       </form>
     </div>
