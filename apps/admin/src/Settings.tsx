@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAppSettings, updateAppSettings, type AppSettings } from '@ebd/supabase';
-import { commission } from '@ebd/shared';
+import { commission, distanceDeliveryFee } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, peso } from './ui.tsx';
 
@@ -8,6 +8,7 @@ const SAMPLE: AppSettings = {
   is_open: true, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
   convenience_fee: 0, commission_rate: 0.15, delivery_fee_model: 'flat',
   convenience_fee_mode: 'pass_through', settlement_cutoff: '00:00', sms_notify_stores: false,
+  delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
 };
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -17,6 +18,7 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewKm, setPreviewKm] = useState(5);
 
   useEffect(() => {
     (async () => {
@@ -102,6 +104,52 @@ export function Settings() {
           Example: ₱{s.default_delivery_fee} delivery + {peso(s.per_store_fee)}×2 added stores →
           commission <span className="font-bold">{peso(example)}</span>
         </p>
+      </Card>
+
+      {/* Distance-based delivery fee */}
+      <Card title="Distance-based delivery fee">
+        <p className="mb-3 text-sm text-black/60">
+          Used when <b>Delivery fee model</b> is set to <b>Per km</b>. The fee is measured from the
+          store’s pinned location to the customer’s drop-off:
+          <br />
+          <span className="mt-1 inline-block rounded bg-black/[0.04] px-2 py-1 font-mono text-xs">
+            fee = base fare + per-km × max(0, distance − base distance)
+          </span>
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Base fare (₱)">
+            <input type="number" min={0} className={inp} value={s.delivery_base_fare}
+              onChange={(e) => set('delivery_base_fare', Number(e.target.value))} />
+          </Field>
+          <Field label="Base distance (km)">
+            <input type="number" min={0} step={0.5} className={inp} value={s.delivery_base_km}
+              onChange={(e) => set('delivery_base_km', Number(e.target.value))} />
+          </Field>
+          <Field label="Rate beyond base (₱/km)">
+            <input type="number" min={0} step={0.5} className={inp} value={s.delivery_per_km}
+              onChange={(e) => set('delivery_per_km', Number(e.target.value))} />
+          </Field>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-brand-purple/[0.06] px-3 py-2">
+          <span className="text-sm text-black/60">Preview a</span>
+          <input type="number" min={0} step={0.5} value={previewKm}
+            onChange={(e) => setPreviewKm(Number(e.target.value))}
+            className="w-20 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm outline-none focus:border-brand-green" />
+          <span className="text-sm text-black/60">km delivery →</span>
+          <span className="text-sm font-bold text-brand-purple">
+            {peso(distanceDeliveryFee(previewKm, {
+              baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km,
+            }))}
+          </span>
+        </div>
+
+        {s.delivery_fee_model !== 'per_km' && (
+          <p className="mt-3 rounded-lg bg-brand-yellow/20 px-3 py-2 text-xs text-yellow-800">
+            Heads up — the delivery fee model above is set to <b>{s.delivery_fee_model}</b>, so these
+            rates aren’t applied yet. Switch it to <b>Per km</b> to charge by distance.
+          </p>
+        )}
       </Card>
 
       {/* Store SMS */}

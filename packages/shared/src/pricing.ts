@@ -40,6 +40,39 @@ export function addedStores(storeCount: number): number {
   return Math.max(0, Math.trunc(storeCount) - 1);
 }
 
+/** Distance-based delivery-fee rate, mirrors the admin-editable settings. */
+export interface DistanceFeeConfig {
+  /** Base fare charged for any delivery within `baseKm`. Default ₱50. */
+  baseFare: number;
+  /** Distance (km) already covered by the base fare. Default 2. */
+  baseKm: number;
+  /** Rate (₱ per km) charged for each km beyond `baseKm`. Default ₱10. */
+  perKm: number;
+}
+
+export const DEFAULT_DISTANCE_FEE_CONFIG: DistanceFeeConfig = {
+  baseFare: 50,
+  baseKm: 2,
+  perKm: 10,
+};
+
+/**
+ * Delivery fee for a `distanceKm`-long trip (store pin → drop-off) under the
+ * per-km model:  baseFare + perKm × max(0, distanceKm − baseKm).
+ *
+ * @example
+ * // 5 km with the defaults → 50 + 10 × (5 − 2) = ₱80
+ * distanceDeliveryFee(5) // 80
+ */
+export function distanceDeliveryFee(
+  distanceKm: number,
+  config: DistanceFeeConfig = DEFAULT_DISTANCE_FEE_CONFIG,
+): number {
+  const km = Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0;
+  const billableKm = Math.max(0, km - config.baseKm);
+  return roundPeso(config.baseFare + config.perKm * billableKm);
+}
+
 /** Total per-store fee for an order touching `storeCount` stores. */
 export function storeFeeTotal(storeCount: number, config: FeeConfig): number {
   return roundPeso(addedStores(storeCount) * config.perStoreFee);

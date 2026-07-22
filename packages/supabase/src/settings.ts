@@ -16,6 +16,10 @@ export interface AppSettings {
   convenience_fee_mode: 'pass_through' | 'in_base';
   settlement_cutoff: string;
   sms_notify_stores: boolean;
+  /** Distance-fee rate (used when delivery_fee_model = 'per_km'). */
+  delivery_base_fare: number;
+  delivery_base_km: number;
+  delivery_per_km: number;
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {

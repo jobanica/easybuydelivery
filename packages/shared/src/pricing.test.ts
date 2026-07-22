@@ -5,8 +5,11 @@ import {
   commission,
   storeFeeTotal,
   orderCost,
+  distanceDeliveryFee,
   DEFAULT_FEE_CONFIG,
+  DEFAULT_DISTANCE_FEE_CONFIG,
   type FeeConfig,
+  type DistanceFeeConfig,
 } from './pricing.ts';
 
 test('addedStores counts only stores beyond the first', () => {
@@ -79,4 +82,29 @@ test('no floating point drift in rounding', () => {
   // 0.1-style inputs should still round cleanly to centavos
   const b = orderCost({ deliveryFee: 10.1, storeCount: 1, goodsCost: 0.2 });
   assert.equal(b.customerTotal, 10.3);
+});
+
+test('distanceDeliveryFee: within base distance is just the base fare', () => {
+  assert.equal(distanceDeliveryFee(0), 50);
+  assert.equal(distanceDeliveryFee(1.5), 50);
+  assert.equal(distanceDeliveryFee(2), 50); // exactly at the base km
+});
+
+test('distanceDeliveryFee: charges per km beyond the base distance', () => {
+  // 5 km → 50 + 10 × (5 − 2) = 80
+  assert.equal(distanceDeliveryFee(5), 80);
+  // 2.5 km → 50 + 10 × 0.5 = 55
+  assert.equal(distanceDeliveryFee(2.5), 55);
+});
+
+test('distanceDeliveryFee: honours a custom rate config', () => {
+  const config: DistanceFeeConfig = { baseFare: 40, baseKm: 1, perKm: 12 };
+  // 4 km → 40 + 12 × (4 − 1) = 76
+  assert.equal(distanceDeliveryFee(4, config), 76);
+});
+
+test('distanceDeliveryFee: guards bad distances', () => {
+  assert.equal(distanceDeliveryFee(-3), 50);          // negative → base fare
+  assert.equal(distanceDeliveryFee(NaN), 50);         // NaN → base fare
+  assert.equal(DEFAULT_DISTANCE_FEE_CONFIG.baseFare, 50);
 });
