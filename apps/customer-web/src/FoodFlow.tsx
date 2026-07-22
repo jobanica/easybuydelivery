@@ -5,10 +5,12 @@ import {
   collectibleAtDoor,
   resolveDeliveryFee,
   DEFAULT_DISTANCE_FEE_CONFIG,
+  DEFAULT_FEE_CONFIG,
   MAX_STORES_PER_ORDER,
   type CartLine,
   type DeliveryFeeModel,
   type DistanceFeeConfig,
+  type FeeConfig,
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -26,8 +28,11 @@ interface FeeSettings {
   model: DeliveryFeeModel;
   flatFee: number;
   distance: DistanceFeeConfig;
+  config: FeeConfig; // perStoreFee, commissionRate, convenienceFee
 }
-const DEFAULT_FEE_SETTINGS: FeeSettings = { model: 'flat', flatFee: DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG };
+const DEFAULT_FEE_SETTINGS: FeeSettings = {
+  model: 'flat', flatFee: DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG, config: DEFAULT_FEE_CONFIG,
+};
 
 export function FoodFlow() {
   const { ensureContact } = useAuth();
@@ -58,6 +63,11 @@ export function FoodFlow() {
                 baseFare: settings.delivery_base_fare,
                 baseKm: settings.delivery_base_km,
                 perKm: settings.delivery_per_km,
+              },
+              config: {
+                perStoreFee: settings.per_store_fee,
+                commissionRate: settings.commission_rate,
+                convenienceFee: settings.convenience_fee,
               },
             });
           }
@@ -94,11 +104,22 @@ export function FoodFlow() {
     dropoff,
   }), [fees, cartStoreLocations, dropoff]);
 
-  const summary = useMemo(() => summarizeCart(cart, deliveryFee), [cart, deliveryFee]);
+  const summary = useMemo(() => summarizeCart(cart, deliveryFee, fees.config), [cart, deliveryFee, fees.config]);
   const storeCount = distinctStoreCount(cart);
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
   const needsDropoff = fees.model === 'per_km' && !dropoff;
+
+  // Cart grouped by store (one order → one rider visits each store).
+  const cartByStore = useMemo(() => {
+    const map = new Map<string, { name: string; lines: CartLine[] }>();
+    for (const l of cart) {
+      if (!map.has(l.storeId)) map.set(l.storeId, { name: stores.find((s) => s.id === l.storeId)?.name ?? 'Store', lines: [] });
+      map.get(l.storeId)!.lines.push(l);
+    }
+    return [...map.values()];
+  }, [cart, stores]);
+  const canAddStore = storeCount < MAX_STORES_PER_ORDER;
 
   function addToCart(store: Store, item: MenuItem) {
     setError(null);
@@ -139,12 +160,12 @@ export function FoodFlow() {
           deliveryLng: dropoff?.lng,
           paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
           paid: pay === 'online',
-        }));
+        }, fees.config));
       } else {
         buildFoodOrder({
           customerId: 'preview-customer', customerContact: contact.trim() || '09171234567',
           deliveryFee, lines: cart, paymentMethod: pay === 'online' ? 'online' : 'cod', paid: pay === 'online',
-        });
+        }, fees.config);
         setCreatedId('preview-only');
       }
     } catch (e) {
@@ -198,6 +219,11 @@ export function FoodFlow() {
         </section>
       ) : (
         <section className="grid gap-3">
+          {cart.length > 0 && (
+            <p className="rounded-lg bg-brand-green/10 px-3 py-2 text-xs text-green-800">
+              Pick another store to add to your order — one rider will buy from all of them.
+            </p>
+          )}
           {stores.map((s) => (
             <button key={s.id} onClick={() => setOpenStoreId(s.id)}
               className="flex items-center justify-between rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
@@ -214,19 +240,44 @@ export function FoodFlow() {
       {cart.length > 0 && (
         <section className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
           <h3 className="mb-2 font-bold">Your cart {storeCount > 1 && <span className="text-xs font-normal text-black/50">· {storeCount} stores</span>}</h3>
-          <ul className="mb-3 divide-y divide-black/5">
-            {cart.map((l) => (
-              <li key={l.menuItemId} className="flex items-center justify-between py-2 text-sm">
-                <span>{l.name}</span>
-                <span className="flex items-center gap-2">
-                  <button onClick={() => changeQty(l.menuItemId!, -1)} className="h-6 w-6 rounded bg-black/5">−</button>
-                  <span className="w-4 text-center">{l.qty}</span>
-                  <button onClick={() => changeQty(l.menuItemId!, +1)} className="h-6 w-6 rounded bg-black/5">+</button>
-                  <span className="w-16 text-right font-medium">{peso(l.unitPrice * l.qty)}</span>
-                </span>
-              </li>
+
+          {/* Items grouped by store — one order, one rider visits each store. */}
+          <div className="mb-3 space-y-3">
+            {cartByStore.map((grp) => (
+              <div key={grp.name}>
+                {storeCount > 1 && <p className="mb-1 text-xs font-semibold text-brand-purple">🏪 {grp.name}</p>}
+                <ul className="divide-y divide-black/5">
+                  {grp.lines.map((l) => (
+                    <li key={l.menuItemId} className="flex items-center justify-between py-2 text-sm">
+                      <span>{l.name}</span>
+                      <span className="flex items-center gap-2">
+                        <button onClick={() => changeQty(l.menuItemId!, -1)} className="h-6 w-6 rounded bg-black/5">−</button>
+                        <span className="w-4 text-center">{l.qty}</span>
+                        <button onClick={() => changeQty(l.menuItemId!, +1)} className="h-6 w-6 rounded bg-black/5">+</button>
+                        <span className="w-16 text-right font-medium">{peso(l.unitPrice * l.qty)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
+
+          {/* Order from more than one store — the same rider buys at each. */}
+          {canAddStore ? (
+            <button onClick={() => { setOpenStoreId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className="mb-3 w-full rounded-lg border border-dashed border-brand-purple/50 py-2.5 text-sm font-semibold text-brand-purple hover:bg-brand-purple/5">
+              ＋ Add items from another store
+            </button>
+          ) : (
+            <p className="mb-3 text-center text-xs text-black/40">Up to {MAX_STORES_PER_ORDER} stores per order.</p>
+          )}
+          {storeCount > 1 && (
+            <p className="mb-3 rounded-lg bg-brand-purple/5 px-3 py-2 text-xs text-brand-purple">
+              One rider will buy from all {storeCount} stores. The delivery fee is charged for the farthest store only.
+            </p>
+          )}
+
           {fees.model === 'per_km' && (
             <div className="mb-3 border-t border-black/5 pt-3">
               <LocationPicker value={dropoff} onChange={setDropoff} />
@@ -246,6 +297,7 @@ export function FoodFlow() {
               value={needsDropoff ? '—' : peso(summary.deliveryFee)}
             />
             {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
+            {summary.convenienceFee > 0 && <Row label="Convenience fee" value={peso(summary.convenienceFee)} />}
             <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
               <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
             </div>

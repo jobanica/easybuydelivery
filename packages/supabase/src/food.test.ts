@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildFoodOrder, type FoodCheckoutInput } from './food.ts';
-import type { CartLine } from '@ebd/shared';
+import { DEFAULT_FEE_CONFIG, type CartLine } from '@ebd/shared';
 
 const lines: CartLine[] = [
   { storeId: 'A', menuItemId: 'm1', name: 'Burger', unitPrice: 120, qty: 2,
@@ -27,6 +27,13 @@ test('builds order with goods pass-through and 2-store fee', () => {
 test('collects distinct store links', () => {
   const built = buildFoodOrder(base);
   assert.deepEqual(built.storeIds.sort(), ['A', 'B']);
+});
+
+test('a multi-store order carries store fee + convenience fee (rider keeps it)', () => {
+  const built = buildFoodOrder(base, { ...DEFAULT_FEE_CONFIG, convenienceFee: 20 });
+  assert.equal(built.order.store_fee_total, 25);    // ₱25 for the 1 added store
+  assert.equal(built.order.convenience_fee, 20);    // ₱20 convenience, on the order
+  assert.equal(built.order.commission_amount, 11.25); // unchanged — convenience excluded
 });
 
 test('tags each line item with its store for per-store SMS', () => {

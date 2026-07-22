@@ -35,6 +35,7 @@ export interface FoodOrderRow {
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   store_fee_total: number;
+  convenience_fee: number;
   goods_cost: number;
   commission_amount: number;
   delivery_lat: number | null;
@@ -79,6 +80,7 @@ export function buildFoodOrder(
       payment_status: input.paid ? 'paid' : 'unpaid',
       delivery_fee: summary.deliveryFee,
       store_fee_total: summary.storeFeeTotal,
+      convenience_fee: summary.convenienceFee,
       goods_cost: summary.goodsCost,
       commission_amount: summary.commission,
       delivery_lat: input.deliveryLat ?? null,
