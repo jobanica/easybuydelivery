@@ -1,18 +1,18 @@
 # Commission & Settlement
 
-## The formula
+## The locked formula
 
 ```
-Commission = Delivery Fee × 15% + ₱25 × number of added stores
+Commission = (Delivery Fee + ₱25 × number of added stores) × 15%
 ```
 
 Confirmed by the operator. All three inputs are **admin-set and editable**.
 
-- The operator takes **15% of the delivery fee**, **plus** the **full per-store
-  fee (default ₱25)** for each added store — the per-store fee is not rated, it
-  goes to the app in whole.
+- The **delivery fee** and the **per-store fee (default ₱25)** are added together
+  first, then multiplied by **15%**.
 - **"Added stores"** = stores beyond the first. One rider services up to **3
-  stores per trip**, so a 3-store order adds ₱25 × 2 = ₱50 on top of the 15%.
+  stores per trip**, so a 3-store order adds ₱25 × 2 = ₱50 into the base before
+  the 15%.
 
 ### Worked example
 
@@ -20,15 +20,15 @@ Confirmed by the operator. All three inputs are **admin-set and editable**.
 |---|---|
 | Delivery fee | ₱50 |
 | Added stores | 2 (a 3-store order) |
-| 15% of delivery fee | ₱50 × 0.15 = ₱7.50 |
-| Store fees (full) | ₱25 × 2 = ₱50 |
-| **Commission** | ₱7.50 + ₱50 = **₱57.50** |
+| Store fee base | ₱25 × 2 = ₱50 |
+| **Commission base** | ₱50 + ₱50 = **₱100** |
+| **Commission (15%)** | **₱15** |
 
 ### The structural point
 
-Commission is on the **delivery fee (rated) + store fees (in full), NOT the
-food/goods cost.** The cost of goods is a straight pass-through — the rider
-fronts it, the customer repays it, the admin doesn't touch it.
+Commission is on the **delivery fee + store fees, NOT the food/goods cost.** The
+cost of goods is a straight pass-through — the rider fronts it, the customer
+repays it, the admin doesn't touch it.
 
 ### Reference pseudocode
 
@@ -40,7 +40,8 @@ function commission(deliveryFee: number, storeCount: number, opts: {
   const perStoreFee = opts.perStoreFee ?? 25;
   const rate = opts.rate ?? 0.15;
   const addedStores = Math.max(0, storeCount - 1);
-  return deliveryFee * rate + perStoreFee * addedStores;
+  const base = deliveryFee + perStoreFee * addedStores;
+  return base * rate;
 }
 ```
 

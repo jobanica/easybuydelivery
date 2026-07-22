@@ -15,7 +15,7 @@ app, and the admin dashboard. Pure logic and types — no UI, no I/O.
 ## The commission formula
 
 ```
-Commission = Delivery Fee × commissionRate + perStoreFee × addedStores
+Commission = (Delivery Fee + perStoreFee × addedStores) × commissionRate
 ```
 
 `addedStores = max(0, storeCount − 1)`; defaults ₱25 / 15%. Commission is on the

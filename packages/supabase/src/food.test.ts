@@ -20,7 +20,7 @@ test('builds order with goods pass-through and 2-store fee', () => {
   const built = buildFoodOrder(base);
   assert.equal(built.order.goods_cost, 270 + 90); // (135*2) + 90
   assert.equal(built.order.store_fee_total, 25); // 1 added store
-  assert.equal(built.order.commission_amount, 32.5); // 50*0.15 + 25 = 32.5
+  assert.equal(built.order.commission_amount, 11.25); // (50+25)*0.15
   assert.equal(built.order.delivery_fee, 50);
 });
 

@@ -44,7 +44,7 @@ Padala is the **lowest-risk service to launch first** — no rider cash float.
 ## Commission (locked formula)
 
 ```
-Commission = Delivery Fee × 15% + ₱25 × number of added stores
+Commission = (Delivery Fee + ₱25 × number of added stores) × 15%
 ```
 
 "Added stores" = stores beyond the first. Commission is charged on the

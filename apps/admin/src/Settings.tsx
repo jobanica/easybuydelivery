@@ -117,8 +117,7 @@ export function Settings() {
           </Field>
         </div>
         <p className="mt-4 rounded-lg bg-brand-green/10 px-3 py-2 text-sm text-green-800">
-          Example (3-store order): {Math.round(s.commission_rate * 1000) / 10}% of ₱{s.default_delivery_fee} delivery
-          ({peso(s.default_delivery_fee * s.commission_rate)}) + {peso(s.per_store_fee)}×2 store fees →
+          Example: ₱{s.default_delivery_fee} delivery + {peso(s.per_store_fee)}×2 added stores →
           commission <span className="font-bold">{peso(example)}</span>
         </p>
       </Card>

@@ -20,13 +20,13 @@ test('addedStores counts only stores beyond the first', () => {
   assert.equal(addedStores(3), 2);
 });
 
-test('formula: DF 50 + 3 stores => commission 57.5', () => {
-  // 50 * 0.15 + 25*2 = 7.5 + 50 = 57.5
-  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }), 57.5);
+test('locked formula: DF 50 + 3 stores => commission 15', () => {
+  // base = 50 + 25*2 = 100 ; 100 * 0.15 = 15
+  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }), 15);
 });
 
 test('single-store food order: DF 50 => commission 7.5', () => {
-  // 50 * 0.15 + 25*0 = 7.5
+  // base = 50 + 25*0 = 50 ; 50 * 0.15 = 7.5
   assert.equal(commission({ deliveryFee: 50, storeCount: 1 }), 7.5);
 });
 
@@ -45,17 +45,17 @@ test('convenience fee pass-through does NOT change commission', () => {
     convenienceFee: 20,
     convenienceFeeMode: 'pass_through',
   };
-  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 57.5);
+  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 15);
 });
 
-test('convenience fee in_base DOES fold into the rated base', () => {
+test('convenience fee in_base DOES fold into the 15% base', () => {
   const config: FeeConfig = {
     ...DEFAULT_FEE_CONFIG,
     convenienceFee: 20,
     convenienceFeeMode: 'in_base',
   };
-  // (50 + 20) * 0.15 + 25*2 = 10.5 + 50 = 60.5
-  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 60.5);
+  // base = 50 + 50 + 20 = 120 ; 120 * 0.15 = 18
+  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 18);
 });
 
 test('editable commission rate is honored', () => {
@@ -67,8 +67,8 @@ test('orderCost: goods are a pass-through, excluded from commission', () => {
   const b = orderCost({ deliveryFee: 50, storeCount: 3, goodsCost: 500 });
   // customer pays goods + DF + store fees + convenience
   assert.equal(b.customerTotal, 500 + 50 + 50 + 0);
-  // commission untouched by the 500 goods cost: 50*0.15 + 25*2 = 57.5
-  assert.equal(b.commission, 57.5);
+  // commission untouched by the 500 goods cost
+  assert.equal(b.commission, 15);
   assert.equal(b.storeFeeTotal, 50);
 });
 

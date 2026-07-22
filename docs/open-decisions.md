@@ -4,7 +4,7 @@ Track these before / while building. Recommendations noted where the spec gives 
 
 | # | Decision | Options | Recommendation / status |
 |---|---|---|---|
-| 1 | **Commission formula** | — | ✅ **RESOLVED:** `Delivery Fee × 15% + ₱25 × added stores` |
+| 1 | **Commission formula** | — | ✅ **RESOLVED:** `(Delivery Fee + ₱25 × added stores) × 15%` |
 | 2 | **Convenience fee treatment** | Inside the 15% base, or flat pass-through to admin | **Flat pass-through** (simpler, more common) unless operator says otherwise |
 | 3 | **Delivery fee model** | Flat, per-km, or per-zone | Open — affects both the customer quote and the 15% math |
 | 4 | **Rider float / cash risk** | — | Define: **daily cutoff time** for settlement; **settlement method** (GCash/cash/bank) + manual-confirm vs auto-verify; **cancellation/no-show policy** (rider out real cash if customer cancels after pickup or refuses at door) |
