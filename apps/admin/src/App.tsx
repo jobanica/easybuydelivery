@@ -80,7 +80,7 @@ export function App() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-20 w-60 transform bg-white pt-16 shadow-lg transition-transform lg:static lg:translate-x-0 lg:pt-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-20 w-60 transform overflow-y-auto bg-white pt-16 shadow-lg transition-transform lg:sticky lg:top-16 lg:bottom-auto lg:h-[calc(100vh-4rem)] lg:self-start lg:translate-x-0 lg:pt-0 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
           <nav className="p-4">
             <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wide text-black/40">Main Menu</p>
             <ul className="space-y-1">
