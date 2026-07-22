@@ -73,6 +73,38 @@ export interface StorePatch {
   lat?: number | null;
   lng?: number | null;
   contactNumber?: string | null;
+  logoUrl?: string | null;
+}
+
+const ASSETS_BUCKET = 'store-assets';
+
+function fileExt(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ext && /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png';
+}
+
+/** Upload a store logo to storage and save its public URL on the store. */
+export async function uploadStoreLogo(db: SupabaseClient, storeId: string, file: File): Promise<string> {
+  const path = `logos/${storeId}/${Date.now()}.${fileExt(file.name)}`;
+  const { error: upErr } = await db.storage.from(ASSETS_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const url = db.storage.from(ASSETS_BUCKET).getPublicUrl(path).data.publicUrl;
+  const { error } = await db.from('stores').update({ logo_url: url }).eq('id', storeId);
+  if (error) throw error;
+  return url;
+}
+
+/** Upload a menu-item image to storage and save its public URL on the item. */
+export async function uploadMenuItemImage(db: SupabaseClient, itemId: string, file: File): Promise<string> {
+  const path = `items/${itemId}/${Date.now()}.${fileExt(file.name)}`;
+  const { error: upErr } = await db.storage.from(ASSETS_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const url = db.storage.from(ASSETS_BUCKET).getPublicUrl(path).data.publicUrl;
+  const { error } = await db.from('menu_items').update({ image_url: url }).eq('id', itemId);
+  if (error) throw error;
+  return url;
 }
 
 /** Update editable fields of an existing store (e.g. pinning its map location). */
@@ -84,6 +116,7 @@ export async function updateStore(db: SupabaseClient, storeId: string, patch: St
   if (patch.lat !== undefined) row.lat = patch.lat;
   if (patch.lng !== undefined) row.lng = patch.lng;
   if (patch.contactNumber !== undefined) row.contact_number = patch.contactNumber;
+  if (patch.logoUrl !== undefined) row.logo_url = patch.logoUrl;
   if (Object.keys(row).length === 0) return;
   const { error } = await db.from('stores').update(row).eq('id', storeId);
   if (error) throw error;

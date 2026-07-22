@@ -21,8 +21,8 @@ import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
 
-interface MenuItem { id: string; name: string; price: number; description?: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null }
+interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null; logo_url?: string | null }
 
 interface FeeSettings {
   model: DeliveryFeeModel;
@@ -72,11 +72,11 @@ export function FoodFlow() {
             });
           }
           const withMenus: Store[] = [];
-          for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null }[]) {
+          for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[]) {
             const menu = await listMenu(supabase, s.id);
             withMenus.push({
               id: s.id, name: s.name, category: s.category ?? '',
-              lat: s.lat, lng: s.lng,
+              lat: s.lat, lng: s.lng, logo_url: s.logo_url,
               items: (menu.items as MenuItem[]),
             });
           }
@@ -199,16 +199,26 @@ export function FoodFlow() {
       {openStore ? (
         <section className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
           <button onClick={() => setOpenStoreId(null)} className="mb-3 text-sm text-brand-purple">← All stores</button>
-          <h2 className="font-bold">{openStore.name}</h2>
-          <p className="mb-3 text-xs text-black/50">{openStore.category}</p>
+          <div className="mb-3 flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/5">
+              {openStore.logo_url ? <img src={openStore.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">🏪</span>}
+            </span>
+            <span>
+              <h2 className="font-bold">{openStore.name}</h2>
+              <p className="text-xs text-black/50">{openStore.category}</p>
+            </span>
+          </div>
           <ul className="divide-y divide-black/5">
             {openStore.items.map((it) => (
-              <li key={it.id} className="flex items-center justify-between py-2">
-                <span>
-                  <span className="text-sm font-medium">{it.name}</span>
-                  {it.description && <span className="block text-xs text-black/40">{it.description}</span>}
+              <li key={it.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="flex min-w-0 items-center gap-3">
+                  {it.image_url && <img src={it.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{it.name}</span>
+                    {it.description && <span className="block truncate text-xs text-black/40">{it.description}</span>}
+                  </span>
                 </span>
-                <span className="flex items-center gap-3">
+                <span className="flex shrink-0 items-center gap-3">
                   <span className="text-sm">{peso(it.price)}</span>
                   <button onClick={() => addToCart(openStore, it)}
                     className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
@@ -226,9 +236,12 @@ export function FoodFlow() {
           )}
           {stores.map((s) => (
             <button key={s.id} onClick={() => setOpenStoreId(s.id)}
-              className="flex items-center justify-between rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
-              <span>
-                <span className="block font-semibold">{s.name}</span>
+              className="flex items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/5">
+                {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">🏪</span>}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{s.name}</span>
                 <span className="text-xs text-black/50">{s.category}</span>
               </span>
               <span className="text-brand-purple">→</span>

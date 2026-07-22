@@ -9,6 +9,8 @@ import {
   setMenuItemAvailability,
   createMenuCategory,
   deleteMenuCategory,
+  uploadStoreLogo,
+  uploadMenuItemImage,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
@@ -24,8 +26,9 @@ interface StoreRow {
   address: string | null;
   lat: number | null;
   lng: number | null;
+  logo_url: string | null;
 }
-interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null }
+interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null }
 interface CatRow { id: string; title: string; sort_order: number }
 
 export function Stores() {
@@ -125,13 +128,18 @@ export function Stores() {
         {rows.map((s) => (
           <div key={s.id} className="rounded-xl bg-white shadow-sm ring-1 ring-black/5">
             <div className="flex items-center justify-between p-4">
-              <button className="text-left" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
-                <span className="font-medium">{s.name}</span>
-                <span className="ml-2 text-xs text-black/40">{s.category ?? '—'}</span>
-                <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  s.lat != null && s.lng != null ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'
-                }`}>
-                  {s.lat != null && s.lng != null ? '📍 Pinned' : 'No location'}
+              <button className="flex items-center gap-3 text-left" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/10">
+                  {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-base text-black/25">🏪</span>}
+                </span>
+                <span>
+                  <span className="font-medium">{s.name}</span>
+                  <span className="ml-2 text-xs text-black/40">{s.category ?? '—'}</span>
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    s.lat != null && s.lng != null ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'
+                  }`}>
+                    {s.lat != null && s.lng != null ? '📍 Pinned' : 'No location'}
+                  </span>
                 </span>
               </button>
               <div className="flex items-center gap-2 text-sm">
@@ -143,6 +151,11 @@ export function Stores() {
             </div>
             {openId === s.id && (
               <>
+                <div className="border-t border-black/5 p-4">
+                  <h4 className="mb-2 text-sm font-semibold">Store logo</h4>
+                  <ImageUpload url={s.logo_url}
+                    onUpload={async (file) => { if (supabase) { await uploadStoreLogo(supabase, s.id, file); await load(); } }} />
+                </div>
                 <LocationEditor store={s} onSaved={load} />
                 <MenuEditor storeId={s.id} />
               </>
@@ -268,13 +281,28 @@ function MenuEditor({ storeId }: { storeId: string }) {
               <p className="mb-1 text-xs font-semibold text-black/50">{cat ? cat.title : 'Uncategorised'}</p>
               <ul className="divide-y divide-black/5">
                 {rows.map((it) => (
-                  <li key={it.id} className="flex items-center justify-between py-1.5 text-sm">
-                    <span>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
-                    <label className="flex items-center gap-1 text-xs text-black/50">
-                      available
-                      <input type="checkbox" checked={it.is_available}
-                        onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
-                    </label>
+                  <li key={it.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.04] ring-1 ring-black/10">
+                        {it.image_url ? <img src={it.image_url} alt="" className="h-full w-full object-cover" /> : <span className="text-black/25">🍽️</span>}
+                      </span>
+                      <span className="truncate">{it.name} · ₱{Number(it.price).toFixed(2)}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <label className="cursor-pointer text-xs font-medium text-brand-purple hover:underline">
+                        {it.image_url ? 'Change photo' : 'Add photo'}
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0]; e.target.value = '';
+                            if (file && supabase) { await uploadMenuItemImage(supabase, it.id, file); await load(); }
+                          }} />
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-black/50">
+                        available
+                        <input type="checkbox" checked={it.is_available}
+                          onChange={async (e) => { if (supabase) { await setMenuItemAvailability(supabase, it.id, e.target.checked); await load(); } }} />
+                      </label>
+                    </span>
                   </li>
                 ))}
                 {rows.length === 0 && <li className="py-1.5 text-xs text-black/30">No items in this category.</li>}
@@ -295,6 +323,34 @@ function MenuEditor({ storeId }: { storeId: string }) {
         </select>
         <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add item</button>
       </form>
+    </div>
+  );
+}
+
+/** Thumbnail + file picker that uploads an image and reports the new URL. */
+function ImageUpload({ url, onUpload, rounded = 'rounded-lg', size = 'h-14 w-14' }:
+  { url: string | null; onUpload: (file: File) => Promise<void>; rounded?: string; size?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !supabase) return;
+    setBusy(true); setErr(null);
+    try { await onUpload(file); }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : String(ex)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`flex ${size} shrink-0 items-center justify-center overflow-hidden ${rounded} bg-black/[0.04] ring-1 ring-black/10`}>
+        {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="text-lg text-black/25">🖼️</span>}
+      </div>
+      <label className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-brand-purple ring-1 ring-brand-purple/40 hover:bg-brand-purple/5">
+        {busy ? 'Uploading…' : url ? 'Change' : 'Upload'}
+        <input type="file" accept="image/*" className="hidden" onChange={pick} disabled={busy || !supabase} />
+      </label>
+      {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   );
 }
