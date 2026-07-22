@@ -11,6 +11,8 @@
  */
 
 import { roundPeso } from './money.ts';
+import { haversineMeters, type LatLng } from './tracking.ts';
+import type { DeliveryFeeModel } from './types.ts';
 
 /** Fee configuration, mirrors the admin-editable `app_settings` row. */
 export interface FeeConfig {
@@ -71,6 +73,33 @@ export function distanceDeliveryFee(
   const km = Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0;
   const billableKm = Math.max(0, km - config.baseKm);
   return roundPeso(config.baseFare + config.perKm * billableKm);
+}
+
+/**
+ * Resolve the delivery fee for a trip. Under the 'per_km' model the fee is
+ * driven by the farthest store→drop-off leg (a rider visiting several stores
+ * still ends up covering at least that distance; extra stops are billed via the
+ * per-store fee). Any other model — or a missing drop-off / un-pinned store —
+ * falls back to the flat fee, so checkout never blocks on geodata.
+ */
+export function resolveDeliveryFee(args: {
+  model: DeliveryFeeModel;
+  flatFee: number;
+  distanceConfig: DistanceFeeConfig;
+  storeLocations: readonly (LatLng | null | undefined)[];
+  dropoff: LatLng | null | undefined;
+}): number {
+  const { model, flatFee, distanceConfig, storeLocations, dropoff } = args;
+  if (model !== 'per_km' || !isLatLng(dropoff)) return roundPeso(flatFee);
+  const legsKm = storeLocations
+    .filter(isLatLng)
+    .map((s) => haversineMeters(s, dropoff) / 1000);
+  if (legsKm.length === 0) return roundPeso(flatFee);
+  return distanceDeliveryFee(Math.max(...legsKm), distanceConfig);
+}
+
+function isLatLng(p: LatLng | null | undefined): p is LatLng {
+  return !!p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
 }
 
 /** Total per-store fee for an order touching `storeCount` stores. */

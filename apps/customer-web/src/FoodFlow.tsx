@@ -3,19 +3,31 @@ import {
   summarizeCart,
   distinctStoreCount,
   collectibleAtDoor,
+  resolveDeliveryFee,
+  DEFAULT_DISTANCE_FEE_CONFIG,
   MAX_STORES_PER_ORDER,
   type CartLine,
+  type DeliveryFeeModel,
+  type DistanceFeeConfig,
 } from '@ebd/shared';
-import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder } from '@ebd/supabase';
+import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
 
 interface MenuItem { id: string; name: string; price: number; description?: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[] }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null }
+
+interface FeeSettings {
+  model: DeliveryFeeModel;
+  flatFee: number;
+  distance: DistanceFeeConfig;
+}
+const DEFAULT_FEE_SETTINGS: FeeSettings = { model: 'flat', flatFee: DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG };
 
 export function FoodFlow() {
   const { customerId, mobile } = useAuth();
@@ -26,23 +38,40 @@ export function FoodFlow() {
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
+  const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         if (supabase && isSupabaseConfigured) {
-          const rows = await listAvailableStores(supabase);
+          const [rows, settings] = await Promise.all([
+            listAvailableStores(supabase),
+            getAppSettings(supabase).catch(() => null),
+          ]);
+          if (settings) {
+            setFees({
+              model: settings.delivery_fee_model,
+              flatFee: settings.default_delivery_fee,
+              distance: {
+                baseFare: settings.delivery_base_fare,
+                baseKm: settings.delivery_base_km,
+                perKm: settings.delivery_per_km,
+              },
+            });
+          }
           const withMenus: Store[] = [];
-          for (const s of rows as { id: string; name: string; category: string | null }[]) {
+          for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null }[]) {
             const menu = await listMenu(supabase, s.id);
             withMenus.push({
               id: s.id, name: s.name, category: s.category ?? '',
+              lat: s.lat, lng: s.lng,
               items: (menu.items as MenuItem[]),
             });
           }
           setStores(withMenus);
         } else {
-          setStores(SAMPLE_STORES as SampleStore[]);
+          setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({ ...s, lat: null, lng: null })));
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -52,9 +81,23 @@ export function FoodFlow() {
     })();
   }, []);
 
-  const summary = useMemo(() => summarizeCart(cart, DELIVERY_FEE), [cart]);
+  // Distinct store locations touched by the cart, for the distance-based fee.
+  const cartStoreLocations = useMemo(() => {
+    const ids = new Set(cart.map((l) => l.storeId));
+    return stores.filter((s) => ids.has(s.id)).map((s) => ({ lat: s.lat, lng: s.lng }));
+  }, [cart, stores]);
+
+  const deliveryFee = useMemo(() => resolveDeliveryFee({
+    model: fees.model, flatFee: fees.flatFee, distanceConfig: fees.distance,
+    storeLocations: cartStoreLocations.map((s) => (s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null)),
+    dropoff,
+  }), [fees, cartStoreLocations, dropoff]);
+
+  const summary = useMemo(() => summarizeCart(cart, deliveryFee), [cart, deliveryFee]);
   const storeCount = distinctStoreCount(cart);
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
+  // Under per-km pricing we need the drop-off pin before we can price/checkout.
+  const needsDropoff = fees.model === 'per_km' && !dropoff;
 
   function addToCart(store: Store, item: MenuItem) {
     setError(null);
@@ -81,11 +124,14 @@ export function FoodFlow() {
 
   async function checkout() {
     setError(null);
+    if (needsDropoff) { setError('Please set your delivery location first.'); return; }
     const input = {
       customerId: customerId ?? 'preview-customer',
       customerContact: mobile || '09171234567',
-      deliveryFee: DELIVERY_FEE,
+      deliveryFee,
       lines: cart,
+      deliveryLat: dropoff?.lat,
+      deliveryLng: dropoff?.lng,
       paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
       paid: pay === 'online',
     };
@@ -112,7 +158,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -176,23 +222,31 @@ export function FoodFlow() {
               </li>
             ))}
           </ul>
+          {fees.model === 'per_km' && (
+            <div className="mb-3 border-t border-black/5 pt-3">
+              <LocationPicker value={dropoff} onChange={setDropoff} />
+            </div>
+          )}
           <div className="border-t border-black/5 pt-2">
             <Row label="Goods" value={peso(summary.goodsCost)} />
-            <Row label="Delivery fee" value={peso(summary.deliveryFee)} />
+            <Row
+              label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+              value={needsDropoff ? '—' : peso(summary.deliveryFee)}
+            />
             {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
             <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
-              <span>Total</span><span>{peso(summary.customerTotal)}</span>
+              <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
             </div>
-            {pay === 'online' && (
+            {pay === 'online' && !needsDropoff && (
               <div className="mt-1 flex justify-between text-xs text-black/50">
                 <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
               </div>
             )}
           </div>
           <div className="mt-4"><PaymentChoice value={pay} onChange={setPay} /></div>
-          <button onClick={checkout}
-            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95">
-            {pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
+          <button onClick={checkout} disabled={needsDropoff}
+            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
+            {needsDropoff ? 'Set delivery location to continue' : pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
           </button>
         </section>
       )}

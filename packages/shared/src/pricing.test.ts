@@ -6,6 +6,7 @@ import {
   storeFeeTotal,
   orderCost,
   distanceDeliveryFee,
+  resolveDeliveryFee,
   DEFAULT_FEE_CONFIG,
   DEFAULT_DISTANCE_FEE_CONFIG,
   type FeeConfig,
@@ -107,4 +108,43 @@ test('distanceDeliveryFee: guards bad distances', () => {
   assert.equal(distanceDeliveryFee(-3), 50);          // negative → base fare
   assert.equal(distanceDeliveryFee(NaN), 50);         // NaN → base fare
   assert.equal(DEFAULT_DISTANCE_FEE_CONFIG.baseFare, 50);
+});
+
+const rates = DEFAULT_DISTANCE_FEE_CONFIG; // base 50, baseKm 2, perKm 10
+// ~3 km apart in Metro Manila (0.027° of latitude ≈ 3 km).
+const store = { lat: 14.600, lng: 121.000 };
+const dropoff3km = { lat: 14.573, lng: 121.000 };
+
+test('resolveDeliveryFee: flat model ignores distance', () => {
+  const fee = resolveDeliveryFee({
+    model: 'flat', flatFee: 50, distanceConfig: rates,
+    storeLocations: [store], dropoff: dropoff3km,
+  });
+  assert.equal(fee, 50);
+});
+
+test('resolveDeliveryFee: per_km charges on the farthest store leg', () => {
+  const near = { lat: 14.591, lng: 121.000 }; // ~1 km
+  const fee = resolveDeliveryFee({
+    model: 'per_km', flatFee: 50, distanceConfig: rates,
+    storeLocations: [near, store], dropoff: dropoff3km,
+  });
+  // farthest leg ≈ 3 km → 50 + 10 × (3 − 2) ≈ 60 (allow ±1 for geo rounding)
+  assert.ok(Math.abs(fee - 60) <= 1, `expected ~60, got ${fee}`);
+});
+
+test('resolveDeliveryFee: falls back to flat when drop-off missing', () => {
+  const fee = resolveDeliveryFee({
+    model: 'per_km', flatFee: 55, distanceConfig: rates,
+    storeLocations: [store], dropoff: null,
+  });
+  assert.equal(fee, 55);
+});
+
+test('resolveDeliveryFee: falls back to flat when no store is pinned', () => {
+  const fee = resolveDeliveryFee({
+    model: 'per_km', flatFee: 55, distanceConfig: rates,
+    storeLocations: [null, undefined], dropoff: dropoff3km,
+  });
+  assert.equal(fee, 55);
 });
