@@ -16,6 +16,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { sendSms } from '../_shared/sms.ts';
+import { preflight, withCors } from '../_shared/cors.ts';
 
 const db = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -37,12 +38,13 @@ async function authorize(req: Request): Promise<boolean> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') return new Response('POST only', { status: 405 });
-  if (!(await authorize(req))) return new Response('forbidden', { status: 403 });
+  if (req.method === 'OPTIONS') return preflight();
+  if (req.method !== 'POST') return withCors('POST only', { status: 405 });
+  if (!(await authorize(req))) return withCors('forbidden', { status: 403 });
 
   const { message, audience, numbers } = await req.json().catch(() => ({}));
   if (!message || typeof message !== 'string') {
-    return new Response('message required', { status: 400 });
+    return withCors('message required', { status: 400 });
   }
 
   const db2 = db();
@@ -59,8 +61,8 @@ Deno.serve(async (req) => {
     recipients = (data ?? []).map((r) => r.contact_number).filter(Boolean);
   }
 
-  if (recipients.length === 0) return new Response('no recipients', { status: 200 });
+  if (recipients.length === 0) return withCors('no recipients', { status: 200 });
 
   const result = await sendSms(recipients, message);
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  return withCors(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
 });
