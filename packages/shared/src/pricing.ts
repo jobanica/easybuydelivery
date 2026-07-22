@@ -20,21 +20,18 @@ export interface FeeConfig {
   perStoreFee: number;
   /** Commission rate as a fraction. Default 0.15 (15%). */
   commissionRate: number;
-  /** Flat convenience fee charged to the customer. Default ₱0. */
-  convenienceFee: number;
   /**
-   * How the convenience fee interacts with commission (open decision #2):
-   * - 'pass_through' (default): straight to admin, outside the 15% base.
-   * - 'in_base': folded into the commission base before applying the rate.
+   * Flat convenience fee charged to the customer. Default ₱0. This goes to the
+   * rider in full — the operator takes NO commission on it, so it never enters
+   * the commission base.
    */
-  convenienceFeeMode: 'pass_through' | 'in_base';
+  convenienceFee: number;
 }
 
 export const DEFAULT_FEE_CONFIG: FeeConfig = {
   perStoreFee: 25,
   commissionRate: 0.15,
   convenienceFee: 0,
-  convenienceFeeMode: 'pass_through',
 };
 
 /** Number of stores billed the per-store add-on (stores beyond the first). */
@@ -115,17 +112,15 @@ export interface CommissionInput {
 }
 
 /**
- * Operator commission for an order.
+ * Operator commission for an order: (delivery fee + per-store fees) × rate.
+ * The convenience fee is the rider's — never in the commission base.
  *
  * @example
  * // DF ₱50, 3 stores → base = 50 + 25×2 = 100 → commission = ₱15
  * commission({ deliveryFee: 50, storeCount: 3 }, DEFAULT_FEE_CONFIG) // 15
  */
 export function commission(input: CommissionInput, config: FeeConfig = DEFAULT_FEE_CONFIG): number {
-  let base = input.deliveryFee + addedStores(input.storeCount) * config.perStoreFee;
-  if (config.convenienceFeeMode === 'in_base') {
-    base += config.convenienceFee;
-  }
+  const base = input.deliveryFee + addedStores(input.storeCount) * config.perStoreFee;
   return roundPeso(base * config.commissionRate);
 }
 

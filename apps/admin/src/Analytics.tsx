@@ -61,7 +61,7 @@ export function Analytics() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Tile label="Commission revenue" value={peso(d.commissionRevenue)} accent />
         <Tile label="GMV" value={peso(d.gmv)} />
-        <Tile label="Convenience fees" value={peso(d.convenienceRevenue)} />
+        <Tile label="Convenience fees (to riders)" value={peso(d.convenienceRevenue)} />
         <Tile label="Orders" value={`${d.totalOrders}`} sub={`${d.delivered} delivered · ${d.cancelled} cancelled`} />
       </div>
 

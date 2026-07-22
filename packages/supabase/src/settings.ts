@@ -13,7 +13,6 @@ export interface AppSettings {
   convenience_fee: number;
   commission_rate: number;
   delivery_fee_model: 'flat' | 'per_km' | 'per_zone';
-  convenience_fee_mode: 'pass_through' | 'in_base';
   settlement_cutoff: string;
   sms_notify_stores: boolean;
   /** Distance-fee rate (used when delivery_fee_model = 'per_km'). */

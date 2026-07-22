@@ -7,7 +7,7 @@ import { Card, Muted, peso } from './ui.tsx';
 const SAMPLE: AppSettings = {
   is_open: true, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
   convenience_fee: 0, commission_rate: 0.15, delivery_fee_model: 'flat',
-  convenience_fee_mode: 'pass_through', settlement_cutoff: '00:00', sms_notify_stores: false,
+  settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
   service_food: true, service_pabili: true, service_padala: true,
 };
@@ -49,7 +49,7 @@ export function Settings() {
   // Live example: DF + 3 stores (2 added) at the current rate.
   const example = commission(
     { deliveryFee: s.default_delivery_fee, storeCount: 3 },
-    { perStoreFee: s.per_store_fee, commissionRate: s.commission_rate, convenienceFee: s.convenience_fee, convenienceFeeMode: s.convenience_fee_mode },
+    { perStoreFee: s.per_store_fee, commissionRate: s.commission_rate, convenienceFee: s.convenience_fee },
   );
 
   return (
@@ -104,16 +104,10 @@ export function Settings() {
               value={Math.round(s.commission_rate * 1000) / 10}
               onChange={(e) => set('commission_rate', Number(e.target.value) / 100)} />
           </Field>
-          <Field label="Convenience fee (₱)">
+          <Field label="Convenience fee (₱) — goes to rider">
             <input type="number" min={0} className={inp} value={s.convenience_fee}
               onChange={(e) => set('convenience_fee', Number(e.target.value))} />
-          </Field>
-          <Field label="Convenience fee handling">
-            <select className={inp} value={s.convenience_fee_mode}
-              onChange={(e) => set('convenience_fee_mode', e.target.value as AppSettings['convenience_fee_mode'])}>
-              <option value="pass_through">Pass-through to admin</option>
-              <option value="in_base">Inside the commission base</option>
-            </select>
+            <span className="mt-1 block text-xs text-black/40">Paid to the rider in full. No commission is taken on it.</span>
           </Field>
         </div>
         <p className="mt-4 rounded-lg bg-brand-green/10 px-3 py-2 text-sm text-green-800">

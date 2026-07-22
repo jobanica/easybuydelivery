@@ -39,23 +39,10 @@ test('storeFeeTotal uses per-store fee for added stores', () => {
   assert.equal(storeFeeTotal(1, DEFAULT_FEE_CONFIG), 0);
 });
 
-test('convenience fee pass-through does NOT change commission', () => {
-  const config: FeeConfig = {
-    ...DEFAULT_FEE_CONFIG,
-    convenienceFee: 20,
-    convenienceFeeMode: 'pass_through',
-  };
+test('convenience fee never changes commission (it is the rider\'s)', () => {
+  const config: FeeConfig = { ...DEFAULT_FEE_CONFIG, convenienceFee: 20 };
+  // base = 50 + 25*2 = 100 ; 100 * 0.15 = 15 — the ₱20 convenience fee is excluded
   assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 15);
-});
-
-test('convenience fee in_base DOES fold into the 15% base', () => {
-  const config: FeeConfig = {
-    ...DEFAULT_FEE_CONFIG,
-    convenienceFee: 20,
-    convenienceFeeMode: 'in_base',
-  };
-  // base = 50 + 50 + 20 = 120 ; 120 * 0.15 = 18
-  assert.equal(commission({ deliveryFee: 50, storeCount: 3 }, config), 18);
 });
 
 test('editable commission rate is honored', () => {
