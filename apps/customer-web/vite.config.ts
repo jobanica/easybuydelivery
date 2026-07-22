@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // we register manually in main.tsx to auto-reload on update
       includeAssets: ['favicon.png', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Easy Buy Delivery',
@@ -30,6 +31,9 @@ export default defineConfig({
         // Cache the app shell; Supabase API calls always go to the network.
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.hostname.endsWith('.supabase.co'),
