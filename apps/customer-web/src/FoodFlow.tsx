@@ -23,8 +23,9 @@ import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
 
-interface Size { name: string; priceDelta: number }
-interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; sizes: Size[] }
+interface Choice { name: string; priceDelta: number }
+interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
+interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; groups: CustomGroup[] }
 interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null; logo_url?: string | null }
 
 /** Unique cart key for an item + chosen size (different sizes are separate lines). */
@@ -45,6 +46,7 @@ export function FoodFlow() {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
+  const [customizingId, setCustomizingId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -80,24 +82,26 @@ export function FoodFlow() {
           const withMenus: Store[] = [];
           for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[]) {
             const menu = await listMenu(supabase, s.id);
-            const optsByItem = new Map<string, Size[]>();
-            for (const o of (menu.options ?? []) as { menu_item_id: string; option_name: string; price_delta: number }[]) {
-              const arr = optsByItem.get(o.menu_item_id) ?? [];
-              arr.push({ name: o.option_name, priceDelta: Number(o.price_delta) });
-              optsByItem.set(o.menu_item_id, arr);
+            const allOpts = (menu.options ?? []) as { group_id: string | null; option_name: string; price_delta: number }[];
+            const groupsByItem = new Map<string, CustomGroup[]>();
+            for (const g of (menu.optionGroups ?? []) as { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean }[]) {
+              const choices = allOpts.filter((o) => o.group_id === g.id).map((o) => ({ name: o.option_name, priceDelta: Number(o.price_delta) }));
+              const arr = groupsByItem.get(g.menu_item_id) ?? [];
+              arr.push({ id: g.id, name: g.name, required: g.required, multi: g.multi_select, choices });
+              groupsByItem.set(g.menu_item_id, arr);
             }
             withMenus.push({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
               items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null }[])
-                .map((it) => ({ ...it, sizes: optsByItem.get(it.id) ?? [] })),
+                .map((it) => ({ ...it, groups: groupsByItem.get(it.id) ?? [] })),
             });
           }
           setStores(withMenus);
         } else {
           setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({
             ...s, lat: null, lng: null,
-            items: s.items.map((it) => ({ ...it, sizes: [] })),
+            items: s.items.map((it) => ({ ...it, groups: [] })),
           })));
         }
       } catch (e) {
@@ -137,13 +141,13 @@ export function FoodFlow() {
   }, [cart, stores]);
   const canAddStore = storeCount < MAX_STORES_PER_ORDER;
 
-  function addToCart(store: Store, item: MenuItem, size?: Size) {
+  function addToCart(store: Store, item: MenuItem, options?: CartOption[]) {
     setError(null);
-    const options: CartOption[] | undefined = size ? [{ name: size.name, priceDelta: size.priceDelta }] : undefined;
+    const opts = options && options.length ? options : undefined;
     const newLine: CartLine = {
       storeId: store.id, menuItemId: item.id,
-      name: size ? `${item.name} — ${size.name}` : item.name,
-      unitPrice: item.price, qty: 1, options,
+      name: opts ? `${item.name} — ${opts.map((o) => o.name).join(', ')}` : item.name,
+      unitPrice: item.price, qty: 1, options: opts,
     };
     const key = lineKey(newLine);
     const existing = cart.find((l) => lineKey(l) === key);
@@ -230,29 +234,31 @@ export function FoodFlow() {
           </div>
           <ul className="divide-y divide-black/5">
             {openStore.items.map((it) => (
-              <li key={it.id} className="flex items-center justify-between gap-3 py-2">
-                <span className="flex min-w-0 items-center gap-3">
-                  {it.image_url && <img src={it.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />}
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{it.name}</span>
-                    {it.description && <span className="block truncate text-xs text-black/40">{it.description}</span>}
+              <li key={it.id} className="py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-3">
+                    {it.image_url && <img src={it.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />}
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{it.name}</span>
+                      {it.description && <span className="block truncate text-xs text-black/40">{it.description}</span>}
+                    </span>
                   </span>
-                </span>
-                {it.sizes.length === 0 ? (
                   <span className="flex shrink-0 items-center gap-3">
                     <span className="text-sm">{peso(it.price)}</span>
-                    <button onClick={() => addToCart(openStore, it)}
-                      className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
-                  </span>
-                ) : (
-                  <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                    {it.sizes.map((sz) => (
-                      <button key={sz.name} onClick={() => addToCart(openStore, it, sz)}
-                        className="rounded-md bg-brand-green px-2 py-1 text-xs font-semibold text-white hover:brightness-95">
-                        {sz.name} · {peso(it.price + sz.priceDelta)}
+                    {it.groups.length === 0 ? (
+                      <button onClick={() => addToCart(openStore, it)}
+                        className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
+                    ) : (
+                      <button onClick={() => setCustomizingId(customizingId === it.id ? null : it.id)}
+                        className="rounded-md bg-brand-purple px-2.5 py-1 text-xs font-semibold text-white">
+                        {customizingId === it.id ? 'Close' : 'Customize'}
                       </button>
-                    ))}
+                    )}
                   </span>
+                </div>
+                {customizingId === it.id && it.groups.length > 0 && (
+                  <Customizer item={it}
+                    onAdd={(options) => { addToCart(openStore, it, options); setCustomizingId(null); }} />
                 )}
               </li>
             ))}
@@ -366,4 +372,62 @@ export function FoodFlow() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between py-0.5 text-sm text-black/70"><span>{label}</span><span>{value}</span></div>;
+}
+
+/** Inline panel to pick a customized item (one/many choices per group). */
+function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOption[]) => void }) {
+  // selected choice names per group id
+  const [sel, setSel] = useState<Record<string, string[]>>(() => {
+    const init: Record<string, string[]> = {};
+    for (const g of item.groups) {
+      // pre-select the first choice for a required single-select group
+      init[g.id] = g.required && !g.multi && g.choices[0] ? [g.choices[0].name] : [];
+    }
+    return init;
+  });
+
+  function pick(g: CustomGroup, name: string) {
+    setSel((s) => {
+      const cur = s[g.id] ?? [];
+      if (g.multi) return { ...s, [g.id]: cur.includes(name) ? cur.filter((n) => n !== name) : [...cur, name] };
+      return { ...s, [g.id]: [name] };
+    });
+  }
+
+  const chosen: CartOption[] = item.groups.flatMap((g) =>
+    (sel[g.id] ?? []).map((n) => ({ name: n, priceDelta: g.choices.find((c) => c.name === n)?.priceDelta ?? 0 })),
+  );
+  const missing = item.groups.some((g) => g.required && (sel[g.id] ?? []).length === 0);
+  const total = item.price + chosen.reduce((s, o) => s + o.priceDelta, 0);
+
+  return (
+    <div className="mt-2 rounded-lg bg-black/[0.02] p-3">
+      {item.groups.map((g) => (
+        <div key={g.id} className="mb-3">
+          <p className="mb-1 text-xs font-semibold text-black/70">
+            {g.name}
+            <span className="ml-1 font-normal text-black/40">{g.required ? '(required)' : '(optional)'}{g.multi ? ' · pick any' : ''}</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {g.choices.map((c) => {
+              const on = (sel[g.id] ?? []).includes(c.name);
+              return (
+                <button key={c.name} type="button" onClick={() => pick(g, c.name)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
+                    on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'
+                  }`}>
+                  {c.name}{c.priceDelta !== 0 && <span className={on ? 'opacity-80' : 'text-black/40'}> {c.priceDelta > 0 ? '+' : ''}{peso(c.priceDelta)}</span>}
+                </button>
+              );
+            })}
+            {g.choices.length === 0 && <span className="text-xs text-black/30">No choices set.</span>}
+          </div>
+        </div>
+      ))}
+      <button onClick={() => onAdd(chosen)} disabled={missing}
+        className="w-full rounded-lg bg-brand-green py-2 text-sm font-semibold text-white disabled:opacity-50">
+        {missing ? 'Choose required options' : `Add to cart · ${peso(total)}`}
+      </button>
+    </div>
+  );
 }

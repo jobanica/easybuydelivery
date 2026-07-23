@@ -147,16 +147,20 @@ export async function listMenu(db: SupabaseClient, storeId: string, availableOnl
   const items = await itemsQuery;
   if (items.error) throw items.error;
 
-  // Variations (e.g. sizes) for every item in this store.
+  // Customization groups (e.g. Size, Sugar level) + their options, per item.
   const itemIds = (items.data ?? []).map((i) => (i as { id: string }).id);
+  let optionGroups: unknown[] = [];
   let options: unknown[] = [];
   if (itemIds.length) {
+    const g = await db.from('menu_item_option_groups').select('*').in('menu_item_id', itemIds).order('sort_order');
+    if (g.error) throw g.error;
+    optionGroups = g.data ?? [];
     const opts = await db.from('menu_item_options').select('*').in('menu_item_id', itemIds);
     if (opts.error) throw opts.error;
     options = opts.data ?? [];
   }
 
-  return { categories: cats.data ?? [], items: items.data ?? [], options };
+  return { categories: cats.data ?? [], items: items.data ?? [], optionGroups, options };
 }
 
 export interface MenuItemPatch {
@@ -181,22 +185,72 @@ export async function updateMenuItem(db: SupabaseClient, itemId: string, patch: 
   if (error) throw error;
 }
 
-export interface MenuItemOptionInput {
+// --- Customizations: groups (e.g. "Size", "Sugar level") and their options ---
+
+export interface OptionGroupInput {
   itemId: string;
-  groupName?: string;   // defaults to 'Size'
+  name: string;
+  required?: boolean;
+  multiSelect?: boolean;
+  sortOrder?: number;
+}
+
+/** Create a customization group on an item. */
+export async function createOptionGroup(db: SupabaseClient, input: OptionGroupInput): Promise<string> {
+  const name = input.name.trim();
+  if (!name) throw new Error('customization name is required');
+  const { data, error } = await db
+    .from('menu_item_option_groups')
+    .insert({
+      menu_item_id: input.itemId,
+      name,
+      required: input.required ?? false,
+      multi_select: input.multiSelect ?? false,
+      sort_order: input.sortOrder ?? 0,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function updateOptionGroup(
+  db: SupabaseClient, groupId: string,
+  patch: { name?: string; required?: boolean; multiSelect?: boolean },
+) {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name.trim();
+  if (patch.required !== undefined) row.required = patch.required;
+  if (patch.multiSelect !== undefined) row.multi_select = patch.multiSelect;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await db.from('menu_item_option_groups').update(row).eq('id', groupId);
+  if (error) throw error;
+}
+
+/** Delete a group and (via cascade) its options. */
+export async function deleteOptionGroup(db: SupabaseClient, groupId: string) {
+  const { error } = await db.from('menu_item_option_groups').delete().eq('id', groupId);
+  if (error) throw error;
+}
+
+export interface OptionInput {
+  itemId: string;
+  groupId: string;
+  groupName?: string;   // stored for reference; group_id is authoritative
   optionName: string;
   priceDelta?: number;  // extra added to the base price (may be negative)
 }
 
-/** Add a variation (e.g. a size) to a menu item. */
-export async function createMenuItemOption(db: SupabaseClient, input: MenuItemOptionInput) {
+/** Add an option (choice) to a customization group. */
+export async function createMenuItemOption(db: SupabaseClient, input: OptionInput): Promise<string> {
   const name = input.optionName.trim();
   if (!name) throw new Error('option name is required');
   const { data, error } = await db
     .from('menu_item_options')
     .insert({
       menu_item_id: input.itemId,
-      group_name: input.groupName?.trim() || 'Size',
+      group_id: input.groupId,
+      group_name: input.groupName?.trim() || null,
       option_name: name,
       price_delta: input.priceDelta ?? 0,
     })

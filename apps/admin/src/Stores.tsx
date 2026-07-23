@@ -14,6 +14,8 @@ import {
   updateMenuItem,
   createMenuItemOption,
   deleteMenuItemOption,
+  createOptionGroup,
+  deleteOptionGroup,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
@@ -33,7 +35,8 @@ interface StoreRow {
 }
 interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null; description: string | null }
 interface CatRow { id: string; title: string; sort_order: number }
-interface OptRow { id: string; menu_item_id: string; group_name: string; option_name: string; price_delta: number }
+interface GroupRow { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }
+interface OptRow { id: string; menu_item_id: string; group_id: string | null; option_name: string; price_delta: number }
 
 export function Stores() {
   const [rows, setRows] = useState<StoreRow[]>([]);
@@ -213,6 +216,7 @@ function MenuEditor({ storeId }: { storeId: string }) {
   const [cats, setCats] = useState<CatRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [opts, setOpts] = useState<OptRow[]>([]);
+  const [groups, setGroups] = useState<GroupRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [catTitle, setCatTitle] = useState('');
   const [name, setName] = useState('');
@@ -225,6 +229,7 @@ function MenuEditor({ storeId }: { storeId: string }) {
     setCats((menu.categories as CatRow[]).sort((a, b) => a.sort_order - b.sort_order));
     setItems(menu.items as ItemRow[]);
     setOpts((menu.options as OptRow[]) ?? []);
+    setGroups((menu.optionGroups as GroupRow[]) ?? []);
   }
   useEffect(() => { void load(); }, [storeId]);
 
@@ -253,7 +258,7 @@ function MenuEditor({ storeId }: { storeId: string }) {
 
   // Group items under their category, with an "Uncategorised" bucket last.
   const knownCat = new Set(cats.map((c) => c.id));
-  const groups: { cat: CatRow | null; rows: ItemRow[] }[] = [
+  const sections: { cat: CatRow | null; rows: ItemRow[] }[] = [
     ...cats.map((c) => ({ cat: c, rows: items.filter((i) => i.category_id === c.id) })),
     { cat: null, rows: items.filter((i) => !i.category_id || !knownCat.has(i.category_id)) },
   ];
@@ -282,7 +287,7 @@ function MenuEditor({ storeId }: { storeId: string }) {
 
       {/* Items grouped by category */}
       <div className="mb-3 space-y-3">
-        {groups.map(({ cat, rows }) => (
+        {sections.map(({ cat, rows }) => (
           (cat || rows.length > 0) && (
             <div key={cat?.id ?? 'uncat'}>
               <p className="mb-1 text-xs font-semibold text-black/50">{cat ? cat.title : 'Uncategorised'}</p>
@@ -297,8 +302,10 @@ function MenuEditor({ storeId }: { storeId: string }) {
                         <span className="min-w-0">
                           <span className={`block truncate ${it.is_available ? '' : 'text-black/40'}`}>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
                           {!it.is_available && <span className="text-[11px] font-semibold text-red-600">SOLD OUT</span>}
-                          {opts.some((o) => o.menu_item_id === it.id) && (
-                            <span className="ml-0 block text-[11px] text-black/40">{opts.filter((o) => o.menu_item_id === it.id).length} size(s)</span>
+                          {groups.some((g) => g.menu_item_id === it.id) && (
+                            <span className="ml-0 block text-[11px] text-black/40">
+                              {groups.filter((g) => g.menu_item_id === it.id).map((g) => g.name).join(' · ')}
+                            </span>
                           )}
                         </span>
                       </span>
@@ -316,7 +323,9 @@ function MenuEditor({ storeId }: { storeId: string }) {
                       </span>
                     </div>
                     {editingId === it.id && (
-                      <ItemEditor item={it} options={opts.filter((o) => o.menu_item_id === it.id)} cats={cats} onSaved={load} />
+                      <ItemEditor item={it} cats={cats} onSaved={load}
+                        groups={groups.filter((g) => g.menu_item_id === it.id)}
+                        options={opts.filter((o) => o.menu_item_id === it.id)} />
                     )}
                   </li>
                 ))}
@@ -342,17 +351,20 @@ function MenuEditor({ storeId }: { storeId: string }) {
   );
 }
 
-/** Expanded editor for a single menu item: photo, price, category, sizes. */
-function ItemEditor({ item, options, cats, onSaved }:
-  { item: ItemRow; options: OptRow[]; cats: CatRow[]; onSaved: () => void }) {
+/** Expanded editor for a single menu item: photo, price, category, customizations. */
+function ItemEditor({ item, groups, options, cats, onSaved }:
+  { item: ItemRow; groups: GroupRow[]; options: OptRow[]; cats: CatRow[]; onSaved: () => void }) {
   const [name, setName] = useState(item.name);
   const [price, setPrice] = useState(String(item.price));
   const [desc, setDesc] = useState(item.description ?? '');
   const [cat, setCat] = useState(item.category_id ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [sizeName, setSizeName] = useState('');
-  const [sizeExtra, setSizeExtra] = useState('');
+  // new-group form
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [gName, setGName] = useState('');
+  const [gRequired, setGRequired] = useState(true);
+  const [gMulti, setGMulti] = useState(false);
   const base = Number(price) || 0;
 
   async function saveMeta() {
@@ -368,13 +380,13 @@ function ItemEditor({ item, options, cats, onSaved }:
       setSaved(true); onSaved();
     } finally { setSaving(false); }
   }
-  async function addSize(e: React.FormEvent) {
+  async function addGroup(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase || !sizeName.trim()) return;
-    await createMenuItemOption(supabase, { itemId: item.id, groupName: 'Size', optionName: sizeName.trim(), priceDelta: Number(sizeExtra) || 0 });
-    setSizeName(''); setSizeExtra(''); onSaved();
+    if (!supabase || !gName.trim()) return;
+    await createOptionGroup(supabase, { itemId: item.id, name: gName.trim(), required: gRequired, multiSelect: gMulti, sortOrder: groups.length });
+    setGName(''); setGRequired(true); setGMulti(false); setShowNewGroup(false);
+    onSaved();
   }
-  async function removeSize(id: string) { if (supabase) { await deleteMenuItemOption(supabase, id); onSaved(); } }
 
   return (
     <div className="mt-2 space-y-3 rounded-lg bg-white p-3 ring-1 ring-black/10">
@@ -401,26 +413,90 @@ function ItemEditor({ item, options, cats, onSaved }:
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
       </button>
 
-      {/* Sizes / variations */}
+      {/* Customizations */}
       <div className="border-t border-black/5 pt-3">
-        <p className="mb-1.5 text-xs font-semibold text-black/60">Sizes / variations</p>
-        <div className="mb-2 flex flex-wrap gap-2">
-          {options.map((o) => (
-            <span key={o.id} className="inline-flex items-center gap-1 rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs text-brand-purple">
-              {o.option_name} · ₱{(base + Number(o.price_delta)).toFixed(2)}
-              {Number(o.price_delta) !== 0 && <span className="text-black/40">({Number(o.price_delta) > 0 ? '+' : ''}{Number(o.price_delta)})</span>}
-              <button onClick={() => removeSize(o.id)} title="Remove" className="text-brand-purple/60 hover:text-red-600">×</button>
-            </span>
-          ))}
-          {options.length === 0 && <span className="text-xs text-black/40">No sizes — item is sold at its base price.</span>}
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold text-black/60">Customizations</p>
+          <button onClick={() => setShowNewGroup((v) => !v)}
+            className="rounded-lg px-2.5 py-1 text-xs font-medium text-brand-purple ring-1 ring-brand-purple/40 hover:bg-brand-purple/5">
+            ＋ Add customization
+          </button>
         </div>
-        <form onSubmit={addSize} className="flex flex-wrap gap-2">
-          <input className={inp + ' w-32'} placeholder="Size (e.g. Large)" value={sizeName} onChange={(e) => setSizeName(e.target.value)} />
-          <input className={inp + ' w-28'} type="number" placeholder="Extra ₱" value={sizeExtra} onChange={(e) => setSizeExtra(e.target.value)} />
-          <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add size</button>
-        </form>
-        <p className="mt-1 text-xs text-black/40">“Extra” is added to the base price (can be negative). Leave sizes empty to sell at one price.</p>
+
+        {showNewGroup && (
+          <form onSubmit={addGroup} className="mb-3 space-y-2 rounded-lg bg-black/[0.02] p-3">
+            <input className={inp + ' w-full'} placeholder="Customization name (e.g. Size, Temperature, Sugar level)"
+              value={gName} onChange={(e) => setGName(e.target.value)} autoFocus />
+            <div className="flex flex-wrap gap-4 text-xs">
+              <label className="flex items-center gap-1.5"><input type="checkbox" checked={gRequired} onChange={(e) => setGRequired(e.target.checked)} /> Required</label>
+              <label className="flex items-center gap-1.5"><input type="checkbox" checked={gMulti} onChange={(e) => setGMulti(e.target.checked)} /> Allow multiple choices</label>
+            </div>
+            <button className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white">Create</button>
+          </form>
+        )}
+
+        {groups.length === 0 && !showNewGroup && (
+          <p className="text-xs text-black/40">No customizations. Add “Size”, “Sugar level”, “Hot or Cold”, etc.</p>
+        )}
+
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <OptionGroupEditor key={g.id} group={g} base={base}
+              options={options.filter((o) => o.group_id === g.id)} onChanged={onSaved} />
+          ))}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** One customization group: its header, its options, and an add-option form. */
+function OptionGroupEditor({ group, base, options, onChanged }:
+  { group: GroupRow; base: number; options: OptRow[]; onChanged: () => void }) {
+  const [optName, setOptName] = useState('');
+  const [optExtra, setOptExtra] = useState('');
+
+  async function addOption(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase || !optName.trim()) return;
+    await createMenuItemOption(supabase, {
+      itemId: group.menu_item_id, groupId: group.id, groupName: group.name,
+      optionName: optName.trim(), priceDelta: Number(optExtra) || 0,
+    });
+    setOptName(''); setOptExtra(''); onChanged();
+  }
+  async function removeOption(id: string) { if (supabase) { await deleteMenuItemOption(supabase, id); onChanged(); } }
+  async function removeGroup() { if (supabase) { await deleteOptionGroup(supabase, group.id); onChanged(); } }
+
+  return (
+    <div className="rounded-lg bg-black/[0.02] p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-medium">
+          {group.name}
+          <span className="ml-2 text-[11px] font-normal text-black/40">
+            {group.required ? 'required' : 'optional'} · {group.multi_select ? 'pick many' : 'pick one'}
+          </span>
+        </span>
+        <button onClick={removeGroup} className="text-xs text-red-600 hover:underline">Delete</button>
+      </div>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {options.map((o) => (
+          <span key={o.id} className="inline-flex items-center gap-1 rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs text-brand-purple">
+            {o.option_name}
+            {Number(o.price_delta) !== 0 && <span className="text-black/40">{Number(o.price_delta) > 0 ? '+' : ''}₱{Number(o.price_delta)}</span>}
+            <button onClick={() => removeOption(o.id)} title="Remove" className="text-brand-purple/60 hover:text-red-600">×</button>
+          </span>
+        ))}
+        {options.length === 0 && <span className="text-xs text-black/40">No choices yet.</span>}
+      </div>
+      <form onSubmit={addOption} className="flex flex-wrap gap-2">
+        <input className={inp + ' w-36'} placeholder="Choice (e.g. Large, Hot)" value={optName} onChange={(e) => setOptName(e.target.value)} />
+        <input className={inp + ' w-24'} type="number" placeholder="Extra ₱" value={optExtra} onChange={(e) => setOptExtra(e.target.value)} />
+        <button className="rounded-lg bg-brand-purple/80 px-3 py-2 text-xs font-medium text-white">Add choice</button>
+      </form>
+      {base >= 0 && options.length > 0 && Number(options[0]!.price_delta) !== 0 && (
+        <p className="mt-1 text-[11px] text-black/40">Extra ₱ is added to the base price (₱{base.toFixed(2)}).</p>
+      )}
     </div>
   );
 }
