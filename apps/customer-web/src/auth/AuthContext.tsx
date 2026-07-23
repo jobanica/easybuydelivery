@@ -1,31 +1,30 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
-import { ensureCustomer } from '@ebd/supabase';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { ensureCustomer, onAuthChange, signOut as sbSignOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
 
 interface AuthValue {
   /** Whether the app is wired to a real backend (vs preview sample mode). */
   live: boolean;
-  /** The customer id for this device's orders (set once an order is placed). */
+  /** True once the customer has a verified account and may place orders. */
+  authed: boolean;
+  /** The signed-in customer's id (used on orders). */
   customerId: string | null;
-  /**
-   * Ensure a customer record exists for this device and return its id. Signs in
-   * anonymously on first use (no account, no OTP) so order RLS is satisfied.
-   * Called at checkout with the contact number the customer entered.
-   */
+  /** The account's verified mobile number (E.164 digits). */
+  mobile: string;
+  /** Ensure/refresh the customer record (name / contact) and return its id. */
   ensureContact: (mobile: string, name?: string) => Promise<string>;
+  signOut: () => Promise<void>;
 }
 
 const PREVIEW: AuthValue = {
-  live: false,
-  customerId: 'preview-customer',
-  ensureContact: async () => 'preview-customer',
+  live: false, authed: true, customerId: 'preview-customer', mobile: '',
+  ensureContact: async () => 'preview-customer', signOut: async () => {},
 };
 
 const Ctx = createContext<AuthValue>(PREVIEW);
 export const useAuth = () => useContext(Ctx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Preview mode: no backend, ordering works with a placeholder id.
   if (!isSupabaseConfigured || !supabase) {
     return <Ctx.Provider value={PREVIEW}>{children}</Ctx.Provider>;
   }
@@ -33,31 +32,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 function LiveAuthProvider({ children }: { children: ReactNode }) {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [mobile, setMobile] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const inflight = useRef<Promise<string> | null>(null);
 
-  async function ensureContact(mobile: string, name?: string): Promise<string> {
-    // De-dupe concurrent checkouts so we don't create two anonymous users.
-    if (inflight.current) return inflight.current;
-    const run = (async () => {
-      // A session (anonymous) is required to write an order under RLS.
-      let { data: { user } } = await supabase!.auth.getUser();
-      if (!user) {
-        await supabase!.auth.signInAnonymously();
-        ({ data: { user } } = await supabase!.auth.getUser());
-      }
-      const id = await ensureCustomer(supabase!, { mobile: mobile || 'unknown', name });
-      setCustomerId(id);
-      return id;
-    })();
-    inflight.current = run;
-    try { return await run; }
-    finally { inflight.current = null; }
+  useEffect(() => onAuthChange(supabase!, (u) => {
+    setUserId(u?.id ?? null);
+    setMobile(u?.phone ?? '');
+  }), []);
+
+  // On sign-in, make sure a customer row exists for this verified phone.
+  useEffect(() => {
+    if (!userId) { setCustomerId(null); return; }
+    ensureCustomer(supabase!, { mobile: mobile || 'unknown' })
+      .then(setCustomerId)
+      .catch(() => {});
+  }, [userId, mobile]);
+
+  async function ensureContact(m: string, name?: string): Promise<string> {
+    const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name });
+    setCustomerId(id);
+    return id;
   }
 
-  return (
-    <Ctx.Provider value={{ live: true, customerId, ensureContact }}>
-      {children}
-    </Ctx.Provider>
-  );
+  const value: AuthValue = {
+    live: true,
+    authed: Boolean(userId && customerId),
+    customerId,
+    mobile,
+    ensureContact,
+    signOut: async () => { await sbSignOut(supabase!); },
+  };
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

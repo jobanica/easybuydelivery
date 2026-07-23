@@ -5,6 +5,7 @@ import { PadalaForm } from './PadalaForm.tsx';
 import { PabiliForm } from './PabiliForm.tsx';
 import { FoodFlow } from './FoodFlow.tsx';
 import { TrackingMap } from './tracking/TrackingMap.tsx';
+import { useAuth } from './auth/AuthContext.tsx';
 
 type Service = 'food' | 'pabili' | 'padala';
 type ServiceAvailability = Record<Service, boolean>;
@@ -15,6 +16,7 @@ const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
 const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
 
 export function App() {
+  const { live, mobile, signOut } = useAuth();
   const [service, setService] = useState<Service>('food');
   const [tracking, setTracking] = useState(false);
   const [enabled, setEnabled] = useState<ServiceAvailability>(ALL_ON);
@@ -47,6 +49,12 @@ export function App() {
               className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium">
               {tracking ? 'Back to ordering' : 'Track a delivery'}
             </button>
+            {live && (
+              <button onClick={() => void signOut()} title={mobile ? `Signed in as ${mobile}` : 'Sign out'}
+                className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium">
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       </header>

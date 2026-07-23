@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import { App } from './App.tsx';
 import { AuthProvider } from './auth/AuthContext.tsx';
+import { AuthGate } from './auth/AuthGate.tsx';
 
 // Auto-update the app when a new version is deployed: register immediately,
 // re-check for a new service worker every 30 min and on tab focus, and reload
@@ -25,7 +26,9 @@ const updateSW = registerSW({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <AuthGate>
+        <App />
+      </AuthGate>
     </AuthProvider>
   </StrictMode>,
 );

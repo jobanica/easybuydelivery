@@ -43,7 +43,7 @@ const DEFAULT_FEE_SETTINGS: FeeSettings = {
 };
 
 export function FoodFlow() {
-  const { ensureContact } = useAuth();
+  const { ensureContact, mobile } = useAuth();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
@@ -58,6 +58,8 @@ export function FoodFlow() {
   const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
   const [contact, setContact] = useState('');
+  // Prefill the delivery contact with the account's verified phone.
+  useEffect(() => { if (mobile && !contact) setContact(mobile); }, [mobile]);
 
   useEffect(() => {
     (async () => {
