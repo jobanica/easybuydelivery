@@ -236,7 +236,10 @@ export function FoodFlow() {
 
       {openStore ? (
         <section className="space-y-4">
-          <button onClick={() => setOpenStoreId(null)} className="text-sm font-medium text-brand-purple">← All restaurants</button>
+          <button onClick={() => setOpenStoreId(null)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-purple px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95">
+            <span className="text-base leading-none">←</span> All restaurants
+          </button>
 
           {/* Restaurant hero */}
           <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
