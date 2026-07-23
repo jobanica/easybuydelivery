@@ -25,8 +25,9 @@ const DELIVERY_FEE = 50;
 
 interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
-interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; groups: CustomGroup[] }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; lat: number | null; lng: number | null; logo_url?: string | null }
+interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
+interface Category { id: string; title: string }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null }
 
 /** Unique cart key for an item + chosen size (different sizes are separate lines). */
 const lineKey = (l: CartLine) => `${l.menuItemId ?? l.name}|${(l.options ?? []).map((o) => o.name).join(',')}`;
@@ -47,6 +48,8 @@ export function FoodFlow() {
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
   const [customizingId, setCustomizingId] = useState<string | null>(null);
+  const [menuCat, setMenuCat] = useState<string>(''); // '' = all categories
+  const [menuSearch, setMenuSearch] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -93,15 +96,16 @@ export function FoodFlow() {
             withMenus.push({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
-              items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null }[])
-                .map((it) => ({ ...it, groups: groupsByItem.get(it.id) ?? [] })),
+              categories: ((menu.categories ?? []) as { id: string; title: string }[]).map((c) => ({ id: c.id, title: c.title })),
+              items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
+                .map((it) => ({ ...it, category_id: it.category_id ?? null, groups: groupsByItem.get(it.id) ?? [] })),
             });
           }
           setStores(withMenus);
         } else {
           setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({
-            ...s, lat: null, lng: null,
-            items: s.items.map((it) => ({ ...it, groups: [] })),
+            ...s, lat: null, lng: null, categories: [],
+            items: s.items.map((it) => ({ ...it, category_id: null, groups: [] })),
           })));
         }
       } catch (e) {
@@ -129,6 +133,16 @@ export function FoodFlow() {
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
   const needsDropoff = fees.model === 'per_km' && !dropoff;
+
+  // Reset menu filters whenever the open restaurant changes.
+  useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
+
+  // Menu items filtered by the selected category + search box.
+  const menuItems = (openStore?.items ?? []).filter((it) => {
+    if (menuCat && it.category_id !== menuCat) return false;
+    if (menuSearch.trim() && !it.name.toLowerCase().includes(menuSearch.trim().toLowerCase())) return false;
+    return true;
+  });
 
   // Cart grouped by store (one order → one rider visits each store).
   const cartByStore = useMemo(() => {
@@ -221,48 +235,77 @@ export function FoodFlow() {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {openStore ? (
-        <section className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-          <button onClick={() => setOpenStoreId(null)} className="mb-3 text-sm text-brand-purple">← All stores</button>
-          <div className="mb-3 flex items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/5">
-              {openStore.logo_url ? <img src={openStore.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">🏪</span>}
+        <section className="space-y-4">
+          <button onClick={() => setOpenStoreId(null)} className="text-sm font-medium text-brand-purple">← All restaurants</button>
+
+          {/* Restaurant hero */}
+          <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black/[0.04] ring-1 ring-black/5">
+              {openStore.logo_url ? <img src={openStore.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-2xl">🏪</span>}
             </span>
-            <span>
-              <h2 className="font-bold">{openStore.name}</h2>
-              <p className="text-xs text-black/50">{openStore.category}</p>
-            </span>
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-extrabold">{openStore.name}</h2>
+              {openStore.category && <p className="text-sm text-black/50">{openStore.category}</p>}
+              <p className="mt-0.5 text-xs text-brand-green">● Open now</p>
+            </div>
           </div>
-          <ul className="divide-y divide-black/5">
-            {openStore.items.map((it) => (
-              <li key={it.id} className="py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-3">
-                    {it.image_url && <img src={it.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />}
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium">{it.name}</span>
-                      {it.description && <span className="block truncate text-xs text-black/40">{it.description}</span>}
-                    </span>
+
+          {/* Search */}
+          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-black/5">
+            <SearchIcon />
+            <input value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)}
+              placeholder="Search this menu"
+              className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
+          </div>
+
+          {/* Category pills */}
+          {openStore.categories.length > 0 && (
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              <CatPill active={menuCat === ''} onClick={() => setMenuCat('')}>All</CatPill>
+              {openStore.categories.map((c) => (
+                <CatPill key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatPill>
+              ))}
+            </div>
+          )}
+
+          {/* Menu item cards */}
+          <div className="space-y-3">
+            {menuItems.map((it) => (
+              <div key={it.id} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+                <div className="flex gap-3 p-3">
+                  <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/[0.04]">
+                    {it.image_url ? <img src={it.image_url} alt="" className="h-full w-full object-cover" /> : <span className="text-3xl">🍽️</span>}
                   </span>
-                  <span className="flex shrink-0 items-center gap-3">
-                    <span className="text-sm">{peso(it.price)}</span>
-                    {it.groups.length === 0 ? (
-                      <button onClick={() => addToCart(openStore, it)}
-                        className="rounded-md bg-brand-green px-2.5 py-1 text-xs font-semibold text-white">Add</button>
-                    ) : (
-                      <button onClick={() => setCustomizingId(customizingId === it.id ? null : it.id)}
-                        className="rounded-md bg-brand-purple px-2.5 py-1 text-xs font-semibold text-white">
-                        {customizingId === it.id ? 'Close' : 'Customize'}
-                      </button>
-                    )}
-                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <p className="font-semibold leading-tight">{it.name}</p>
+                    {it.description && <p className="mt-0.5 line-clamp-2 text-xs text-black/50">{it.description}</p>}
+                    <div className="mt-auto flex items-center justify-between pt-2">
+                      <span className="font-bold text-brand-ink">{peso(it.price)}{it.groups.length > 0 && <span className="text-xs font-normal text-black/40">+</span>}</span>
+                      {it.groups.length === 0 ? (
+                        <button onClick={() => addToCart(openStore, it)}
+                          className="rounded-full bg-brand-green px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:brightness-95">＋ Add</button>
+                      ) : (
+                        <button onClick={() => setCustomizingId(customizingId === it.id ? null : it.id)}
+                          className="rounded-full bg-brand-purple px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:brightness-95">
+                          {customizingId === it.id ? 'Close' : 'Customize'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 {customizingId === it.id && it.groups.length > 0 && (
-                  <Customizer item={it}
-                    onAdd={(options) => { addToCart(openStore, it, options); setCustomizingId(null); }} />
+                  <div className="px-3 pb-3">
+                    <Customizer item={it} onAdd={(options) => { addToCart(openStore, it, options); setCustomizingId(null); }} />
+                  </div>
                 )}
-              </li>
+              </div>
             ))}
-          </ul>
+            {menuItems.length === 0 && (
+              <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+                {menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
+              </p>
+            )}
+          </div>
         </section>
       ) : (
         <section className="grid gap-3">
@@ -372,6 +415,24 @@ export function FoodFlow() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between py-0.5 text-sm text-black/70"><span>{label}</span><span>{value}</span></div>;
+}
+
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      className="shrink-0 text-black/30"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" strokeLinecap="round" /></svg>
+  );
+}
+
+function CatPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick}
+      className={`shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+        active ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-black/60 ring-1 ring-black/10'
+      }`}>
+      {children}
+    </button>
+  );
 }
 
 /** Inline panel to pick a customized item (one/many choices per group). */
