@@ -50,6 +50,7 @@ export function FoodFlow() {
   const [customizingId, setCustomizingId] = useState<string | null>(null);
   const [menuCat, setMenuCat] = useState<string>(''); // '' = all categories
   const [menuSearch, setMenuSearch] = useState('');
+  const [storeSearch, setStoreSearch] = useState(''); // filter the restaurant list
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -136,6 +137,13 @@ export function FoodFlow() {
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
+
+  // Restaurants filtered by the search box (name or category).
+  const shownStores = stores.filter((s) => {
+    const q = storeSearch.trim().toLowerCase();
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
+  });
 
   // Menu items filtered by the selected category + search box.
   const menuItems = (openStore?.items ?? []).filter((it) => {
@@ -311,15 +319,27 @@ export function FoodFlow() {
           </div>
         </section>
       ) : (
-        <section className="grid gap-3">
+        <section className="space-y-3">
           {cart.length > 0 && (
             <p className="rounded-lg bg-brand-green/10 px-3 py-2 text-xs text-green-800">
               Pick another store to add to your order — one rider will buy from all of them.
             </p>
           )}
-          {stores.map((s) => (
+
+          {/* Search restaurants */}
+          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-black/5">
+            <SearchIcon />
+            <input value={storeSearch} onChange={(e) => setStoreSearch(e.target.value)}
+              placeholder="Search restaurants"
+              className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
+            {storeSearch && (
+              <button onClick={() => setStoreSearch('')} className="text-black/30 hover:text-black/60">✕</button>
+            )}
+          </div>
+
+          {shownStores.map((s) => (
             <button key={s.id} onClick={() => setOpenStoreId(s.id)}
-              className="flex items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
+              className="flex w-full items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/5">
                 {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">🏪</span>}
               </span>
@@ -330,6 +350,11 @@ export function FoodFlow() {
               <span className="text-brand-purple">→</span>
             </button>
           ))}
+          {shownStores.length === 0 && (
+            <p className="rounded-xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+              {storeSearch ? `No restaurants match “${storeSearch}”.` : 'No restaurants available yet.'}
+            </p>
+          )}
         </section>
       )}
 
