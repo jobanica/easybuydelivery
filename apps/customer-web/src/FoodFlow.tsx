@@ -467,15 +467,8 @@ function CatPill({ active, onClick, children }: { active: boolean; onClick: () =
 
 /** Inline panel to pick a customized item (one/many choices per group). */
 function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOption[]) => void }) {
-  // selected choice names per group id
-  const [sel, setSel] = useState<Record<string, string[]>>(() => {
-    const init: Record<string, string[]> = {};
-    for (const g of item.groups) {
-      // pre-select the first choice for a required single-select group
-      init[g.id] = g.required && !g.multi && g.choices[0] ? [g.choices[0].name] : [];
-    }
-    return init;
-  });
+  // selected choice names per group id — nothing pre-selected; the customer picks.
+  const [sel, setSel] = useState<Record<string, string[]>>({});
 
   function pick(g: CustomGroup, name: string) {
     setSel((s) => {
