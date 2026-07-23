@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ensureCustomer, onAuthChange, signOut as sbSignOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
+import { REQUIRE_ACCOUNT } from '../config.ts';
 
 interface AuthValue {
   /** Whether the app is wired to a real backend (vs preview sample mode). */
@@ -35,29 +36,40 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [mobile, setMobile] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const inflight = useRef<Promise<string> | null>(null);
 
   useEffect(() => onAuthChange(supabase!, (u) => {
     setUserId(u?.id ?? null);
     setMobile(u?.phone ?? '');
   }), []);
 
-  // On sign-in, make sure a customer row exists for this verified phone.
+  // With the account gate ON, a signed-in phone gets its customer row up front.
   useEffect(() => {
-    if (!userId) { setCustomerId(null); return; }
-    ensureCustomer(supabase!, { mobile: mobile || 'unknown' })
-      .then(setCustomerId)
-      .catch(() => {});
+    if (!REQUIRE_ACCOUNT || !userId) { if (!userId) setCustomerId(null); return; }
+    ensureCustomer(supabase!, { mobile: mobile || 'unknown' }).then(setCustomerId).catch(() => {});
   }, [userId, mobile]);
 
   async function ensureContact(m: string, name?: string): Promise<string> {
-    const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name });
-    setCustomerId(id);
-    return id;
+    if (inflight.current) return inflight.current;
+    const run = (async () => {
+      // Gate OFF: order under a background anonymous session (no account needed).
+      let { data: { user } } = await supabase!.auth.getUser();
+      if (!user && !REQUIRE_ACCOUNT) {
+        await supabase!.auth.signInAnonymously();
+        ({ data: { user } } = await supabase!.auth.getUser());
+      }
+      const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name });
+      setCustomerId(id);
+      return id;
+    })();
+    inflight.current = run;
+    try { return await run; } finally { inflight.current = null; }
   }
 
   const value: AuthValue = {
     live: true,
-    authed: Boolean(userId && customerId),
+    // When the gate is off, ordering is always allowed.
+    authed: REQUIRE_ACCOUNT ? Boolean(userId && customerId) : true,
     customerId,
     mobile,
     ensureContact,

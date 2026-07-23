@@ -3,6 +3,7 @@ import { sendOtp, verifyOtp } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from './AuthContext.tsx';
 import { inputCls } from '../ui.tsx';
+import { REQUIRE_ACCOUNT } from '../config.ts';
 
 /**
  * Require a phone-verified account before ordering. In preview mode `authed`
@@ -13,7 +14,8 @@ import { inputCls } from '../ui.tsx';
  */
 export function AuthGate({ children }: { children: ReactNode }) {
   const { live, authed, ensureContact } = useAuth();
-  if (!live || authed) return <>{children}</>;
+  // Account gate is off until an SMS provider is set up (see config.ts).
+  if (!REQUIRE_ACCOUNT || !live || authed) return <>{children}</>;
   return <OtpSignIn onVerified={(name) => name && void ensureContact('', name)} />;
 }
 

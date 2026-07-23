@@ -6,6 +6,7 @@ import { PabiliForm } from './PabiliForm.tsx';
 import { FoodFlow } from './FoodFlow.tsx';
 import { TrackingMap } from './tracking/TrackingMap.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
+import { REQUIRE_ACCOUNT } from './config.ts';
 
 type Service = 'food' | 'pabili' | 'padala';
 type ServiceAvailability = Record<Service, boolean>;
@@ -49,7 +50,7 @@ export function App() {
               className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium">
               {tracking ? 'Back to ordering' : 'Track a delivery'}
             </button>
-            {live && (
+            {live && REQUIRE_ACCOUNT && (
               <button onClick={() => void signOut()} title={mobile ? `Signed in as ${mobile}` : 'Sign out'}
                 className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium">
                 Sign out
