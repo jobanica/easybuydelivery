@@ -16,6 +16,8 @@ import {
   deleteMenuItemOption,
   createOptionGroup,
   deleteOptionGroup,
+  deleteStore,
+  deleteMenuItem,
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
@@ -95,6 +97,14 @@ export function Stores() {
     await load();
   }
 
+  async function removeStore(s: StoreRow) {
+    if (!supabase) return;
+    if (!window.confirm(`Delete “${s.name}” and its whole menu? This can’t be undone.`)) return;
+    setError(null);
+    try { await deleteStore(supabase, s.id); setOpenId(null); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
+
   if (loading) return <Muted>Loading…</Muted>;
 
   return (
@@ -165,6 +175,13 @@ export function Stores() {
                 </div>
                 <LocationEditor store={s} onSaved={load} />
                 <MenuEditor storeId={s.id} />
+                <div className="border-t border-black/5 p-4">
+                  <button onClick={() => removeStore(s)}
+                    className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
+                    Delete this store
+                  </button>
+                  <span className="ml-2 text-xs text-black/40">Removes the store and its whole menu.</span>
+                </div>
               </>
             )}
           </div>
@@ -360,12 +377,21 @@ function ItemEditor({ item, groups, options, cats, onSaved }:
   const [cat, setCat] = useState(item.category_id ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
   // new-group form
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [gName, setGName] = useState('');
   const [gRequired, setGRequired] = useState(true);
   const [gMulti, setGMulti] = useState(false);
   const base = Number(price) || 0;
+
+  async function removeItem() {
+    if (!supabase) return;
+    if (!window.confirm(`Delete “${item.name}”? This can’t be undone.`)) return;
+    setDelErr(null);
+    try { await deleteMenuItem(supabase, item.id); onSaved(); }
+    catch (e) { setDelErr(e instanceof Error ? e.message : String(e)); }
+  }
 
   async function saveMeta() {
     if (!supabase) return;
@@ -408,10 +434,17 @@ function ItemEditor({ item, groups, options, cats, onSaved }:
             {cats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select></label>
       </div>
-      <button onClick={saveMeta} disabled={saving || !supabase}
-        className="rounded-lg bg-brand-green px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
-      </button>
+      <div className="flex items-center gap-3">
+        <button onClick={saveMeta} disabled={saving || !supabase}
+          className="rounded-lg bg-brand-green px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+        </button>
+        <button onClick={removeItem}
+          className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50">
+          Delete item
+        </button>
+      </div>
+      {delErr && <p className="text-xs text-red-600">{delErr}</p>}
 
       {/* Customizations */}
       <div className="border-t border-black/5 pt-3">

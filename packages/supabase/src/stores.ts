@@ -122,6 +122,34 @@ export async function updateStore(db: SupabaseClient, storeId: string, patch: St
   if (error) throw error;
 }
 
+/** True when a Postgres error is a foreign-key violation (referenced by orders). */
+function isFkViolation(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  return e?.code === '23503' || /foreign key/i.test(e?.message ?? '');
+}
+
+/** Delete a store and its whole menu. Blocked if it appears in any order. */
+export async function deleteStore(db: SupabaseClient, storeId: string) {
+  const { error } = await db.from('stores').delete().eq('id', storeId);
+  if (error) {
+    if (isFkViolation(error)) {
+      throw new Error('This store has past orders and can’t be deleted. Turn it Closed instead.');
+    }
+    throw error;
+  }
+}
+
+/** Delete a single menu item. Blocked if it appears in any order. */
+export async function deleteMenuItem(db: SupabaseClient, itemId: string) {
+  const { error } = await db.from('menu_items').delete().eq('id', itemId);
+  if (error) {
+    if (isFkViolation(error)) {
+      throw new Error('This item is on past orders and can’t be deleted. Mark it Out instead.');
+    }
+    throw error;
+  }
+}
+
 /** Set (or clear) a store's map pin. */
 export async function setStoreLocation(
   db: SupabaseClient, storeId: string, loc: { lat: number; lng: number } | null,
