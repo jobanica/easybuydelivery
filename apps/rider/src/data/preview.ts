@@ -22,7 +22,7 @@ export function createPreviewData(): RiderData {
       delivery_fee: 50, goods_cost: 280, commission_amount: 7.5,
       customer_contact: '0917 111 2222', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null,
-      store_contact: '0918 555 0100',
+      store_contact: '0918 555 0100', notes: 'Extra spicy, leave at the gate.',
     },
     {
       id: 'ord-pabili-1', service_type: 'pabili', status: 'pending',
@@ -30,7 +30,7 @@ export function createPreviewData(): RiderData {
       delivery_fee: 60, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
-      budget_cap: 600, actual_amount: null, store_contact: null,
+      budget_cap: 600, actual_amount: null, store_contact: null, notes: null,
     },
     {
       id: 'ord-padala-1', service_type: 'padala', status: 'pending',
@@ -38,7 +38,7 @@ export function createPreviewData(): RiderData {
       delivery_fee: 40, goods_cost: 0, commission_amount: 6,
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null,
-      store_contact: null,
+      store_contact: null, notes: null,
     },
   ];
   let active: RiderOrder[] = [];

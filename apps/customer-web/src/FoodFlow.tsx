@@ -58,6 +58,7 @@ export function FoodFlow() {
   const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
   const [contact, setContact] = useState('');
+  const [note, setNote] = useState('');
   // Prefill the delivery contact with the account's verified phone.
   useEffect(() => { if (mobile && !contact) setContact(mobile); }, [mobile]);
 
@@ -204,6 +205,7 @@ export function FoodFlow() {
           customerContact: contact.trim(),
           deliveryFee,
           lines: cart,
+          notes: note.trim() || undefined,
           deliveryLat: dropoff?.lat,
           deliveryLng: dropoff?.lng,
           paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
@@ -232,7 +234,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setNote(''); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -412,6 +414,12 @@ export function FoodFlow() {
               inputMode="tel" placeholder="0917 123 4567"
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
             <p className="mt-1 text-xs text-black/40">So the rider can reach you. No account needed.</p>
+          </div>
+          <div className="mb-3 border-t border-black/5 pt-3">
+            <label className="mb-1 block text-sm font-medium">Note to the rider <span className="font-normal text-black/40">(optional)</span></label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+              placeholder="e.g. Extra spicy, leave at the gate, call when outside…"
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
           </div>
           <div className="border-t border-black/5 pt-2">
             <Row label="Goods" value={peso(summary.goodsCost)} />

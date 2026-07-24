@@ -16,6 +16,7 @@ export interface RiderOrder {
   budget_cap: number | null;
   actual_amount: number | null;
   store_contact: string | null;
+  notes: string | null;
 }
 
 /** Abstraction the UI depends on — implemented for live Supabase and preview. */

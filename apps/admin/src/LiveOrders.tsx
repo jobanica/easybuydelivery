@@ -10,6 +10,7 @@ interface OrderRow {
   delivery_fee: number;
   commission_amount: number;
   customer_contact: string;
+  notes?: string | null;
 }
 
 const SAMPLE: OrderRow[] = [
@@ -53,7 +54,10 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
             <tr key={o.id} className="border-b border-black/[0.04]">
               <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${serviceColor[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span></Td>
               <Td className="capitalize">{o.status.replaceAll('_', ' ')}</Td>
-              <Td>{o.customer_contact}</Td>
+              <Td>
+                {o.customer_contact}
+                {o.notes && <span className="mt-0.5 block text-xs text-yellow-800">📝 {o.notes}</span>}
+              </Td>
               <Td>{peso(o.delivery_fee)}</Td>
               <Td className="font-medium">{peso(o.commission_amount)}</Td>
             </tr>

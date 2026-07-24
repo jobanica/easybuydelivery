@@ -277,6 +277,9 @@ function CardHead({ order }: { order: RiderOrder }) {
         <a href={`tel:${order.customer_contact}`} className="text-xs text-brand-purple">
           📞 {order.customer_contact}
         </a>
+        {order.notes && (
+          <p className="mt-1 rounded-lg bg-brand-yellow/20 px-2 py-1 text-xs text-yellow-900">📝 {order.notes}</p>
+        )}
       </div>
       <div className="text-right">
         <span className="block text-xs capitalize text-black/50">{order.status.replaceAll('_', ' ')}</span>
