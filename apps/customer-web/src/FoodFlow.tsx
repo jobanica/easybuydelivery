@@ -134,6 +134,7 @@ export function FoodFlow() {
 
   const summary = useMemo(() => summarizeCart(cart, deliveryFee, fees.config), [cart, deliveryFee, fees.config]);
   const storeCount = distinctStoreCount(cart);
+  const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
   const needsDropoff = fees.model === 'per_km' && !dropoff;
@@ -363,7 +364,7 @@ export function FoodFlow() {
       )}
 
       {cart.length > 0 && (
-        <section className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <section id="ebd-cart" className="scroll-mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
           <h3 className="mb-2 font-bold">Your cart {storeCount > 1 && <span className="text-xs font-normal text-black/50">· {storeCount} stores</span>}</h3>
 
           {/* Items grouped by store — one order, one rider visits each store. */}
@@ -447,7 +448,31 @@ export function FoodFlow() {
           </button>
         </section>
       )}
+
+      {/* Floating cart button */}
+      {cart.length > 0 && (
+        <button onClick={() => document.getElementById('ebd-cart')?.scrollIntoView({ behavior: 'smooth' })}
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-brand-green px-4 py-3 text-white shadow-lg ring-2 ring-white transition hover:brightness-95">
+          <span className="relative">
+            <CartIcon />
+            <span className="absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-purple px-1 text-[11px] font-bold">
+              {cartCount}
+            </span>
+          </span>
+          {!needsDropoff && <span className="text-sm font-bold">{peso(summary.customerTotal)}</span>}
+        </button>
+      )}
     </div>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
   );
 }
 
