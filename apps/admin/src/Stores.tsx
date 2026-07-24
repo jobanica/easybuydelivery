@@ -4,6 +4,7 @@ import {
   createStore,
   setStoreAvailability,
   setStoreLocation,
+  updateStore,
   listMenu,
   createMenuItem,
   setMenuItemAvailability,
@@ -168,6 +169,7 @@ export function Stores() {
             </div>
             {openId === s.id && (
               <>
+                <StoreDetailsEditor store={s} onSaved={load} />
                 <div className="border-t border-black/5 p-4">
                   <h4 className="mb-2 text-sm font-semibold">Store logo</h4>
                   <ImageUpload url={s.logo_url}
@@ -189,6 +191,53 @@ export function Stores() {
       </div>
       </>
       )}
+    </div>
+  );
+}
+
+function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () => void }) {
+  const [name, setName] = useState(store.name);
+  const [category, setCategory] = useState(store.category ?? '');
+  const [contact, setContact] = useState(store.contact_number ?? '');
+  const [address, setAddress] = useState(store.address ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const dirty = name.trim() !== store.name || category !== (store.category ?? '')
+    || contact !== (store.contact_number ?? '') || address !== (store.address ?? '');
+
+  async function save() {
+    if (!supabase || !name.trim()) return;
+    setSaving(true); setSaved(false); setErr(null);
+    try {
+      await updateStore(supabase, store.id, {
+        name: name.trim(),
+        category: category.trim() || null,
+        contactNumber: contact.trim() || null,
+        address: address.trim() || null,
+      });
+      setSaved(true); onSaved();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="border-t border-black/5 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Store details</h4>
+        <button onClick={save} disabled={!supabase || !name.trim() || !dirty || saving}
+          className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+          {saving ? 'Saving…' : dirty ? 'Save details' : saved ? '✓ Saved' : 'Saved'}
+        </button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input className={inp} placeholder="Name" value={name} onChange={(e) => { setName(e.target.value); setSaved(false); }} />
+        <input className={inp} placeholder="Category" value={category} onChange={(e) => { setCategory(e.target.value); setSaved(false); }} />
+        <input className={inp} placeholder="Contact #" value={contact} onChange={(e) => { setContact(e.target.value); setSaved(false); }} />
+      </div>
+      <input className={inp + ' mt-2 w-full'} placeholder="Address (optional)" value={address} onChange={(e) => { setAddress(e.target.value); setSaved(false); }} />
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
