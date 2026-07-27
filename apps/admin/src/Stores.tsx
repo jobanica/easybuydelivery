@@ -537,15 +537,19 @@ function OptionGroupEditor({ group, base, options, onChanged }:
   { group: GroupRow; base: number; options: OptRow[]; onChanged: () => void }) {
   const [optName, setOptName] = useState('');
   const [optExtra, setOptExtra] = useState('');
+  const [err, setErr] = useState<string | null>(null);
 
   async function addOption(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !optName.trim()) return;
-    await createMenuItemOption(supabase, {
-      itemId: group.menu_item_id, groupId: group.id, groupName: group.name,
-      optionName: optName.trim(), priceDelta: Number(optExtra) || 0,
-    });
-    setOptName(''); setOptExtra(''); onChanged();
+    setErr(null);
+    try {
+      await createMenuItemOption(supabase, {
+        itemId: group.menu_item_id, groupId: group.id, groupName: group.name,
+        optionName: optName.trim(), priceDelta: Number(optExtra) || 0,
+      });
+      setOptName(''); setOptExtra(''); onChanged();
+    } catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
   }
   async function removeOption(id: string) { if (supabase) { await deleteMenuItemOption(supabase, id); onChanged(); } }
   async function removeGroup() { if (supabase) { await deleteOptionGroup(supabase, group.id); onChanged(); } }
@@ -576,6 +580,7 @@ function OptionGroupEditor({ group, base, options, onChanged }:
         <input className={inp + ' w-24'} type="number" placeholder="Extra ₱" value={optExtra} onChange={(e) => setOptExtra(e.target.value)} />
         <button className="rounded-lg bg-brand-purple/80 px-3 py-2 text-xs font-medium text-white">Add choice</button>
       </form>
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
       {base >= 0 && options.length > 0 && Number(options[0]!.price_delta) !== 0 && (
         <p className="mt-1 text-[11px] text-black/40">Extra ₱ is added to the base price (₱{base.toFixed(2)}).</p>
       )}

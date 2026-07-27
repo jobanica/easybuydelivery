@@ -161,6 +161,26 @@ export async function setStoreLocation(
   if (error) throw error;
 }
 
+/**
+ * Fetch every row matching `col in (ids)`, paging past PostgREST's per-request
+ * row cap (default 1000). Without this, big stores silently lose options/groups.
+ */
+async function fetchAllIn(
+  db: SupabaseClient, table: string, col: string, ids: string[], orderCol?: string,
+): Promise<unknown[]> {
+  const PAGE = 1000;
+  const out: unknown[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = db.from(table).select('*').in(col, ids).range(from, from + PAGE - 1);
+    if (orderCol) q = q.order(orderCol);
+    const { data, error } = await q;
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
 /** A store's menu: categories with their items (available items only for customers). */
 export async function listMenu(db: SupabaseClient, storeId: string, availableOnly = true) {
   const cats = await db
@@ -180,12 +200,9 @@ export async function listMenu(db: SupabaseClient, storeId: string, availableOnl
   let optionGroups: unknown[] = [];
   let options: unknown[] = [];
   if (itemIds.length) {
-    const g = await db.from('menu_item_option_groups').select('*').in('menu_item_id', itemIds).order('sort_order');
-    if (g.error) throw g.error;
-    optionGroups = g.data ?? [];
-    const opts = await db.from('menu_item_options').select('*').in('menu_item_id', itemIds);
-    if (opts.error) throw opts.error;
-    options = opts.data ?? [];
+    // Paginated so stores with 1000+ total options don't get silently truncated.
+    optionGroups = await fetchAllIn(db, 'menu_item_option_groups', 'menu_item_id', itemIds, 'sort_order');
+    options = await fetchAllIn(db, 'menu_item_options', 'menu_item_id', itemIds);
   }
 
   return { categories: cats.data ?? [], items: items.data ?? [], optionGroups, options };
