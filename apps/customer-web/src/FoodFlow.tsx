@@ -76,6 +76,8 @@ export function FoodFlow() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
   const [contact, setContact] = useState('');
   const [note, setNote] = useState('');
+  const [cutlery, setCutlery] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false); // full-screen cart popup
   // Prefill the delivery contact with the account's verified phone.
   useEffect(() => { if (mobile && !contact) setContact(mobile); }, [mobile]);
 
@@ -221,6 +223,7 @@ export function FoodFlow() {
     setError(null);
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
+    const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
     try {
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(contact.trim());
@@ -229,7 +232,7 @@ export function FoodFlow() {
           customerContact: contact.trim(),
           deliveryFee,
           lines: cart,
-          notes: note.trim() || undefined,
+          notes: fullNote,
           deliveryLat: dropoff?.lat,
           deliveryLng: dropoff?.lng,
           paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
@@ -258,7 +261,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setNote(''); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setNote(''); setCutlery(false); setCartOpen(false); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -387,95 +390,104 @@ export function FoodFlow() {
         </section>
       )}
 
-      {cart.length > 0 && (
-        <section id="ebd-cart" className="scroll-mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-          <h3 className="mb-2 font-bold">Your cart {storeCount > 1 && <span className="text-xs font-normal text-black/50">· {storeCount} stores</span>}</h3>
+      {/* Full-screen cart popup */}
+      {cartOpen && cart.length > 0 && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f4f5f2]">
+          <header className="flex items-center justify-between border-b border-black/10 bg-white px-4 py-3">
+            <h3 className="font-bold">Your cart {storeCount > 1 && <span className="text-xs font-normal text-black/50">· {storeCount} stores</span>}</h3>
+            <button onClick={() => setCartOpen(false)} aria-label="Close cart"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 text-lg text-black/60 hover:bg-black/10">✕</button>
+          </header>
 
-          {/* Items grouped by store — one order, one rider visits each store. */}
-          <div className="mb-3 space-y-3">
-            {cartByStore.map((grp) => (
-              <div key={grp.name}>
-                {storeCount > 1 && <p className="mb-1 text-xs font-semibold text-brand-purple">🏪 {grp.name}</p>}
-                <ul className="divide-y divide-black/5">
-                  {grp.lines.map((l) => (
-                    <li key={lineKey(l)} className="flex items-center justify-between py-2 text-sm">
-                      <span>{l.name}</span>
-                      <span className="flex items-center gap-2">
-                        <button onClick={() => changeQty(lineKey(l), -1)} className="h-6 w-6 rounded bg-black/5">−</button>
-                        <span className="w-4 text-center">{l.qty}</span>
-                        <button onClick={() => changeQty(lineKey(l), +1)} className="h-6 w-6 rounded bg-black/5">+</button>
-                        <span className="w-16 text-right font-medium">{peso(lineUnitPrice(l) * l.qty)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {/* Items grouped by store — one order, one rider visits each store. */}
+            <div className="mb-3 space-y-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+              {cartByStore.map((grp) => (
+                <div key={grp.name}>
+                  {storeCount > 1 && <p className="mb-1 text-xs font-semibold text-brand-purple">🏪 {grp.name}</p>}
+                  <ul className="divide-y divide-black/5">
+                    {grp.lines.map((l) => (
+                      <li key={lineKey(l)} className="flex items-center justify-between py-2 text-sm">
+                        <span>{l.name}</span>
+                        <span className="flex items-center gap-2">
+                          <button onClick={() => changeQty(lineKey(l), -1)} className="h-6 w-6 rounded bg-black/5">−</button>
+                          <span className="w-4 text-center">{l.qty}</span>
+                          <button onClick={() => changeQty(lineKey(l), +1)} className="h-6 w-6 rounded bg-black/5">+</button>
+                          <span className="w-16 text-right font-medium">{peso(lineUnitPrice(l) * l.qty)}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {canAddStore ? (
+                <button onClick={() => { setCartOpen(false); setOpenStoreId(null); window.scrollTo({ top: 0 }); }}
+                  className="w-full rounded-lg border border-dashed border-brand-purple/50 py-2.5 text-sm font-semibold text-brand-purple hover:bg-brand-purple/5">
+                  ＋ Add items from another store
+                </button>
+              ) : (
+                <p className="text-center text-xs text-black/40">Up to {MAX_STORES_PER_ORDER} stores per order.</p>
+              )}
+              {storeCount > 1 && (
+                <p className="rounded-lg bg-brand-purple/5 px-3 py-2 text-xs text-brand-purple">
+                  One rider will buy from all {storeCount} stores. The delivery fee is charged for the farthest store only.
+                </p>
+              )}
+            </div>
+
+            <div className="mb-3 space-y-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+              {fees.model === 'per_km' && <LocationPicker value={dropoff} onChange={setDropoff} />}
+              <div>
+                <label className="mb-1 block text-sm font-medium">Your mobile number</label>
+                <input value={contact} onChange={(e) => setContact(e.target.value)}
+                  inputMode="tel" placeholder="0917 123 4567"
+                  className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+                <p className="mt-1 text-xs text-black/40">So the rider can reach you.</p>
               </div>
-            ))}
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={cutlery} onChange={(e) => setCutlery(e.target.checked)} className="h-4 w-4 accent-[#6DBE22]" />
+                🍴 Include cutlery
+              </label>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Note to the rider <span className="font-normal text-black/40">(optional)</span></label>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+                  placeholder="e.g. Extra spicy, leave at the gate, call when outside…"
+                  className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+              <Row label="Goods" value={peso(summary.goodsCost)} />
+              <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+                value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
+              {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
+              {summary.convenienceFee > 0 && <Row label="Convenience fee" value={peso(summary.convenienceFee)} />}
+              <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
+                <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
+              </div>
+              {pay === 'online' && !needsDropoff && (
+                <div className="mt-1 flex justify-between text-xs text-black/50">
+                  <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
+                </div>
+              )}
+              <div className="mt-3"><PaymentChoice value={pay} onChange={setPay} /></div>
+            </div>
           </div>
 
-          {/* Order from more than one store — the same rider buys at each. */}
-          {canAddStore ? (
-            <button onClick={() => { setOpenStoreId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="mb-3 w-full rounded-lg border border-dashed border-brand-purple/50 py-2.5 text-sm font-semibold text-brand-purple hover:bg-brand-purple/5">
-              ＋ Add items from another store
+          <div className="border-t border-black/10 bg-white p-4">
+            <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
+              className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
+              {needsDropoff ? 'Set delivery location to continue'
+                : !contact.trim() ? 'Enter your mobile number'
+                : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}` : `Place order (COD) · ${peso(summary.customerTotal)}`}
             </button>
-          ) : (
-            <p className="mb-3 text-center text-xs text-black/40">Up to {MAX_STORES_PER_ORDER} stores per order.</p>
-          )}
-          {storeCount > 1 && (
-            <p className="mb-3 rounded-lg bg-brand-purple/5 px-3 py-2 text-xs text-brand-purple">
-              One rider will buy from all {storeCount} stores. The delivery fee is charged for the farthest store only.
-            </p>
-          )}
-
-          {fees.model === 'per_km' && (
-            <div className="mb-3 border-t border-black/5 pt-3">
-              <LocationPicker value={dropoff} onChange={setDropoff} />
-            </div>
-          )}
-          <div className="mb-3 border-t border-black/5 pt-3">
-            <label className="mb-1 block text-sm font-medium">Your mobile number</label>
-            <input value={contact} onChange={(e) => setContact(e.target.value)}
-              inputMode="tel" placeholder="0917 123 4567"
-              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
-            <p className="mt-1 text-xs text-black/40">So the rider can reach you. No account needed.</p>
           </div>
-          <div className="mb-3 border-t border-black/5 pt-3">
-            <label className="mb-1 block text-sm font-medium">Note to the rider <span className="font-normal text-black/40">(optional)</span></label>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
-              placeholder="e.g. Extra spicy, leave at the gate, call when outside…"
-              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
-          </div>
-          <div className="border-t border-black/5 pt-2">
-            <Row label="Goods" value={peso(summary.goodsCost)} />
-            <Row
-              label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
-              value={needsDropoff ? '—' : peso(summary.deliveryFee)}
-            />
-            {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
-            {summary.convenienceFee > 0 && <Row label="Convenience fee" value={peso(summary.convenienceFee)} />}
-            <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
-              <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
-            </div>
-            {pay === 'online' && !needsDropoff && (
-              <div className="mt-1 flex justify-between text-xs text-black/50">
-                <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
-              </div>
-            )}
-          </div>
-          <div className="mt-4"><PaymentChoice value={pay} onChange={setPay} /></div>
-          <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
-            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
-            {needsDropoff ? 'Set delivery location to continue'
-              : !contact.trim() ? 'Enter your mobile number'
-              : pay === 'online' ? 'Pay online & order' : 'Place order (COD)'}
-          </button>
-        </section>
+        </div>
       )}
 
       {/* Floating cart button */}
-      {cart.length > 0 && (
-        <button onClick={() => document.getElementById('ebd-cart')?.scrollIntoView({ behavior: 'smooth' })}
+      {cart.length > 0 && !cartOpen && (
+        <button onClick={() => setCartOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-brand-green px-4 py-3 text-white shadow-lg ring-2 ring-white transition hover:brightness-95">
           <span className="relative">
             <CartIcon />
