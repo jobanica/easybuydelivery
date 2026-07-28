@@ -18,11 +18,24 @@ export function RiderGate() {
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
 function LiveGate() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [rider, setRider] = useState<{ id: string; application_status: string } | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
+  // Load this rider's application/status once signed in (so approved riders
+  // go straight to the app instead of re-applying every time).
+  useEffect(() => {
+    if (!userId) { setRider(null); setChecked(userId === null); return; }
+    setChecked(false);
+    supabase!.from('riders').select('id, application_status').eq('profile_id', userId).maybeSingle()
+      .then(({ data }) => { setRider((data as { id: string; application_status: string } | null) ?? null); setChecked(true); });
+  }, [userId]);
+
+  if (userId === undefined || (userId && !checked)) {
+    return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
+  }
   if (!userId) return <OtpSignIn />;
   if (!rider) return <Onboard onDone={setRider} />;
   if (rider.application_status === 'approved') return <App riderId={rider.id} />;
