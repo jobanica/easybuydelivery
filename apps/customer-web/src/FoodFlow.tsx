@@ -27,7 +27,24 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 interface Category { id: string; title: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; loaded: boolean }
+
+/** Build the per-item customization groups from a listMenu() result. */
+function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categories: Category[]; items: MenuItem[] } {
+  const allOpts = (menu.options ?? []) as { group_id: string | null; option_name: string; price_delta: number }[];
+  const groupsByItem = new Map<string, CustomGroup[]>();
+  for (const g of (menu.optionGroups ?? []) as { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean }[]) {
+    const choices = allOpts.filter((o) => o.group_id === g.id).map((o) => ({ name: o.option_name, priceDelta: Number(o.price_delta) }));
+    const arr = groupsByItem.get(g.menu_item_id) ?? [];
+    arr.push({ id: g.id, name: g.name, required: g.required, multi: g.multi_select, choices });
+    groupsByItem.set(g.menu_item_id, arr);
+  }
+  return {
+    categories: ((menu.categories ?? []) as { id: string; title: string }[]).map((c) => ({ id: c.id, title: c.title })),
+    items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
+      .map((it) => ({ ...it, category_id: it.category_id ?? null, groups: groupsByItem.get(it.id) ?? [] })),
+  };
+}
 
 /** Unique cart key for an item + chosen size (different sizes are separate lines). */
 const lineKey = (l: CartLine) => `${l.menuItemId ?? l.name}|${(l.options ?? []).map((o) => o.name).join(',')}`;
@@ -86,29 +103,16 @@ export function FoodFlow() {
               },
             });
           }
-          const withMenus: Store[] = [];
-          for (const s of rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[]) {
-            const menu = await listMenu(supabase, s.id);
-            const allOpts = (menu.options ?? []) as { group_id: string | null; option_name: string; price_delta: number }[];
-            const groupsByItem = new Map<string, CustomGroup[]>();
-            for (const g of (menu.optionGroups ?? []) as { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean }[]) {
-              const choices = allOpts.filter((o) => o.group_id === g.id).map((o) => ({ name: o.option_name, priceDelta: Number(o.price_delta) }));
-              const arr = groupsByItem.get(g.menu_item_id) ?? [];
-              arr.push({ id: g.id, name: g.name, required: g.required, multi: g.multi_select, choices });
-              groupsByItem.set(g.menu_item_id, arr);
-            }
-            withMenus.push({
+          // Only the store list up front — each menu loads lazily when opened.
+          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[])
+            .map((s) => ({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
-              categories: ((menu.categories ?? []) as { id: string; title: string }[]).map((c) => ({ id: c.id, title: c.title })),
-              items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
-                .map((it) => ({ ...it, category_id: it.category_id ?? null, groups: groupsByItem.get(it.id) ?? [] })),
-            });
-          }
-          setStores(withMenus);
+              categories: [], items: [], loaded: false,
+            })));
         } else {
           setStores((SAMPLE_STORES as SampleStore[]).map((s) => ({
-            ...s, lat: null, lng: null, categories: [],
+            ...s, lat: null, lng: null, categories: [], loaded: true,
             items: s.items.map((it) => ({ ...it, category_id: null, groups: [] })),
           })));
         }
@@ -141,6 +145,25 @@ export function FoodFlow() {
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
+
+  // Lazily load a restaurant's menu the first time it's opened.
+  const [menuLoading, setMenuLoading] = useState(false);
+  useEffect(() => {
+    if (!openStoreId || !supabase || !isSupabaseConfigured) return;
+    const s = stores.find((x) => x.id === openStoreId);
+    if (!s || s.loaded) return;
+    let cancelled = false;
+    setMenuLoading(true);
+    listMenu(supabase, openStoreId)
+      .then((menu) => {
+        if (cancelled) return;
+        const built = buildStoreMenu(menu);
+        setStores((prev) => prev.map((x) => x.id === openStoreId ? { ...x, ...built, loaded: true } : x));
+      })
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => !cancelled && setMenuLoading(false));
+    return () => { cancelled = true; };
+  }, [openStoreId, stores]);
 
   // Restaurants filtered by the search box (name or category).
   const shownStores = stores.filter((s) => {
@@ -318,7 +341,8 @@ export function FoodFlow() {
             ))}
             {menuItems.length === 0 && (
               <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
-                {menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
+                {!openStore.loaded || menuLoading ? 'Loading menu…'
+                  : menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
               </p>
             )}
           </div>
