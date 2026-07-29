@@ -496,6 +496,7 @@ export function FoodFlow() {
           </div>
 
           <div className="border-t border-black/10 bg-white p-4">
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {needsDropoff ? 'Set delivery location to continue'
