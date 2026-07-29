@@ -82,7 +82,7 @@ export async function confirmSettlement(
 ) {
   const upd = await db
     .from('settlements')
-    .update({ status: 'confirmed', confirmed_by: params.adminProfileId, confirmed_at: new Date().toISOString() })
+    .update({ status: 'confirmed', confirmed_by: params.adminProfileId || null, confirmed_at: new Date().toISOString() })
     .eq('id', params.settlementId);
   if (upd.error) throw upd.error;
 

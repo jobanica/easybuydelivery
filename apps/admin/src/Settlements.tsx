@@ -3,7 +3,7 @@ import { summarizeRiderBalances, type RiderBalance } from '@ebd/shared';
 import { listRiderBalances, listPendingSettlements, confirmSettlement } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const peso = (n: number) => `₱${n.toFixed(2)}`;
 
 interface PendingRow {
@@ -39,6 +39,8 @@ export function Settlements() {
   const [pending, setPending] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   async function load() {
     if (!supabase) {
@@ -62,11 +64,19 @@ export function Settlements() {
 
   async function confirm(row: PendingRow) {
     if (!supabase) return;
-    await confirmSettlement(supabase, {
-      settlementId: row.id, riderId: row.rider_id, businessDay: row.business_day,
-      adminProfileId: 'admin', today,
-    });
-    await load();
+    setConfirmErr(null); setConfirmingId(row.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await confirmSettlement(supabase, {
+        settlementId: row.id, riderId: row.rider_id, businessDay: row.business_day,
+        adminProfileId: user?.id ?? '', today,
+      });
+      await load();
+    } catch (e) {
+      setConfirmErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConfirmingId(null);
+    }
   }
 
   if (loading) return <Muted>Loading…</Muted>;
@@ -109,6 +119,7 @@ export function Settlements() {
 
       <section>
         <h3 className="mb-2 font-semibold">Pending settlements</h3>
+        {confirmErr && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{confirmErr}</p>}
         {!supabase ? (
           <Muted>Connect Supabase to receive and confirm rider payments.</Muted>
         ) : pending.length === 0 ? (
@@ -131,9 +142,9 @@ export function Settlements() {
                     {row.receipt_url && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="text-xs font-medium text-brand-purple">View receipt →</a>}
                   </div>
                 </div>
-                <button onClick={() => confirm(row)}
-                  className="shrink-0 rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white">
-                  Mark paid
+                <button onClick={() => confirm(row)} disabled={confirmingId === row.id}
+                  className="shrink-0 rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                  {confirmingId === row.id ? 'Marking…' : 'Mark paid'}
                 </button>
               </div>
             ))}
