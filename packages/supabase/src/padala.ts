@@ -134,13 +134,19 @@ export async function listActiveOrdersAdmin(db: SupabaseClient) {
 
 /** A rider accepts an order: claim it and move to `accepted`. */
 export async function acceptOrder(db: SupabaseClient, orderId: string, riderId: string) {
-  const { error } = await db
+  const { data, error } = await db
     .from('orders')
     .update({ rider_id: riderId, status: 'accepted' })
     .eq('id', orderId)
     .eq('status', 'pending')
-    .is('rider_id', null);
+    .is('rider_id', null)
+    .select('id');
   if (error) throw error;
+  // No row updated means someone else grabbed it first (or it's no longer
+  // pending). Surface it instead of silently doing nothing.
+  if (!data || data.length === 0) {
+    throw new Error('This order was just taken or is no longer available.');
+  }
 }
 
 /**
