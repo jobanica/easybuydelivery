@@ -9,13 +9,21 @@ import {
   type LedgerEntry,
   type OrderStatus,
 } from '@ebd/shared';
-import { subscribeToNewOrders } from '@ebd/supabase';
+import {
+  subscribeToNewOrders, signOut,
+  getRiderProfile, updateRiderProfile, uploadRiderPhoto, type RiderProfile,
+} from '@ebd/supabase';
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
 import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
+import { SUPPORT_CONTACT, APP_VERSION, TERMS_URL } from './config.ts';
+
+const SERVICES: { key: string; label: string }[] = [
+  { key: 'food', label: 'Food' }, { key: 'pabili', label: 'Pabili' }, { key: 'padala', label: 'Padala' },
+];
 
 const today = new Date().toISOString().slice(0, 10);
 type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
@@ -30,6 +38,13 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const [online, setOnline] = useState(false);
   const [onlineBusy, setOnlineBusy] = useState(false);
   const [declined, setDeclined] = useState<Set<string>>(new Set());
+  const [profile, setProfile] = useState<RiderProfile | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    if (!supabase || !riderId) return;
+    try { setProfile(await getRiderProfile(supabase, riderId)); } catch { /* non-fatal */ }
+  }, [riderId]);
+  useEffect(() => { void loadProfile(); }, [loadProfile]);
 
   const refresh = useCallback(async () => {
     try {
@@ -42,7 +57,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { data.getOnline().then(setOnline).catch(() => {}); }, [data]);
-  usePushRegistration(riderId);
+  usePushRegistration(riderId, profile?.push_enabled ?? true);
 
   useEffect(() => {
     if (!supabase) return;
@@ -52,7 +67,8 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const locked = isLockedOut(ledger, today);
   const overdue = overdueBalance(ledger, today);
   const owed = owedBalance(ledger);
-  const pool = open.filter((o) => !declined.has(o.id));
+  const accepts = (t: string) => !profile?.services_accepted || profile.services_accepted.includes(t);
+  const pool = open.filter((o) => !declined.has(o.id) && accepts(o.service_type));
 
   async function toggleOnline() {
     setOnlineBusy(true);
@@ -74,7 +90,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
     await refresh();
   }
 
-  const firstName = (riderName ?? '').trim().split(/\s+/)[0] || 'Rider';
+  const firstName = ((profile?.name ?? riderName) ?? '').trim().split(/\s+/)[0] || 'Rider';
 
   return (
     <div className="min-h-screen bg-[#f6f7f4] pb-24">
@@ -82,7 +98,9 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3.5">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-green/15 text-lg">🛵</span>
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-brand-green/15 text-lg">
+              {profile?.photo_url ? <img src={profile.photo_url} alt="" className="h-full w-full object-cover" /> : '🛵'}
+            </span>
             <div className="leading-tight">
               <p className="text-xs text-black/45">Welcome back!</p>
               <h1 className="text-base font-extrabold">{firstName}</h1>
@@ -129,14 +147,15 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
             ? <Empty icon="✅">No active deliveries. Accept one from Requests.</Empty>
             : <div className="space-y-4">
                 <SectionTitle>My deliveries</SectionTitle>
-                {active.map((o) => <DeliveryCard key={o.id} order={o} data={data} onChange={refresh} />)}
+                {active.map((o) => <DeliveryCard key={o.id} order={o} data={data} onChange={refresh} payoutNumber={profile?.payout_number} />)}
               </div>
         )}
 
         {tab === 'earnings' && <EarningsView ledger={ledger} owed={owed} overdue={overdue} onSettle={settleNow} />}
 
         {tab === 'settings' && (
-          <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline} />
+          <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline}
+            profile={profile} onProfileSaved={loadProfile} />
         )}
       </main>
 
@@ -307,7 +326,8 @@ function amountToCollect(o: RiderOrder): number | null {
   return o.goods_cost + o.delivery_fee;
 }
 
-function DeliveryCard({ order, data, onChange }: { order: RiderOrder; data: RiderData; onChange: () => Promise<void> }) {
+function DeliveryCard({ order, data, onChange, payoutNumber }:
+  { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const next = nextStatus(order);
@@ -379,7 +399,10 @@ function DeliveryCard({ order, data, onChange }: { order: RiderOrder; data: Ride
         {order.payment_status !== 'paid' && order.status === 'on_the_way' && (
           <div className="mt-3 flex flex-col items-center rounded-xl bg-black/[0.02] p-3">
             <p className="mb-2 text-xs font-medium text-black/60">Let the customer scan to pay</p>
-            <Qr payload={`ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+            <Qr payload={payoutNumber ? `ebd://pay?to=${encodeURIComponent(payoutNumber)}&amount=${collect ?? 0}` : `ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+            {payoutNumber
+              ? <p className="mt-2 text-xs text-black/60">GCash/Maya: <span className="font-semibold text-brand-ink">{payoutNumber}</span></p>
+              : <p className="mt-2 text-[11px] text-black/35">Set your GCash/Maya number in Settings</p>}
           </div>
         )}
 
@@ -452,22 +475,250 @@ function EarningsView({ ledger, owed, overdue, onSettle }:
   );
 }
 
-function SettingsView({ live, online, busy, onToggleOnline }:
-  { live: boolean; online: boolean; busy: boolean; onToggleOnline: () => void }) {
+function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <p className="mb-3 text-sm font-bold">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+const settingsInp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
+
+function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSaved }: {
+  live: boolean; online: boolean; busy: boolean; onToggleOnline: () => void;
+  profile: RiderProfile | null; onProfileSaved: () => Promise<void>;
+}) {
+  const canEdit = live && !!supabase;
   return (
     <div className="space-y-4">
       <SectionTitle>Settings</SectionTitle>
       <OnlineToggle online={online} busy={busy} onToggle={onToggleOnline} />
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm">Connection</span>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${live ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>
-            {live ? 'Live' : 'Preview mode'}
-          </span>
+
+      {canEdit && profile && <ProfileSection profile={profile} onSaved={onProfileSaved} />}
+      {canEdit && profile && <PayoutSection profile={profile} onSaved={onProfileSaved} />}
+      {canEdit && profile && <ServicesSection profile={profile} onSaved={onProfileSaved} />}
+      {canEdit && profile && <PushSection profile={profile} onSaved={onProfileSaved} />}
+
+      <LocationSection />
+
+      <SettingsCard title="Help & support">
+        <p className="mb-3 text-sm text-black/55">Reach the operator if you have an issue with an order or your account.</p>
+        <div className="flex gap-2">
+          <a href={`tel:${SUPPORT_CONTACT.replace(/\s/g, '')}`}
+            className="flex-1 rounded-xl bg-brand-green py-2.5 text-center text-sm font-bold text-white">Call operator</a>
+          <a href={`sms:${SUPPORT_CONTACT.replace(/\s/g, '')}`}
+            className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Message</a>
         </div>
-      </div>
-      <p className="px-1 text-xs text-black/40">Easy Buy Delivery — Rider</p>
+      </SettingsCard>
+
+      <SettingsCard title="About">
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between"><span className="text-black/55">App version</span><span className="font-medium">{APP_VERSION}</span></div>
+          <div className="flex justify-between">
+            <span className="text-black/55">Connection</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${live ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>{live ? 'Live' : 'Preview mode'}</span>
+          </div>
+          <a href={TERMS_URL} target="_blank" rel="noreferrer" className="block pt-1 text-brand-purple">Terms &amp; Privacy →</a>
+        </div>
+      </SettingsCard>
+
+      {live && supabase && (
+        <button onClick={() => void signOut(supabase!)}
+          className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-red-600 shadow-sm ring-1 ring-black/5">
+          Log out
+        </button>
+      )}
+      {!canEdit && <p className="px-1 text-xs text-black/40">Connect the app to edit your profile.</p>}
+      <p className="px-1 pb-2 text-center text-xs text-black/35">Easy Buy Delivery — Rider · v{APP_VERSION}</p>
     </div>
+  );
+}
+
+/** Reusable save wrapper: runs an update, reloads the profile, shows state. */
+function useSaver(onSaved: () => Promise<void>) {
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function run(fn: () => Promise<void>) {
+    setBusy(true); setSaved(false); setErr(null);
+    try { await fn(); await onSaved(); setSaved(true); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+  return { busy, saved, err, run, setSaved };
+}
+
+function ProfileSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () => Promise<void> }) {
+  const [name, setName] = useState(profile.name);
+  const [mobile, setMobile] = useState(profile.mobile_number);
+  const [vehicle, setVehicle] = useState(profile.vehicle ?? '');
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const { busy, saved, err, run, setSaved } = useSaver(onSaved);
+  const dirty = name !== profile.name || mobile !== profile.mobile_number || vehicle !== (profile.vehicle ?? '');
+
+  async function save() {
+    await run(() => updateRiderProfile(supabase!, {
+      name, mobile, vehicle,
+      payoutNumber: profile.payout_number, services: profile.services_accepted,
+      pushEnabled: profile.push_enabled, photoUrl: profile.photo_url,
+    }));
+  }
+  async function pickPhoto(file: File) {
+    setPhotoBusy(true);
+    try {
+      const url = await uploadRiderPhoto(supabase!, file);
+      await updateRiderProfile(supabase!, {
+        name: profile.name, mobile: profile.mobile_number, vehicle: profile.vehicle,
+        photoUrl: url, payoutNumber: profile.payout_number,
+        services: profile.services_accepted, pushEnabled: profile.push_enabled,
+      });
+      await onSaved();
+    } catch { /* surfaced elsewhere */ } finally { setPhotoBusy(false); }
+  }
+
+  return (
+    <SettingsCard title="Profile">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-brand-green/15 text-2xl">
+          {profile.photo_url ? <img src={profile.photo_url} alt="" className="h-full w-full object-cover" /> : '🛵'}
+        </span>
+        <label className="cursor-pointer rounded-lg border border-black/10 px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/[0.03]">
+          {photoBusy ? 'Uploading…' : 'Change photo'}
+          <input type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickPhoto(f); }} />
+        </label>
+      </div>
+      <div className="space-y-2">
+        <input className={settingsInp} placeholder="Full name" value={name} onChange={(e) => { setName(e.target.value); setSaved(false); }} />
+        <input className={settingsInp} placeholder="Mobile number" inputMode="tel" value={mobile} onChange={(e) => { setMobile(e.target.value); setSaved(false); }} />
+        <input className={settingsInp} placeholder="Vehicle (e.g. motorcycle)" value={vehicle} onChange={(e) => { setVehicle(e.target.value); setSaved(false); }} />
+      </div>
+      <button onClick={save} disabled={busy || !dirty || !name.trim() || !mobile.trim()}
+        className="mt-3 w-full rounded-lg bg-brand-green py-2.5 text-sm font-bold text-white disabled:opacity-50">
+        {busy ? 'Saving…' : saved ? '✓ Saved' : 'Save profile'}
+      </button>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </SettingsCard>
+  );
+}
+
+function PayoutSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () => Promise<void> }) {
+  const [num, setNum] = useState(profile.payout_number ?? '');
+  const { busy, saved, err, run, setSaved } = useSaver(onSaved);
+  const dirty = num !== (profile.payout_number ?? '');
+  async function save() {
+    await run(() => updateRiderProfile(supabase!, {
+      name: profile.name, mobile: profile.mobile_number, vehicle: profile.vehicle,
+      photoUrl: profile.photo_url, payoutNumber: num,
+      services: profile.services_accepted, pushEnabled: profile.push_enabled,
+    }));
+  }
+  return (
+    <SettingsCard title="Payout · GCash / Maya">
+      <p className="mb-2 text-sm text-black/55">Shown to customers at the door so they can pay you online instead of cash.</p>
+      <input className={settingsInp} placeholder="GCash / Maya number" inputMode="tel"
+        value={num} onChange={(e) => { setNum(e.target.value); setSaved(false); }} />
+      <button onClick={save} disabled={busy || !dirty}
+        className="mt-3 w-full rounded-lg bg-brand-green py-2.5 text-sm font-bold text-white disabled:opacity-50">
+        {busy ? 'Saving…' : saved ? '✓ Saved' : 'Save payout number'}
+      </button>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </SettingsCard>
+  );
+}
+
+function ServicesSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () => Promise<void> }) {
+  const { busy, run } = useSaver(onSaved);
+  // null/empty accepted = all on.
+  const accepted = new Set(profile.services_accepted ?? SERVICES.map((s) => s.key));
+  function toggle(key: string) {
+    const next = new Set(accepted);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    const arr = SERVICES.map((s) => s.key).filter((k) => next.has(k));
+    void run(() => updateRiderProfile(supabase!, {
+      name: profile.name, mobile: profile.mobile_number, vehicle: profile.vehicle,
+      photoUrl: profile.photo_url, payoutNumber: profile.payout_number,
+      services: arr.length === SERVICES.length ? null : arr, // all → null
+      pushEnabled: profile.push_enabled,
+    }));
+  }
+  return (
+    <SettingsCard title="Services I accept">
+      <p className="mb-3 text-sm text-black/55">Only orders for the services you turn on will show in your pool.</p>
+      <div className="divide-y divide-black/5">
+        {SERVICES.map((s) => (
+          <label key={s.key} className="flex items-center justify-between py-2.5">
+            <span className="text-sm font-medium">{s.label}</span>
+            <Switch on={accepted.has(s.key)} disabled={busy} onChange={() => toggle(s.key)} />
+          </label>
+        ))}
+      </div>
+    </SettingsCard>
+  );
+}
+
+function PushSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () => Promise<void> }) {
+  const { busy, run } = useSaver(onSaved);
+  function toggle() {
+    void run(() => updateRiderProfile(supabase!, {
+      name: profile.name, mobile: profile.mobile_number, vehicle: profile.vehicle,
+      photoUrl: profile.photo_url, payoutNumber: profile.payout_number,
+      services: profile.services_accepted, pushEnabled: !profile.push_enabled,
+    }));
+  }
+  return (
+    <SettingsCard title="Notifications">
+      <label className="flex items-center justify-between">
+        <span>
+          <span className="block text-sm font-medium">New-order push alerts</span>
+          <span className="block text-xs text-black/45">Get notified when orders enter the pool.</span>
+        </span>
+        <Switch on={profile.push_enabled} disabled={busy} onChange={toggle} />
+      </label>
+    </SettingsCard>
+  );
+}
+
+function LocationSection() {
+  const [state, setState] = useState<string>('checking');
+  useEffect(() => {
+    if (!('permissions' in navigator) || !navigator.permissions?.query) { setState('unknown'); return; }
+    navigator.permissions.query({ name: 'geolocation' as PermissionName })
+      .then((p) => { setState(p.state); p.onchange = () => setState(p.state); })
+      .catch(() => setState('unknown'));
+  }, []);
+  function enable() {
+    navigator.geolocation?.getCurrentPosition(() => setState('granted'), () => setState('denied'));
+  }
+  const label = state === 'granted' ? 'Allowed' : state === 'denied' ? 'Blocked' : state === 'prompt' ? 'Not set' : '—';
+  const tint = state === 'granted' ? 'bg-brand-green/15 text-green-800'
+    : state === 'denied' ? 'bg-red-100 text-red-700' : 'bg-brand-yellow/30 text-yellow-800';
+  return (
+    <SettingsCard title="Location">
+      <div className="flex items-center justify-between">
+        <span>
+          <span className="block text-sm font-medium">GPS permission</span>
+          <span className="block text-xs text-black/45">Needed to share your location during delivery.</span>
+        </span>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${tint}`}>{label}</span>
+      </div>
+      {state !== 'granted' && (
+        <button onClick={enable} className="mt-3 w-full rounded-lg bg-brand-purple py-2.5 text-sm font-bold text-white">
+          Enable location
+        </button>
+      )}
+    </SettingsCard>
+  );
+}
+
+function Switch({ on, onChange, disabled = false }: { on: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button onClick={onChange} disabled={disabled} aria-pressed={on}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-60 ${on ? 'bg-brand-green' : 'bg-black/20'}`}>
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[1.375rem]' : 'left-0.5'}`} />
+    </button>
   );
 }
 

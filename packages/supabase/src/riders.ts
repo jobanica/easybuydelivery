@@ -79,6 +79,65 @@ export async function resumeRiderByMobile(
   return { id: r.id, application_status: r.application_status, name: r.name ?? null };
 }
 
+export interface RiderProfile {
+  id: string;
+  name: string;
+  mobile_number: string;
+  vehicle: string | null;
+  photo_url: string | null;
+  payout_number: string | null;
+  services_accepted: string[] | null;
+  push_enabled: boolean;
+  application_status: string;
+}
+
+/** Read the signed-in rider's full profile (own row, via riders_self_read). */
+export async function getRiderProfile(db: SupabaseClient, riderId: string): Promise<RiderProfile | null> {
+  const { data, error } = await db
+    .from('riders')
+    .select('id, name, mobile_number, vehicle, photo_url, payout_number, services_accepted, push_enabled, application_status')
+    .eq('id', riderId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as RiderProfile | null) ?? null;
+}
+
+export interface RiderProfilePatch {
+  name: string;
+  mobile: string;
+  vehicle?: string | null;
+  photoUrl?: string | null;
+  payoutNumber?: string | null;
+  services?: string[] | null; // null = accept all services
+  pushEnabled?: boolean;
+}
+
+/** Update the caller's own rider profile via the update_rider_profile RPC. */
+export async function updateRiderProfile(db: SupabaseClient, patch: RiderProfilePatch): Promise<void> {
+  const { error } = await db.rpc('update_rider_profile', {
+    p_name: patch.name,
+    p_mobile: patch.mobile,
+    p_vehicle: patch.vehicle ?? null,
+    p_photo_url: patch.photoUrl ?? null,
+    p_payout_number: patch.payoutNumber ?? null,
+    p_services: patch.services ?? null,
+    p_push_enabled: patch.pushEnabled ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Upload a rider's avatar to the public store-assets bucket; returns its URL. */
+export async function uploadRiderPhoto(db: SupabaseClient, file: File): Promise<string> {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `rider-avatars/${user.id}/${Date.now()}.${ext}`;
+  const { error: upErr } = await db.storage.from('store-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  return db.storage.from('store-assets').getPublicUrl(path).data.publicUrl;
+}
+
 /** Admin approves or rejects an application. */
 export async function setRiderApplicationStatus(
   db: SupabaseClient,

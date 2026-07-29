@@ -9,9 +9,9 @@ import { supabase } from './lib/supabase.ts';
  * server can notify this rider of incoming orders while the app is closed.
  * The actual send is a server-side Edge Function (see supabase/functions).
  */
-export function usePushRegistration(riderId: string | undefined) {
+export function usePushRegistration(riderId: string | undefined, enabled = true) {
   useEffect(() => {
-    if (!Capacitor.isNativePlatform() || !supabase || !riderId) return;
+    if (!enabled || !Capacitor.isNativePlatform() || !supabase || !riderId) return;
 
     const platform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android';
 
@@ -32,5 +32,5 @@ export function usePushRegistration(riderId: string | undefined) {
       void tokenSub.then((s) => s.remove());
       void errSub.then((s) => s.remove());
     };
-  }, [riderId]);
+  }, [riderId, enabled]);
 }
