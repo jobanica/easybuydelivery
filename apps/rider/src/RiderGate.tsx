@@ -22,6 +22,7 @@ function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [rider, setRider] = useState<{ id: string; application_status: string; name?: string } | null>(null);
   const [checked, setChecked] = useState(false);
+  const [applying, setApplying] = useState(false); // Landing → apply form
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
@@ -44,9 +45,68 @@ function LiveGate() {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
   if (!userId) return <OtpSignIn />;
-  if (!rider) return <Onboard onDone={setRider} />;
+  if (!rider) {
+    return applying
+      ? <Onboard onDone={setRider} onBack={() => setApplying(false)} />
+      : <Landing onStart={() => setApplying(true)} />;
+  }
   if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
+}
+
+/**
+ * First-run welcome screen: a hero headline, a branded medallion, and the
+ * primary calls to action. With phone OTP disabled, both "Login & Start
+ * Riding" and "Join Us Now" lead to the rider application; "Learn More"
+ * expands a short how-it-works panel.
+ */
+function Landing({ onStart }: { onStart: () => void }) {
+  const [learn, setLearn] = useState(false);
+  return (
+    <div className="flex min-h-screen flex-col bg-[#f6f7f4]">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col px-6 pt-10">
+        <h1 className="text-4xl font-black leading-tight tracking-tight">
+          Deliver faster,<br /><span className="text-brand-green">earn smarter</span>
+        </h1>
+        <p className="mt-3 text-sm text-black/55">
+          Accept orders across your town and earn on your own schedule with Easy Buy Delivery.
+        </p>
+
+        <div className="flex flex-1 items-center justify-center py-6">
+          <div className="relative flex h-52 w-52 items-center justify-center rounded-full bg-gradient-to-br from-brand-green to-brand-purple shadow-xl">
+            <span className="absolute -right-2 -top-1 h-16 w-16 rounded-full bg-brand-yellow/40 blur-xl" />
+            <span className="text-[6rem] leading-none">🛵</span>
+          </div>
+        </div>
+
+        {learn && (
+          <div className="mb-4 rounded-2xl bg-white p-4 text-sm text-black/60 shadow-sm ring-1 ring-black/5">
+            <p className="font-semibold text-brand-ink">How it works</p>
+            <ul className="mt-1 list-disc space-y-1 pl-4">
+              <li>Apply with your name, mobile number, and vehicle.</li>
+              <li>Once an admin approves you, go online to receive nearby orders.</li>
+              <li>You keep the delivery &amp; convenience fees — a small commission is settled daily.</li>
+            </ul>
+          </div>
+        )}
+
+        <div className="space-y-3 pb-8">
+          <button onClick={onStart}
+            className="w-full rounded-2xl bg-brand-green py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
+            Login &amp; Start Riding
+          </button>
+          <button onClick={onStart}
+            className="w-full rounded-2xl bg-brand-purple py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
+            Join Us Now
+          </button>
+          <button onClick={() => setLearn((v) => !v)}
+            className="w-full rounded-2xl bg-white py-3.5 font-bold text-brand-ink ring-1 ring-black/10 transition hover:bg-black/[0.02]">
+            {learn ? 'Hide details' : 'Learn More'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Shell({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
@@ -108,7 +168,7 @@ function OtpSignIn() {
   );
 }
 
-function Onboard({ onDone }: { onDone: (r: { id: string; application_status: string }) => void }) {
+function Onboard({ onDone, onBack }: { onDone: (r: { id: string; application_status: string }) => void; onBack?: () => void }) {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [vehicle, setVehicle] = useState('');
@@ -124,6 +184,9 @@ function Onboard({ onDone }: { onDone: (r: { id: string; application_status: str
 
   return (
     <Shell title="Apply as a rider" sub="Tell us about you">
+      {onBack && (
+        <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
+      )}
       <div className="space-y-3">
         <input className={inp} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={inp} placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} />
