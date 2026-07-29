@@ -19,7 +19,7 @@ export function createPreviewData(): RiderData {
     {
       id: 'ord-food-1', service_type: 'food', status: 'pending',
       payment_method: 'cod', payment_status: 'unpaid',
-      delivery_fee: 50, goods_cost: 280, commission_amount: 7.5,
+      delivery_fee: 50, store_fee_total: 0, convenience_fee: 0, goods_cost: 280, commission_amount: 7.5,
       customer_contact: '0917 111 2222', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null,
       store_contact: '0918 555 0100', notes: 'Extra spicy, leave at the gate.',
@@ -27,7 +27,7 @@ export function createPreviewData(): RiderData {
     {
       id: 'ord-pabili-1', service_type: 'pabili', status: 'pending',
       payment_method: 'cod', payment_status: 'unpaid',
-      delivery_fee: 60, goods_cost: 0, commission_amount: 9,
+      delivery_fee: 60, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
       budget_cap: 600, actual_amount: null, store_contact: null, notes: null,
@@ -35,7 +35,7 @@ export function createPreviewData(): RiderData {
     {
       id: 'ord-padala-1', service_type: 'padala', status: 'pending',
       payment_method: 'online', payment_status: 'paid',
-      delivery_fee: 40, goods_cost: 0, commission_amount: 6,
+      delivery_fee: 40, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 6,
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null,
       store_contact: null, notes: null,

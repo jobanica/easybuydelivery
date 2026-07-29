@@ -5,6 +5,7 @@ import {
   overdueBalance,
   owedBalance,
   pabiliCollectible,
+  riderEarnings,
   type LedgerEntry,
   type OrderStatus,
 } from '@ebd/shared';
@@ -201,12 +202,24 @@ function amountToCollect(o: RiderOrder): number | null {
   return o.goods_cost + o.delivery_fee; // food
 }
 
+function riderEarn(o: RiderOrder): number {
+  return riderEarnings({
+    deliveryFee: o.delivery_fee,
+    storeFeeTotal: o.store_fee_total,
+    convenienceFee: o.convenience_fee,
+    commission: o.commission_amount,
+  });
+}
+
 function PoolCard({ order, onAccept }: { order: RiderOrder; onAccept: () => void }) {
   return (
     <div className="mb-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
       <CardHead order={order} />
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm text-black/60">Earn {peso(order.commission_amount)} commission</span>
+        <span className="text-sm">
+          <span className="font-bold text-green-700">Earn {peso(riderEarn(order))}</span>
+          <span className="ml-1 text-xs text-black/40">after ₱{order.commission_amount.toFixed(2)} commission</span>
+        </span>
         <button onClick={onAccept}
           className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white">
           Accept

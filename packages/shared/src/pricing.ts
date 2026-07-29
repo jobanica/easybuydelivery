@@ -124,6 +124,32 @@ export function commission(input: CommissionInput, config: FeeConfig = DEFAULT_F
   return roundPeso(base * config.commissionRate);
 }
 
+export interface RiderEarningsInput {
+  /** Delivery fee charged on this order (collected by the rider). */
+  deliveryFee: number;
+  /** Per-store fees on this order (collected by the rider). */
+  storeFeeTotal?: number;
+  /** Convenience fee — the rider's in full. */
+  convenienceFee?: number;
+  /** Operator commission the rider settles later. */
+  commission: number;
+}
+
+/**
+ * A rider's take-home for an order: the delivery + per-store + convenience fees
+ * they collect, minus the operator's commission they settle later. Goods are a
+ * pass-through (repaid by the customer) and excluded.
+ *
+ * @example
+ * // DF ₱50, no added stores, no convenience, commission ₱7.50 → earns ₱42.50
+ * riderEarnings({ deliveryFee: 50, commission: 7.5 }) // 42.5
+ */
+export function riderEarnings(input: RiderEarningsInput): number {
+  return roundPeso(
+    input.deliveryFee + (input.storeFeeTotal ?? 0) + (input.convenienceFee ?? 0) - input.commission,
+  );
+}
+
 export interface OrderCostInput extends CommissionInput {
   /**
    * Cost of goods the customer repays the rider (food/pabili). ₱0 for padala.

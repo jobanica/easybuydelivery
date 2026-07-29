@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   addedStores,
   commission,
+  riderEarnings,
   storeFeeTotal,
   orderCost,
   distanceDeliveryFee,
@@ -23,6 +24,14 @@ test('addedStores counts only stores beyond the first', () => {
 test('locked formula: DF 50 + 3 stores => commission 15', () => {
   // base = 50 + 25*2 = 100 ; 100 * 0.15 = 15
   assert.equal(commission({ deliveryFee: 50, storeCount: 3 }), 15);
+});
+
+test('riderEarnings = fees collected minus commission', () => {
+  // DF 50, no added stores, no convenience, commission 7.5 → earns 42.5
+  assert.equal(riderEarnings({ deliveryFee: 50, commission: 7.5 }), 42.5);
+  // DF 50 + 1 added store (₱25) → commission 11.25; convenience 20 to rider.
+  // earn = 50 + 25 + 20 − 11.25 = 83.75
+  assert.equal(riderEarnings({ deliveryFee: 50, storeFeeTotal: 25, convenienceFee: 20, commission: 11.25 }), 83.75);
 });
 
 test('single-store food order: DF 50 => commission 7.5', () => {
