@@ -410,8 +410,8 @@ export function FoodFlow() {
 
       {/* Customizer bottom-sheet */}
       {openStore && customizingItem && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" onClick={() => setCustomizingId(null)}>
-          <div className="max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={() => setCustomizingId(null)}>
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-white sm:max-w-md sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="relative h-40 w-full">
               {customizingItem.image_url
                 ? <img src={customizingItem.image_url} alt="" className="h-full w-full object-cover" />
@@ -428,9 +428,12 @@ export function FoodFlow() {
         </div>
       )}
 
-      {/* Full-screen cart popup */}
+      {/* Cart popup — full-screen on phones, a centered app-width panel on desktop */}
       {cartOpen && cart.length > 0 && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f4f5f2]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 sm:p-4"
+          onClick={() => setCartOpen(false)}>
+          <div className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-[#f4f5f2] shadow-2xl sm:h-auto sm:max-h-[calc(100vh-2rem)] sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}>
           <header className="flex items-center justify-between border-b border-black/10 bg-white px-4 py-3">
             <h3 className="font-bold">Your cart {storeCount > 1 && <span className="text-xs font-normal text-black/50">· {storeCount} stores</span>}</h3>
             <button onClick={() => setCartOpen(false)} aria-label="Close cart"
@@ -520,6 +523,7 @@ export function FoodFlow() {
                 : !contact.trim() ? 'Enter your mobile number'
                 : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}` : `Place order (COD) · ${peso(summary.customerTotal)}`}
             </button>
+          </div>
           </div>
         </div>
       )}
