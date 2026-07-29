@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { onAuthChange, sendOtp, verifyOtp, ensureRider, signOut } from '@ebd/supabase';
+import { onAuthChange, sendOtp, verifyOtp, ensureRider, resumeRiderByMobile, signOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
 import { REQUIRE_ACCOUNT } from './config.ts';
@@ -22,7 +22,7 @@ function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [rider, setRider] = useState<{ id: string; application_status: string; name?: string } | null>(null);
   const [checked, setChecked] = useState(false);
-  const [applying, setApplying] = useState(false); // Landing → apply form
+  const [screen, setScreen] = useState<'landing' | 'login' | 'apply'>('landing');
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
@@ -46,9 +46,9 @@ function LiveGate() {
   }
   if (!userId) return <OtpSignIn />;
   if (!rider) {
-    return applying
-      ? <Onboard onDone={setRider} onBack={() => setApplying(false)} />
-      : <Landing onStart={() => setApplying(true)} />;
+    if (screen === 'apply') return <Onboard onDone={setRider} onBack={() => setScreen('landing')} />;
+    if (screen === 'login') return <RiderLogin onResume={setRider} onBack={() => setScreen('landing')} onApply={() => setScreen('apply')} />;
+    return <Landing onLogin={() => setScreen('login')} onJoin={() => setScreen('apply')} />;
   }
   if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
@@ -60,7 +60,7 @@ function LiveGate() {
  * Riding" and "Join Us Now" lead to the rider application; "Learn More"
  * expands a short how-it-works panel.
  */
-function Landing({ onStart }: { onStart: () => void }) {
+function Landing({ onLogin, onJoin }: { onLogin: () => void; onJoin: () => void }) {
   const [learn, setLearn] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f7f4]">
@@ -91,11 +91,11 @@ function Landing({ onStart }: { onStart: () => void }) {
         )}
 
         <div className="space-y-3 pb-8">
-          <button onClick={onStart}
+          <button onClick={onLogin}
             className="w-full rounded-2xl bg-brand-green py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Login &amp; Start Riding
           </button>
-          <button onClick={onStart}
+          <button onClick={onJoin}
             className="w-full rounded-2xl bg-brand-purple py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Join Us Now
           </button>
@@ -196,6 +196,53 @@ function Onboard({ onDone, onBack }: { onDone: (r: { id: string; application_sta
         className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Submitting…' : 'Submit application'}
       </button>
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </Shell>
+  );
+}
+
+/**
+ * Stop-gap "login": resume an existing rider account by mobile number (no OTP
+ * yet). Re-links the found rider to this session so approved riders go straight
+ * to the app and pending ones see their status.
+ */
+function RiderLogin({ onResume, onBack, onApply }: {
+  onResume: (r: { id: string; application_status: string; name?: string }) => void;
+  onBack: () => void;
+  onApply: () => void;
+}) {
+  const [mobile, setMobile] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  async function login() {
+    setBusy(true); setError(null); setNotFound(false);
+    try {
+      const r = await resumeRiderByMobile(supabase!, mobile.trim());
+      if (!r) { setNotFound(true); return; }
+      onResume({ id: r.id, application_status: r.application_status, name: r.name ?? undefined });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Shell title="Log in" sub="Resume your rider account">
+      <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
+      <p className="mb-3 text-sm text-black/55">Enter the mobile number you applied with.</p>
+      <input className={inp} value={mobile} onChange={(e) => { setMobile(e.target.value); setNotFound(false); }}
+        placeholder="0917 123 4567" inputMode="tel" />
+      <button disabled={busy || mobile.trim().length < 7} onClick={login}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Checking…' : 'Continue'}
+      </button>
+      {notFound && (
+        <div className="mt-3 rounded-lg bg-brand-yellow/20 px-3 py-2 text-sm text-yellow-900">
+          No rider found with that number.{' '}
+          <button onClick={onApply} className="font-semibold underline">Apply to ride</button> instead.
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </Shell>
   );

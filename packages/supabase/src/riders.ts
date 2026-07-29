@@ -62,6 +62,23 @@ export async function setRiderOnline(db: SupabaseClient, online: boolean): Promi
   return Boolean(data);
 }
 
+/**
+ * Resume an existing rider account by mobile number (stop-gap login). Re-links
+ * the matched rider to the current session via the resume_rider RPC and returns
+ * it, or null if no rider matches. Phone-number match only — no OTP yet.
+ */
+export async function resumeRiderByMobile(
+  db: SupabaseClient,
+  mobile: string,
+): Promise<{ id: string; application_status: string; name: string | null } | null> {
+  const { data, error } = await db.rpc('resume_rider', { p_mobile: mobile });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  const r = row as { id: string; application_status: string; name: string | null };
+  return { id: r.id, application_status: r.application_status, name: r.name ?? null };
+}
+
 /** Admin approves or rejects an application. */
 export async function setRiderApplicationStatus(
   db: SupabaseClient,
