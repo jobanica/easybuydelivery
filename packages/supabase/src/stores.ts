@@ -18,6 +18,8 @@ export interface StoreInput {
   /** Daily opening hours as "HH:MM" (Philippine time). Omit for no schedule. */
   opensAt?: string | null;
   closesAt?: string | null;
+  /** Weekdays the store is open (0=Sun…6=Sat). Omit/null = every day. */
+  openDays?: number[] | null;
 }
 
 export interface MenuItemInput {
@@ -58,6 +60,7 @@ export async function createStore(db: SupabaseClient, input: StoreInput) {
       contact_number: input.contactNumber ?? null,
       opens_at: input.opensAt ?? null,
       closes_at: input.closesAt ?? null,
+      open_days: input.openDays ?? null,
     })
     .select('id')
     .single();
@@ -81,6 +84,7 @@ export interface StorePatch {
   logoUrl?: string | null;
   opensAt?: string | null;
   closesAt?: string | null;
+  openDays?: number[] | null;
 }
 
 const ASSETS_BUCKET = 'store-assets';
@@ -126,6 +130,7 @@ export async function updateStore(db: SupabaseClient, storeId: string, patch: St
   if (patch.logoUrl !== undefined) row.logo_url = patch.logoUrl;
   if (patch.opensAt !== undefined) row.opens_at = patch.opensAt;
   if (patch.closesAt !== undefined) row.closes_at = patch.closesAt;
+  if (patch.openDays !== undefined) row.open_days = patch.openDays;
   if (Object.keys(row).length === 0) return;
   const { error } = await db.from('stores').update(row).eq('id', storeId);
   if (error) throw error;

@@ -20,7 +20,7 @@ import {
   deleteStore,
   deleteMenuItem,
 } from '@ebd/supabase';
-import { isOpenNow, scheduleLabel } from '@ebd/shared';
+import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
@@ -28,6 +28,31 @@ import { Toggle } from './ui.tsx';
 
 /** Time value normaliser: "" → null, otherwise the HH:MM string. */
 const hm = (v: string): string | null => (v.trim() ? v : null);
+
+/** All-days-selected collapses to null ("every day"); otherwise the array. */
+const daysOrNull = (days: number[]): number[] | null => (days.length >= 7 ? null : [...days].sort((a, b) => a - b));
+
+/** Seven day chips (Sun…Sat) to pick which weekdays a store is open. */
+function DayPicker({ value, onChange }: { value: number[]; onChange: (days: number[]) => void }) {
+  function toggle(d: number) {
+    onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d]);
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {ALL_DAYS.map((d) => {
+        const on = value.includes(d);
+        return (
+          <button key={d} type="button" onClick={() => toggle(d)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 transition ${
+              on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/50 ring-black/15'
+            }`}>
+            {WEEKDAYS[d]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface StoreRow {
   id: string;
@@ -41,6 +66,7 @@ interface StoreRow {
   logo_url: string | null;
   opens_at: string | null;
   closes_at: string | null;
+  open_days: number[] | null;
 }
 interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null; description: string | null }
 interface CatRow { id: string; title: string; sort_order: number }
@@ -62,6 +88,7 @@ export function Stores() {
   const [address, setAddress] = useState('');
   const [opensAt, setOpensAt] = useState('');
   const [closesAt, setClosesAt] = useState('');
+  const [days, setDays] = useState<number[]>([...ALL_DAYS]);
   const [pin, setPin] = useState<MapValue | null>(null);
 
   async function load() {
@@ -91,8 +118,9 @@ export function Stores() {
         lng: pin?.lng,
         opensAt: hm(opensAt),
         closesAt: hm(closesAt),
+        openDays: daysOrNull(days),
       });
-      setName(''); setCategory(''); setContact(''); setAddress(''); setOpensAt(''); setClosesAt(''); setPin(null); setError(null);
+      setName(''); setCategory(''); setContact(''); setAddress(''); setOpensAt(''); setClosesAt(''); setDays([...ALL_DAYS]); setPin(null); setError(null);
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -149,7 +177,11 @@ export function Stores() {
             <input type="time" className={inp} value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
           </label>
         </div>
-        <p className="mt-1 text-xs text-black/40">Leave both blank for a store that’s always open. The store auto-opens and auto-closes on this schedule (Philippine time).</p>
+        <div className="mt-3">
+          <p className="mb-1.5 text-sm font-medium text-black/70">Open days</p>
+          <DayPicker value={days} onChange={setDays} />
+        </div>
+        <p className="mt-1 text-xs text-black/40">Leave times blank for always-open. Un-highlight a day (e.g. Sun) to close on that day. The store auto-opens and auto-closes on this schedule (Philippine time).</p>
         <div className="mt-3">
           <p className="mb-1.5 text-sm font-medium text-black/70">Store location</p>
           <MapPicker value={pin} onChange={setPin} />
@@ -214,24 +246,24 @@ export function Stores() {
   );
 }
 
-/** Current open/closed status for a store: manual toggle × opening hours. */
+/** Current open/closed status for a store: manual toggle × schedule. */
 function StoreStatus({ store }: { store: StoreRow }) {
-  const openByHours = isOpenNow(store.opens_at, store.closes_at);
+  const openByHours = isOpenNow(store.opens_at, store.closes_at, store.open_days);
+  const label = scheduleLabel(store.opens_at, store.closes_at, store.open_days);
+  const hasSchedule = !!(store.opens_at || store.closes_at || (store.open_days && store.open_days.length < 7));
   if (!store.is_available) return <span className="text-xs font-medium text-black/40">Closed</span>;
   if (!openByHours) {
     return (
-      <span className="text-right text-xs font-medium text-yellow-700" title={scheduleLabel(store.opens_at, store.closes_at)}>
+      <span className="text-right text-xs font-medium text-yellow-700" title={label}>
         Closed now
-        <span className="block font-normal text-black/40">{scheduleLabel(store.opens_at, store.closes_at)}</span>
+        <span className="block font-normal text-black/40">{label}</span>
       </span>
     );
   }
   return (
     <span className="text-right text-xs font-medium text-green-700">
       Open
-      {(store.opens_at || store.closes_at) && (
-        <span className="block font-normal text-black/40">{scheduleLabel(store.opens_at, store.closes_at)}</span>
-      )}
+      {hasSchedule && <span className="block font-normal text-black/40">{label}</span>}
     </span>
   );
 }
@@ -243,13 +275,16 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
   const [address, setAddress] = useState(store.address ?? '');
   const [opensAt, setOpensAt] = useState(store.opens_at?.slice(0, 5) ?? '');
   const [closesAt, setClosesAt] = useState(store.closes_at?.slice(0, 5) ?? '');
+  const [days, setDays] = useState<number[]>(store.open_days ?? [...ALL_DAYS]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const daysKey = (d: number[]) => [...d].sort((a, b) => a - b).join(',');
   const dirty = name.trim() !== store.name || category !== (store.category ?? '')
     || contact !== (store.contact_number ?? '') || address !== (store.address ?? '')
-    || opensAt !== (store.opens_at?.slice(0, 5) ?? '') || closesAt !== (store.closes_at?.slice(0, 5) ?? '');
+    || opensAt !== (store.opens_at?.slice(0, 5) ?? '') || closesAt !== (store.closes_at?.slice(0, 5) ?? '')
+    || daysKey(days) !== daysKey(store.open_days ?? [...ALL_DAYS]);
 
   async function save() {
     if (!supabase || !name.trim()) return;
@@ -262,6 +297,7 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
         address: address.trim() || null,
         opensAt: hm(opensAt),
         closesAt: hm(closesAt),
+        openDays: daysOrNull(days),
       });
       setSaved(true); onSaved();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -293,7 +329,11 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
           <input type="time" className={inp} value={closesAt} onChange={(e) => { setClosesAt(e.target.value); setSaved(false); }} />
         </label>
       </div>
-      <p className="mt-1 text-xs text-black/40">Blank = always open. Auto-opens/closes on schedule (Philippine time).</p>
+      <div className="mt-2">
+        <span className="mb-1 block text-xs font-medium text-black/60">Open days</span>
+        <DayPicker value={days} onChange={(d) => { setDays(d); setSaved(false); }} />
+      </div>
+      <p className="mt-1 text-xs text-black/40">Blank times = always open. Un-highlight a day (e.g. Sun) to close then. Auto-opens/closes on schedule (Philippine time).</p>
       {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
     </div>
   );

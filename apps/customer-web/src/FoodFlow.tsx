@@ -30,7 +30,7 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 interface Category { id: string; title: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; loaded: boolean }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
 function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categories: Category[]; items: MenuItem[] } {
@@ -127,11 +127,11 @@ export function FoodFlow() {
             });
           }
           // Only the store list up front — each menu loads lazily when opened.
-          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null }[])
+          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null }[])
             .map((s) => ({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
-              opens_at: s.opens_at, closes_at: s.closes_at,
+              opens_at: s.opens_at, closes_at: s.closes_at, open_days: s.open_days,
               categories: [], items: [], loaded: false,
             })));
         } else {
@@ -203,7 +203,7 @@ export function FoodFlow() {
     const q = storeSearch.trim().toLowerCase();
     if (!q) return true;
     return s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
-  }).sort((a, b) => Number(isOpenNow(b.opens_at, b.closes_at)) - Number(isOpenNow(a.opens_at, a.closes_at)));
+  }).sort((a, b) => Number(isOpenNow(b.opens_at, b.closes_at, b.open_days)) - Number(isOpenNow(a.opens_at, a.closes_at, a.open_days)));
 
   // Menu items filtered by the selected category + search box.
   const menuItems = (openStore?.items ?? []).filter((it) => {
@@ -362,7 +362,7 @@ export function FoodFlow() {
 
           <div className="space-y-4">
             {shownStores.map((s) => {
-              const open = isOpenNow(s.opens_at, s.closes_at);
+              const open = isOpenNow(s.opens_at, s.closes_at, s.open_days);
               return (
               <button key={s.id} onClick={() => open && setOpenStoreId(s.id)} disabled={!open}
                 className={`block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition ${open ? 'hover:shadow-md' : 'cursor-not-allowed'}`}>
@@ -379,7 +379,8 @@ export function FoodFlow() {
                     <span className="absolute left-3 top-3 rounded-full bg-brand-green px-2.5 py-1 text-[11px] font-bold text-white shadow">● Open now</span>
                   ) : (
                     <span className="absolute left-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-bold text-white shadow">
-                      Closed{s.opens_at ? ` · opens ${formatHm(s.opens_at)}` : ''}
+                      {!isOpenNow(null, null, s.open_days) ? 'Closed today'
+                        : s.opens_at ? `Closed · opens ${formatHm(s.opens_at)}` : 'Closed'}
                     </span>
                   )}
                 </div>
@@ -391,7 +392,8 @@ export function FoodFlow() {
                     <span className={`block truncate font-bold ${open ? '' : 'text-black/50'}`}>{s.name}</span>
                     <span className="text-xs text-black/50">
                       {s.category || 'Restaurant'}
-                      {(s.opens_at || s.closes_at) && <span className="text-black/35"> · {scheduleLabel(s.opens_at, s.closes_at)}</span>}
+                      {(s.opens_at || s.closes_at || (s.open_days && s.open_days.length < 7)) &&
+                        <span className="text-black/35"> · {scheduleLabel(s.opens_at, s.closes_at, s.open_days)}</span>}
                     </span>
                   </span>
                   <span className={open ? 'text-brand-purple' : 'text-black/25'}>→</span>
@@ -580,12 +582,12 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
             <div className="min-w-0">
               <h2 className="truncate text-xl font-black">{store.name}</h2>
               <p className="text-sm text-black/50">
-                {store.category || 'Restaurant'} · {isOpenNow(store.opens_at, store.closes_at)
+                {store.category || 'Restaurant'} · {isOpenNow(store.opens_at, store.closes_at, store.open_days)
                   ? <span className="font-semibold text-brand-green">Open now</span>
                   : <span className="font-semibold text-black/50">Closed</span>}
               </p>
-              {(store.opens_at || store.closes_at) && (
-                <p className="text-xs text-black/40">🕒 {scheduleLabel(store.opens_at, store.closes_at)}</p>
+              {(store.opens_at || store.closes_at || (store.open_days && store.open_days.length < 7)) && (
+                <p className="text-xs text-black/40">🕒 {scheduleLabel(store.opens_at, store.closes_at, store.open_days)}</p>
               )}
             </div>
           </div>
