@@ -32,6 +32,7 @@ export interface RiderData {
   getActiveOrders(): Promise<RiderOrder[]>;
   getLedger(): Promise<LedgerEntry[]>;
   accept(orderId: string): Promise<void>;
+  releaseOrder(orderId: string): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
   settle(businessDay: string, amount: number, extra?: { reference?: string; receiptUrl?: string }): Promise<void>;

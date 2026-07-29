@@ -335,6 +335,8 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState<string | null>(null);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseErr, setReleaseErr] = useState<string | null>(null);
   const next = nextStatus(order);
   const collect = amountToCollect(order);
   const needsActual = order.service_type === 'pabili' && order.actual_amount == null;
@@ -347,6 +349,13 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
     const res = await data.setActual(order, val);
     setNote(res.overCap ? 'Over the cap — confirm with the customer before collecting.' : null);
     await onChange();
+  }
+
+  async function release() {
+    if (!window.confirm("Release this delivery back to the pool? Another rider can then accept it. Use this if you can't continue (e.g. a breakdown).")) return;
+    setReleasing(true); setReleaseErr(null);
+    try { await data.releaseOrder(order.id); await onChange(); }
+    catch (e) { setReleaseErr(e instanceof Error ? e.message : String(e)); setReleasing(false); }
   }
 
   return (
@@ -437,6 +446,13 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
             </button>
           )}
         </div>
+
+        {/* Breakdown / can't-continue handoff: return to the pool. */}
+        <button onClick={release} disabled={releasing}
+          className="mt-3 w-full rounded-xl border border-red-300 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+          {releasing ? 'Releasing…' : '⚠️ Can’t continue — release delivery'}
+        </button>
+        {releaseErr && <p className="mt-2 text-xs text-red-600">{releaseErr}</p>}
       </div>
     </div>
   );

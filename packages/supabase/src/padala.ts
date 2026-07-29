@@ -150,6 +150,16 @@ export async function acceptOrder(db: SupabaseClient, orderId: string, riderId: 
 }
 
 /**
+ * A rider releases an active delivery back to the pool (e.g. breakdown), so
+ * another rider can accept it. Goes through the release_order RPC so only the
+ * handling rider can release their own order.
+ */
+export async function releaseOrder(db: SupabaseClient, orderId: string) {
+  const { error } = await db.rpc('release_order', { p_order_id: orderId });
+  if (error) throw error;
+}
+
+/**
  * Advance an order to the next status, validating the transition against the
  * service's flow. Also records an audit event.
  */

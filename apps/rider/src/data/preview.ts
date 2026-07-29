@@ -61,6 +61,12 @@ export function createPreviewData(): RiderData {
       open = open.filter((x) => x.id !== orderId);
       active = [...active, { ...o, status: 'accepted' }];
     },
+    async releaseOrder(orderId) {
+      const o = active.find((x) => x.id === orderId);
+      if (!o) return;
+      active = active.filter((x) => x.id !== orderId);
+      open = [...open, { ...o, status: 'pending' }];
+    },
     async advance(order, next: OrderStatus) {
       if (!canTransition(order.service_type, order.status, next)) {
         throw new Error(`Illegal transition ${order.status} → ${next}`);

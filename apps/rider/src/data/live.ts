@@ -4,6 +4,7 @@ import {
   listRiderActiveOrders,
   listRiderLedger,
   acceptOrder,
+  releaseOrder,
   advanceOrderStatus,
   updatePabiliActualAmount,
   createSettlement,
@@ -67,6 +68,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async accept(orderId) {
       await acceptOrder(db, orderId, riderId);
+    },
+    async releaseOrder(orderId) {
+      await releaseOrder(db, orderId);
     },
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);
