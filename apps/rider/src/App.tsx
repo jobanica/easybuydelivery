@@ -25,7 +25,9 @@ const SERVICES: { key: string; label: string }[] = [
   { key: 'food', label: 'Food' }, { key: 'pabili', label: 'Pabili' }, { key: 'padala', label: 'Padala' },
 ];
 
-const today = new Date().toISOString().slice(0, 10);
+// Philippine business day (matches the commission_ledger trigger), so the
+// daily settlement gate and the recorded commission agree on "today".
+const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
 
 export function App({ riderId, riderName }: { riderId?: string; riderName?: string } = {}) {
