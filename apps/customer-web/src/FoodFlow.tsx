@@ -49,6 +49,23 @@ function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categorie
 /** Unique cart key for an item + chosen size (different sizes are separate lines). */
 const lineKey = (l: CartLine) => `${l.menuItemId ?? l.name}|${(l.options ?? []).map((o) => o.name).join(',')}`;
 
+/** A friendly emoji for a cuisine/category label (used on chips and image fallbacks). */
+function cuisineEmoji(cat: string): string {
+  const c = cat.toLowerCase();
+  if (/burger/.test(c)) return '🍔';
+  if (/pizza/.test(c)) return '🍕';
+  if (/chicken|fried/.test(c)) return '🍗';
+  if (/coffee|caf[eé]|milk\s?tea|tea|drink|beverage/.test(c)) return '☕';
+  if (/dessert|cake|sweet|bake|pastr/.test(c)) return '🧁';
+  if (/seafood|fish/.test(c)) return '🦐';
+  if (/steak|grill|bbq|barbe/.test(c)) return '🥩';
+  if (/noodle|ramen|pancit|pasta/.test(c)) return '🍜';
+  if (/rice|silog|meal|carinderia|lutong/.test(c)) return '🍚';
+  if (/veg|salad|greens|healthy/.test(c)) return '🥗';
+  if (/breakfast/.test(c)) return '🍳';
+  return '🍽️';
+}
+
 interface FeeSettings {
   model: DeliveryFeeModel;
   flatFee: number;
@@ -68,6 +85,7 @@ export function FoodFlow() {
   const [menuCat, setMenuCat] = useState<string>(''); // '' = all categories
   const [menuSearch, setMenuSearch] = useState('');
   const [storeSearch, setStoreSearch] = useState(''); // filter the restaurant list
+  const [cuisine, setCuisine] = useState<string>(''); // '' = all cuisines
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -167,8 +185,16 @@ export function FoodFlow() {
     return () => { cancelled = true; };
   }, [openStoreId, stores]);
 
-  // Restaurants filtered by the search box (name or category).
+  // Distinct cuisines across all stores, for the category chip row.
+  const cuisines = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of stores) if (s.category.trim()) set.add(s.category.trim());
+    return [...set].sort();
+  }, [stores]);
+
+  // Restaurants filtered by search box (name or category) + selected cuisine chip.
   const shownStores = stores.filter((s) => {
+    if (cuisine && s.category.trim() !== cuisine) return false;
     const q = storeSearch.trim().toLowerCase();
     if (!q) return true;
     return s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
@@ -180,6 +206,7 @@ export function FoodFlow() {
     if (menuSearch.trim() && !it.name.toLowerCase().includes(menuSearch.trim().toLowerCase())) return false;
     return true;
   });
+  const customizingItem = (openStore?.items ?? []).find((it) => it.id === customizingId) ?? null;
 
   // Cart grouped by store (one order → one rider visits each store).
   const cartByStore = useMemo(() => {
@@ -254,7 +281,7 @@ export function FoodFlow() {
 
   if (createdId) {
     return (
-      <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
+      <div className="rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-green/15 text-2xl">✓</div>
         <h2 className="text-lg font-bold">Order placed</h2>
         <p className="mt-1 text-sm text-black/60">
@@ -274,120 +301,114 @@ export function FoodFlow() {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {openStore ? (
+        <StoreDetail
+          store={openStore}
+          fees={fees}
+          menuLoading={menuLoading}
+          menuItems={menuItems}
+          menuCat={menuCat} setMenuCat={setMenuCat}
+          menuSearch={menuSearch} setMenuSearch={setMenuSearch}
+          onBack={() => setOpenStoreId(null)}
+          onAdd={(it) => addToCart(openStore, it)}
+          onCustomize={(id) => setCustomizingId(id)}
+        />
+      ) : (
         <section className="space-y-4">
-          <button onClick={() => setOpenStoreId(null)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-brand-purple px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95">
-            <span className="text-base leading-none">←</span> All restaurants
-          </button>
-
-          {/* Restaurant hero */}
-          <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black/[0.04] ring-1 ring-black/5">
-              {openStore.logo_url ? <img src={openStore.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-2xl">🏪</span>}
-            </span>
-            <div className="min-w-0">
-              <h2 className="truncate text-lg font-extrabold">{openStore.name}</h2>
-              {openStore.category && <p className="text-sm text-black/50">{openStore.category}</p>}
-              <p className="mt-0.5 text-xs text-brand-green">● Open now</p>
-            </div>
+          {/* Promo hero */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-green to-brand-purple p-5 text-white shadow-md">
+            <div className="absolute -right-6 -top-8 h-32 w-32 rounded-full bg-brand-yellow/30 blur-2xl" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-yellow">Easy Buy Delivery</p>
+            <h2 className="mt-1 max-w-[15rem] text-2xl font-black leading-tight">Your favorite local spots, delivered</h2>
+            <p className="mt-1 text-sm text-white/85">Food, Pabili &amp; Padala — one rider, one order.</p>
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-black/5">
-            <SearchIcon />
-            <input value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)}
-              placeholder="Search this menu"
-              className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
-          </div>
-
-          {/* Category pills */}
-          {openStore.categories.length > 0 && (
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-              <CatPill active={menuCat === ''} onClick={() => setMenuCat('')}>All</CatPill>
-              {openStore.categories.map((c) => (
-                <CatPill key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatPill>
-              ))}
-            </div>
-          )}
-
-          {/* Menu item cards */}
-          <div className="space-y-3">
-            {menuItems.map((it) => (
-              <div key={it.id} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-                <div className="flex gap-3 p-3">
-                  <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/[0.04]">
-                    {it.image_url ? <img src={it.image_url} alt="" className="h-full w-full object-cover" /> : <span className="text-3xl">🍽️</span>}
-                  </span>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <p className="font-semibold leading-tight">{it.name}</p>
-                    {it.description && <p className="mt-0.5 line-clamp-2 text-xs text-black/50">{it.description}</p>}
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <span className="font-bold text-brand-ink">{peso(it.price)}{it.groups.length > 0 && <span className="text-xs font-normal text-black/40">+</span>}</span>
-                      {it.groups.length === 0 ? (
-                        <button onClick={() => addToCart(openStore, it)}
-                          className="rounded-full bg-brand-green px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:brightness-95">＋ Add</button>
-                      ) : (
-                        <button onClick={() => setCustomizingId(customizingId === it.id ? null : it.id)}
-                          className="rounded-full bg-brand-purple px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:brightness-95">
-                          {customizingId === it.id ? 'Close' : 'Customize'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {customizingId === it.id && it.groups.length > 0 && (
-                  <div className="px-3 pb-3">
-                    <Customizer item={it} onAdd={(options) => { addToCart(openStore, it, options); setCustomizingId(null); }} />
-                  </div>
-                )}
-              </div>
-            ))}
-            {menuItems.length === 0 && (
-              <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
-                {!openStore.loaded || menuLoading ? 'Loading menu…'
-                  : menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
-              </p>
-            )}
-          </div>
-        </section>
-      ) : (
-        <section className="space-y-3">
-          {cart.length > 0 && (
-            <p className="rounded-lg bg-brand-green/10 px-3 py-2 text-xs text-green-800">
-              Pick another store to add to your order — one rider will buy from all of them.
-            </p>
-          )}
-
-          {/* Search restaurants */}
-          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/5">
             <SearchIcon />
             <input value={storeSearch} onChange={(e) => setStoreSearch(e.target.value)}
-              placeholder="Search restaurants"
+              placeholder="Search by name & restaurant"
               className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
             {storeSearch && (
               <button onClick={() => setStoreSearch('')} className="text-black/30 hover:text-black/60">✕</button>
             )}
           </div>
 
-          {shownStores.map((s) => (
-            <button key={s.id} onClick={() => setOpenStoreId(s.id)}
-              className="flex w-full items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 hover:ring-brand-green/40">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/5">
-                {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">🏪</span>}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">{s.name}</span>
-                <span className="text-xs text-black/50">{s.category}</span>
-              </span>
-              <span className="text-brand-purple">→</span>
-            </button>
-          ))}
-          {shownStores.length === 0 && (
-            <p className="rounded-xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
-              {storeSearch ? `No restaurants match “${storeSearch}”.` : 'No restaurants available yet.'}
+          {cart.length > 0 && (
+            <p className="rounded-xl bg-brand-green/10 px-3 py-2 text-xs text-green-800">
+              Pick another store to add to your order — one rider will buy from all of them.
             </p>
           )}
+
+          {/* Cuisine chips */}
+          {cuisines.length > 0 && (
+            <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+              <CuisineChip emoji="🍽️" label="All" active={cuisine === ''} onClick={() => setCuisine('')} />
+              {cuisines.map((c) => (
+                <CuisineChip key={c} emoji={cuisineEmoji(c)} label={c} active={cuisine === c} onClick={() => setCuisine(cuisine === c ? '' : c)} />
+              ))}
+            </div>
+          )}
+
+          {/* Restaurants */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-extrabold">{cuisine || 'Popular Restaurants'}</h3>
+            <span className="text-xs text-black/40">{shownStores.length} places</span>
+          </div>
+
+          <div className="space-y-4">
+            {shownStores.map((s) => (
+              <button key={s.id} onClick={() => setOpenStoreId(s.id)}
+                className="block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+                <div className="relative h-36 w-full">
+                  {s.logo_url ? (
+                    <img src={s.logo_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green/15 to-brand-purple/15 text-5xl">
+                      {cuisineEmoji(s.category)}
+                    </div>
+                  )}
+                  <span className="absolute left-3 top-3 rounded-full bg-brand-green px-2.5 py-1 text-[11px] font-bold text-white shadow">● Open now</span>
+                </div>
+                <div className="flex items-center gap-3 p-3.5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-lg shadow ring-1 ring-black/5">
+                    {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : cuisineEmoji(s.category)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-bold">{s.name}</span>
+                    <span className="text-xs text-black/50">{s.category || 'Restaurant'}</span>
+                  </span>
+                  <span className="text-brand-purple">→</span>
+                </div>
+              </button>
+            ))}
+            {shownStores.length === 0 && (
+              <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+                {storeSearch ? `No restaurants match “${storeSearch}”.`
+                  : cuisine ? `No ${cuisine} restaurants yet.` : 'No restaurants available yet.'}
+              </p>
+            )}
+          </div>
         </section>
+      )}
+
+      {/* Customizer bottom-sheet */}
+      {openStore && customizingItem && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" onClick={() => setCustomizingId(null)}>
+          <div className="max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-40 w-full">
+              {customizingItem.image_url
+                ? <img src={customizingItem.image_url} alt="" className="h-full w-full object-cover" />
+                : <div className="flex h-full w-full items-center justify-center bg-black/[0.04] text-5xl">🍽️</div>}
+              <button onClick={() => setCustomizingId(null)} aria-label="Close"
+                className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg text-black/60 shadow">✕</button>
+            </div>
+            <div className="p-4">
+              <h3 className="text-lg font-extrabold">{customizingItem.name}</h3>
+              {customizingItem.description && <p className="mt-0.5 text-sm text-black/50">{customizingItem.description}</p>}
+              <Customizer item={customizingItem} onAdd={(options) => { addToCart(openStore, customizingItem, options); setCustomizingId(null); }} />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Full-screen cart popup */}
@@ -401,7 +422,7 @@ export function FoodFlow() {
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {/* Items grouped by store — one order, one rider visits each store. */}
-            <div className="mb-3 space-y-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+            <div className="mb-3 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               {cartByStore.map((grp) => (
                 <div key={grp.name}>
                   {storeCount > 1 && <p className="mb-1 text-xs font-semibold text-brand-purple">🏪 {grp.name}</p>}
@@ -435,7 +456,7 @@ export function FoodFlow() {
               )}
             </div>
 
-            <div className="mb-3 space-y-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+            <div className="mb-3 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               {fees.model === 'per_km' && <LocationPicker value={dropoff} onChange={setDropoff} />}
               <div>
                 <label className="mb-1 block text-sm font-medium">Your mobile number</label>
@@ -456,7 +477,7 @@ export function FoodFlow() {
               </div>
             </div>
 
-            <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               <Row label="Goods" value={peso(summary.goodsCost)} />
               <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
                 value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
@@ -476,7 +497,7 @@ export function FoodFlow() {
 
           <div className="border-t border-black/10 bg-white p-4">
             <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
-              className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
+              className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {needsDropoff ? 'Set delivery location to continue'
                 : !contact.trim() ? 'Enter your mobile number'
                 : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}` : `Place order (COD) · ${peso(summary.customerTotal)}`}
@@ -485,10 +506,10 @@ export function FoodFlow() {
         </div>
       )}
 
-      {/* Floating cart button */}
-      {cart.length > 0 && !cartOpen && (
+      {/* Floating cart button (sits above the bottom tab bar) */}
+      {cart.length > 0 && !cartOpen && !customizingItem && (
         <button onClick={() => setCartOpen(true)}
-          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-brand-green px-4 py-3 text-white shadow-lg ring-2 ring-white transition hover:brightness-95">
+          className="fixed bottom-24 right-5 z-40 flex items-center gap-2 rounded-full bg-brand-green px-4 py-3 text-white shadow-lg ring-2 ring-white transition hover:brightness-95">
           <span className="relative">
             <CartIcon />
             <span className="absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-purple px-1 text-[11px] font-bold">
@@ -502,12 +523,126 @@ export function FoodFlow() {
   );
 }
 
+/** Restaurant detail: hero, info card, category tabs, 2-column menu grid. */
+function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
+  store: Store;
+  fees: FeeSettings;
+  menuLoading: boolean;
+  menuItems: MenuItem[];
+  menuCat: string; setMenuCat: (c: string) => void;
+  menuSearch: string; setMenuSearch: (s: string) => void;
+  onBack: () => void;
+  onAdd: (it: MenuItem) => void;
+  onCustomize: (id: string) => void;
+}) {
+  const feeLabel = fees.model === 'per_km' ? 'By distance' : peso(fees.flatFee);
+  return (
+    <section className="space-y-4">
+      {/* Hero */}
+      <div className="relative -mx-5 -mt-4">
+        <div className="h-44 w-full overflow-hidden">
+          {store.logo_url
+            ? <img src={store.logo_url} alt="" className="h-full w-full object-cover" />
+            : <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green to-brand-purple text-6xl">{cuisineEmoji(store.category)}</div>}
+        </div>
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+          <button onClick={onBack} aria-label="Back"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-lg text-black/70 shadow">←</button>
+        </div>
+        {/* Overlapping logo + title card */}
+        <div className="relative mx-5 -mt-10 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-2xl shadow ring-1 ring-black/5">
+              {store.logo_url ? <img src={store.logo_url} alt="" className="h-full w-full object-cover" /> : cuisineEmoji(store.category)}
+            </span>
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-black">{store.name}</h2>
+              <p className="text-sm text-black/50">{store.category || 'Restaurant'} · <span className="text-brand-green font-semibold">Open now</span></p>
+            </div>
+          </div>
+          {/* Info strip */}
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/[0.03] px-3 py-2.5 text-xs">
+            <BikeIcon />
+            <span className="font-semibold text-brand-ink">Delivery fee</span>
+            <span className="text-black/60">{feeLabel}</span>
+            <span className="mx-1 text-black/20">•</span>
+            <span className="text-black/60">Pay COD or online</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Search this menu */}
+      <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/5">
+        <SearchIcon />
+        <input value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)}
+          placeholder="Search this menu"
+          className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
+      </div>
+
+      {/* Category tabs */}
+      {store.categories.length > 0 && (
+        <div className="-mx-1 flex gap-4 overflow-x-auto border-b border-black/10 px-1">
+          <CatTab active={menuCat === ''} onClick={() => setMenuCat('')}>Popular</CatTab>
+          {store.categories.map((c) => (
+            <CatTab key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatTab>
+          ))}
+        </div>
+      )}
+
+      {/* Menu grid */}
+      <div className="grid grid-cols-2 gap-3">
+        {menuItems.map((it) => (
+          <div key={it.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+            <div className="relative">
+              <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
+                {it.image_url
+                  ? <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                  : <div className="flex h-full w-full items-center justify-center text-4xl">🍽️</div>}
+              </div>
+              <button
+                onClick={() => (it.groups.length === 0 ? onAdd(it) : onCustomize(it.id))}
+                aria-label={it.groups.length === 0 ? `Add ${it.name}` : `Customize ${it.name}`}
+                className="absolute -bottom-3 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-lg font-bold text-white shadow-md ring-2 ring-white transition hover:brightness-95">
+                +
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col p-3 pt-4">
+              <p className="text-sm font-semibold leading-tight">{it.name}</p>
+              {it.description && <p className="mt-0.5 line-clamp-2 text-xs text-black/45">{it.description}</p>}
+              <div className="mt-auto flex items-baseline gap-1 pt-2">
+                <span className="font-bold text-brand-ink">{peso(it.price)}</span>
+                {it.groups.length > 0 && <span className="text-[11px] text-black/40">+ options</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {menuItems.length === 0 && (
+        <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+          {!store.loaded || menuLoading ? 'Loading menu…'
+            : menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function CartIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round">
       <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
       <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
+  );
+}
+
+function BikeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-green">
+      <circle cx="5.5" cy="17.5" r="3.5" /><circle cx="18.5" cy="17.5" r="3.5" />
+      <path d="M15 17.5 12 8h3l1.5 4.5M12 8 9.5 17.5M9 8h3" />
     </svg>
   );
 }
@@ -523,11 +658,22 @@ function SearchIcon() {
   );
 }
 
-function CatPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function CuisineChip({ emoji, label, active, onClick }: { emoji: string; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex shrink-0 flex-col items-center gap-1.5">
+      <span className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl shadow-sm ring-1 transition ${
+        active ? 'bg-brand-green text-white ring-brand-green' : 'bg-white ring-black/5'
+      }`}>{emoji}</span>
+      <span className={`max-w-[4.5rem] truncate text-[11px] font-semibold ${active ? 'text-brand-green' : 'text-black/60'}`}>{label}</span>
+    </button>
+  );
+}
+
+function CatTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-        active ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-black/60 ring-1 ring-black/10'
+      className={`shrink-0 whitespace-nowrap border-b-2 px-1 pb-2 text-sm font-semibold transition ${
+        active ? 'border-brand-green text-brand-ink' : 'border-transparent text-black/40 hover:text-black/70'
       }`}>
       {children}
     </button>
@@ -554,10 +700,10 @@ function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOpti
   const total = item.price + chosen.reduce((s, o) => s + o.priceDelta, 0);
 
   return (
-    <div className="mt-2 rounded-lg bg-black/[0.02] p-3">
+    <div className="mt-3">
       {item.groups.map((g) => (
         <div key={g.id} className="mb-3">
-          <p className="mb-1 text-xs font-semibold text-black/70">
+          <p className="mb-1.5 text-xs font-semibold text-black/70">
             {g.name}
             <span className="ml-1 font-normal text-black/40">{g.required ? '(required)' : '(optional)'}{g.multi ? ' · pick any' : ''}</span>
           </p>
@@ -566,7 +712,7 @@ function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOpti
               const on = (sel[g.id] ?? []).includes(c.name);
               return (
                 <button key={c.name} type="button" onClick={() => pick(g, c.name)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
                     on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'
                   }`}>
                   {c.name}{c.priceDelta !== 0 && <span className={on ? 'opacity-80' : 'text-black/40'}> {c.priceDelta > 0 ? '+' : ''}{peso(c.priceDelta)}</span>}
@@ -578,7 +724,7 @@ function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOpti
         </div>
       ))}
       <button onClick={() => onAdd(chosen)} disabled={missing}
-        className="w-full rounded-lg bg-brand-green py-2 text-sm font-semibold text-white disabled:opacity-50">
+        className="mt-1 w-full rounded-xl bg-brand-green py-3 text-sm font-semibold text-white disabled:opacity-50">
         {missing ? 'Choose required options' : `Add to cart · ${peso(total)}`}
       </button>
     </div>
