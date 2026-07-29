@@ -324,6 +324,41 @@ export async function deleteMenuItemOption(db: SupabaseClient, optionId: string)
   if (error) throw error;
 }
 
+/**
+ * Duplicate every customization group (and its options) from one dish onto
+ * another, so the same add-ons don't have to be re-created by hand. Appends to
+ * the target (existing customizations are kept). Returns how many groups were
+ * copied. Prices carry over and can be edited per dish afterwards.
+ */
+export async function copyItemCustomizations(
+  db: SupabaseClient, fromItemId: string, toItemId: string,
+): Promise<{ groups: number; options: number }> {
+  if (fromItemId === toItemId) return { groups: 0, options: 0 };
+  const { data: groups, error: gErr } = await db
+    .from('menu_item_option_groups').select('*').eq('menu_item_id', fromItemId).order('sort_order');
+  if (gErr) throw gErr;
+  const { data: opts, error: oErr } = await db
+    .from('menu_item_options').select('*').eq('menu_item_id', fromItemId);
+  if (oErr) throw oErr;
+
+  let optionCount = 0;
+  for (const g of (groups ?? []) as { id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }[]) {
+    const newGroupId = await createOptionGroup(db, {
+      itemId: toItemId, name: g.name, required: g.required, multiSelect: g.multi_select, sortOrder: g.sort_order,
+    });
+    const groupOpts = ((opts ?? []) as { group_id: string | null; option_name: string; price_delta: number }[])
+      .filter((o) => o.group_id === g.id);
+    for (const o of groupOpts) {
+      await createMenuItemOption(db, {
+        itemId: toItemId, groupId: newGroupId, groupName: g.name,
+        optionName: o.option_name, priceDelta: Number(o.price_delta),
+      });
+      optionCount++;
+    }
+  }
+  return { groups: (groups ?? []).length, options: optionCount };
+}
+
 export async function createMenuItem(db: SupabaseClient, input: MenuItemInput) {
   if (input.price < 0) throw new Error('price must be non-negative');
   const { data, error } = await db

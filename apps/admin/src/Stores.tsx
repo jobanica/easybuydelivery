@@ -17,6 +17,7 @@ import {
   deleteMenuItemOption,
   createOptionGroup,
   deleteOptionGroup,
+  copyItemCustomizations,
   deleteStore,
   deleteMenuItem,
 } from '@ebd/supabase';
@@ -488,7 +489,10 @@ function MenuEditor({ storeId }: { storeId: string }) {
                     {editingId === it.id && (
                       <ItemEditor item={it} cats={cats} onSaved={load}
                         groups={groups.filter((g) => g.menu_item_id === it.id)}
-                        options={opts.filter((o) => o.menu_item_id === it.id)} />
+                        options={opts.filter((o) => o.menu_item_id === it.id)}
+                        sources={items
+                          .filter((i) => i.id !== it.id && groups.some((g) => g.menu_item_id === i.id))
+                          .map((i) => ({ id: i.id, name: i.name }))} />
                     )}
                   </li>
                 ))}
@@ -515,8 +519,8 @@ function MenuEditor({ storeId }: { storeId: string }) {
 }
 
 /** Expanded editor for a single menu item: photo, price, category, customizations. */
-function ItemEditor({ item, groups, options, cats, onSaved }:
-  { item: ItemRow; groups: GroupRow[]; options: OptRow[]; cats: CatRow[]; onSaved: () => void }) {
+function ItemEditor({ item, groups, options, cats, onSaved, sources }:
+  { item: ItemRow; groups: GroupRow[]; options: OptRow[]; cats: CatRow[]; onSaved: () => void; sources: { id: string; name: string }[] }) {
   const [name, setName] = useState(item.name);
   const [price, setPrice] = useState(String(item.price));
   const [desc, setDesc] = useState(item.description ?? '');
@@ -529,7 +533,23 @@ function ItemEditor({ item, groups, options, cats, onSaved }:
   const [gName, setGName] = useState('');
   const [gRequired, setGRequired] = useState(true);
   const [gMulti, setGMulti] = useState(false);
+  // copy add-ons from another dish
+  const [copyFrom, setCopyFrom] = useState('');
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const base = Number(price) || 0;
+
+  async function copyAddons() {
+    if (!supabase || !copyFrom) return;
+    setCopyBusy(true); setCopyMsg(null);
+    try {
+      const res = await copyItemCustomizations(supabase, copyFrom, item.id);
+      setCopyMsg(`Copied ${res.groups} customization${res.groups === 1 ? '' : 's'} · ${res.options} option${res.options === 1 ? '' : 's'}. Edit any prices below.`);
+      setCopyFrom('');
+      onSaved();
+    } catch (e) { setCopyMsg(e instanceof Error ? e.message : String(e)); }
+    finally { setCopyBusy(false); }
+  }
 
   async function removeItem() {
     if (!supabase) return;
@@ -601,6 +621,22 @@ function ItemEditor({ item, groups, options, cats, onSaved }:
             ＋ Add customization
           </button>
         </div>
+
+        {/* Reuse add-ons from another dish, then just edit prices. */}
+        {sources.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-brand-green/[0.06] p-2.5">
+            <span className="text-xs font-medium text-black/60">Copy add-ons from</span>
+            <select className={inp + ' min-w-[10rem] flex-1'} value={copyFrom} onChange={(e) => { setCopyFrom(e.target.value); setCopyMsg(null); }}>
+              <option value="">Choose a dish…</option>
+              {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button onClick={copyAddons} disabled={!copyFrom || copyBusy}
+              className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {copyBusy ? 'Copying…' : 'Copy'}
+            </button>
+          </div>
+        )}
+        {copyMsg && <p className="mb-2 text-xs text-green-700">{copyMsg}</p>}
 
         {showNewGroup && (
           <form onSubmit={addGroup} className="mb-3 space-y-2 rounded-lg bg-black/[0.02] p-3">
