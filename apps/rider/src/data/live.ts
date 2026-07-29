@@ -7,6 +7,8 @@ import {
   advanceOrderStatus,
   updatePabiliActualAmount,
   createSettlement,
+  getRiderOnline,
+  setRiderOnline,
   type SupabaseClient,
 } from '@ebd/supabase';
 import type { RiderData, RiderOrder } from './types.ts';
@@ -35,6 +37,12 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
 export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
   return {
     live: true,
+    async getOnline() {
+      return getRiderOnline(db, riderId);
+    },
+    async setOnline(online) {
+      return setRiderOnline(db, online);
+    },
     async getOpenOrders() {
       return (await listOpenOrders(db)).map((r) => toRiderOrder(r as Record<string, unknown>));
     },

@@ -26,6 +26,18 @@ export function App({ riderId }: { riderId?: string } = {}) {
   const [tab, setTab] = useState<'available' | 'active'>('available');
   const [error, setError] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<number>(0);
+  const [online, setOnline] = useState(false);
+  const [onlineBusy, setOnlineBusy] = useState(false);
+
+  // Load the rider's saved online/offline availability.
+  useEffect(() => { data.getOnline().then(setOnline).catch(() => {}); }, [data]);
+
+  async function toggleOnline() {
+    setOnlineBusy(true);
+    try { setOnline(await data.setOnline(!online)); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setOnlineBusy(false); }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -63,19 +75,22 @@ export function App({ riderId }: { riderId?: string } = {}) {
   return (
     <div className="min-h-screen">
       <header className="bg-brand-purple text-white">
-        <div className="mx-auto max-w-lg px-5 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">Easy Buy Delivery — Rider</h1>
-            <p className="text-xs opacity-90">{data.live ? 'Live' : 'Preview mode'}</p>
+        <div className="mx-auto max-w-lg px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold">Easy Buy Delivery — Rider</h1>
+              <p className="text-xs opacity-90">{data.live ? 'Live' : 'Preview mode'}</p>
+            </div>
+            <BalancePill owed={owedBalance(ledger)} />
           </div>
-          <BalancePill owed={owedBalance(ledger)} />
+          <OnlineToggle online={online} busy={onlineBusy} onToggle={toggleOnline} />
         </div>
       </header>
 
       <main className="mx-auto max-w-lg px-5 py-5">
         {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        {incoming > 0 && !locked && (
+        {incoming > 0 && !locked && online && (
           <button
             onClick={() => { setIncoming(0); setTab('available'); }}
             className="mb-4 flex w-full items-center justify-between rounded-lg bg-brand-green px-4 py-3 text-sm font-semibold text-white shadow">
@@ -98,12 +113,14 @@ export function App({ riderId }: { riderId?: string } = {}) {
             </nav>
 
             {tab === 'available' ? (
-              open.length === 0
-                ? <Empty>No orders in the pool right now.</Empty>
-                : open.map((o) => (
-                    <PoolCard key={o.id} order={o}
-                      onAccept={async () => { await data.accept(o.id); setTab('active'); await refresh(); }} />
-                  ))
+              !online
+                ? <OfflineNotice onGoOnline={toggleOnline} busy={onlineBusy} />
+                : open.length === 0
+                  ? <Empty>No orders in the pool right now.</Empty>
+                  : open.map((o) => (
+                      <PoolCard key={o.id} order={o}
+                        onAccept={async () => { await data.accept(o.id); setTab('active'); await refresh(); }} />
+                    ))
             ) : (
               active.length === 0
                 ? <Empty>No active deliveries. Accept one from the pool.</Empty>
@@ -289,6 +306,37 @@ function CardHead({ order }: { order: RiderOrder }) {
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Online/offline availability switch shown in the header. */
+function OnlineToggle({ online, busy, onToggle }:
+  { online: boolean; busy: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} disabled={busy} aria-pressed={online}
+      className="mt-3 flex w-full items-center justify-between rounded-xl bg-white/15 px-4 py-2.5 text-left disabled:opacity-70">
+      <span className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-brand-green' : 'bg-white/50'}`} />
+        <span className="text-sm font-semibold">{busy ? 'Saving…' : online ? "You're online" : "You're offline"}</span>
+      </span>
+      <span className={`relative h-6 w-11 rounded-full transition ${online ? 'bg-brand-green' : 'bg-white/30'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${online ? 'left-[1.375rem]' : 'left-0.5'}`} />
+      </span>
+    </button>
+  );
+}
+
+function OfflineNotice({ onGoOnline, busy }: { onGoOnline: () => void; busy: boolean }) {
+  return (
+    <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-black/[0.05] text-2xl">😴</div>
+      <h2 className="text-lg font-bold">You're offline</h2>
+      <p className="mt-1 text-sm text-black/60">Go online to see the order pool and accept deliveries.</p>
+      <button onClick={onGoOnline} disabled={busy}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Saving…' : 'Go online'}
+      </button>
     </div>
   );
 }

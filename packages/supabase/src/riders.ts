@@ -40,6 +40,28 @@ export async function listRiders(db: SupabaseClient, status?: RiderApplicationSt
   return data ?? [];
 }
 
+/** Read a rider's current online/offline availability. */
+export async function getRiderOnline(db: SupabaseClient, riderId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from('riders')
+    .select('is_online')
+    .eq('id', riderId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean((data as { is_online?: boolean } | null)?.is_online);
+}
+
+/**
+ * A rider marks themselves online/offline. Goes through the set_rider_online
+ * RPC (SECURITY DEFINER) so only the is_online flag on the caller's own row is
+ * touched — riders can't update their row directly. Returns the new state.
+ */
+export async function setRiderOnline(db: SupabaseClient, online: boolean): Promise<boolean> {
+  const { data, error } = await db.rpc('set_rider_online', { p_online: online });
+  if (error) throw error;
+  return Boolean(data);
+}
+
 /** Admin approves or rejects an application. */
 export async function setRiderApplicationStatus(
   db: SupabaseClient,

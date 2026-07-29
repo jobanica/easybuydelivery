@@ -22,6 +22,8 @@ export interface RiderOrder {
 /** Abstraction the UI depends on — implemented for live Supabase and preview. */
 export interface RiderData {
   readonly live: boolean;
+  getOnline(): Promise<boolean>;
+  setOnline(online: boolean): Promise<boolean>;
   getOpenOrders(): Promise<RiderOrder[]>;
   getActiveOrders(): Promise<RiderOrder[]>;
   getLedger(): Promise<LedgerEntry[]>;

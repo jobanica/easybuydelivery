@@ -42,6 +42,7 @@ export function createPreviewData(): RiderData {
     },
   ];
   let active: RiderOrder[] = [];
+  let online = true;
   const ledger: LedgerEntry[] = [
     // Yesterday, unsettled -> triggers the lock screen.
     { amount: 22.5, businessDay: isoDay(-1), settled: false },
@@ -49,6 +50,8 @@ export function createPreviewData(): RiderData {
 
   return {
     live: false,
+    async getOnline() { return online; },
+    async setOnline(v) { online = v; return online; },
     async getOpenOrders() { return [...open]; },
     async getActiveOrders() { return [...active]; },
     async getLedger() { return [...ledger]; },
