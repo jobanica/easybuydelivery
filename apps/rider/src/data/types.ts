@@ -18,6 +18,8 @@ export interface RiderOrder {
   budget_cap: number | null;
   actual_amount: number | null;
   store_contact: string | null;
+  /** Linked store(s) for the order, so the rider can call the restaurant. */
+  stores: { name: string | null; contact: string | null }[];
   notes: string | null;
 }
 

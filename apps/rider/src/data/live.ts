@@ -31,6 +31,10 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     budget_cap: row.budget_cap == null ? null : Number(row.budget_cap),
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
     store_contact: (row.store_contact as string) ?? null,
+    stores: Array.isArray(row.order_stores)
+      ? (row.order_stores as { store: { name: string | null; contact_number: string | null } | null }[])
+          .map((os) => ({ name: os.store?.name ?? null, contact: os.store?.contact_number ?? null }))
+      : [],
     notes: (row.notes as string) ?? null,
   };
 }

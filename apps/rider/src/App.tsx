@@ -375,10 +375,19 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
               className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
           </div>
         </div>
-        {order.store_contact && (
-          <a href={`tel:${order.store_contact}`} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-purple">
-            <PhoneIcon /> Call store {order.store_contact}
-          </a>
+        {/* Call the restaurant/store to prepare the order. */}
+        {order.stores.filter((s) => s.contact).map((s, i) => (
+          <div key={i} className="mt-2 flex items-center justify-between rounded-xl bg-brand-purple/[0.06] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-xs text-black/45">Restaurant / store</p>
+              <p className="truncate text-sm font-medium">{s.name ?? 'Store'} · {s.contact}</p>
+            </div>
+            <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white"><PhoneIcon /></a>
+          </div>
+        ))}
+        {order.service_type === 'food' && order.stores.length > 0 && order.stores.every((s) => !s.contact) && (
+          <p className="mt-2 text-xs text-black/40">No store number on file — ask the operator to add it in the store settings.</p>
         )}
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>

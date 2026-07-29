@@ -8,11 +8,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-/** A rider's in-progress orders (accepted but not yet delivered/cancelled). */
+/**
+ * A rider's in-progress orders (accepted but not yet delivered/cancelled),
+ * with the linked store(s) embedded so the rider can call the restaurant.
+ */
 export async function listRiderActiveOrders(db: SupabaseClient, riderId: string) {
   const { data, error } = await db
     .from('orders')
-    .select('*')
+    .select('*, order_stores(store:stores(name, contact_number))')
     .eq('rider_id', riderId)
     .not('status', 'in', '(delivered,cancelled)')
     .order('created_at', { ascending: true });
