@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { onAuthChange, sendOtp, verifyOtp, ensureRider, signOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
+import { REQUIRE_ACCOUNT } from './config.ts';
 
 /**
  * Rider auth + onboarding gate.
@@ -24,16 +25,22 @@ function LiveGate() {
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
+  // OTP off: start a background anonymous session so there's no sign-in screen.
+  useEffect(() => {
+    if (REQUIRE_ACCOUNT || userId !== null) return;
+    void supabase!.auth.signInAnonymously().catch(() => {});
+  }, [userId]);
+
   // Load this rider's application/status once signed in (so approved riders
   // go straight to the app instead of re-applying every time).
   useEffect(() => {
-    if (!userId) { setRider(null); setChecked(userId === null); return; }
+    if (!userId) { setRider(null); setChecked(userId === null && REQUIRE_ACCOUNT); return; }
     setChecked(false);
     supabase!.from('riders').select('id, application_status').eq('profile_id', userId).maybeSingle()
       .then(({ data }) => { setRider((data as { id: string; application_status: string } | null) ?? null); setChecked(true); });
   }, [userId]);
 
-  if (userId === undefined || (userId && !checked)) {
+  if (userId === undefined || (userId && !checked) || (!userId && !REQUIRE_ACCOUNT)) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
   if (!userId) return <OtpSignIn />;
