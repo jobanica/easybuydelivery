@@ -10,6 +10,7 @@ const SAMPLE: AppSettings = {
   settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
   service_food: true, service_pabili: true, service_padala: true,
+  max_active_orders_per_rider: 0,
 };
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -78,6 +79,22 @@ export function Settings() {
           <ServiceRow label="Padala" desc="Point-to-point courier."
             on={s.service_padala} onChange={(v) => set('service_padala', v)} />
         </div>
+      </Card>
+
+      {/* Riders */}
+      <Card title="Riders">
+        <Field label="Max active orders per rider">
+          <input type="number" min={0} step={1} className={`${inp} sm:max-w-[10rem]`}
+            value={s.max_active_orders_per_rider}
+            onChange={(e) => set('max_active_orders_per_rider', Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
+          <span className="mt-1 block text-xs text-black/50">
+            The most orders a rider can hold at once before finishing a delivery.
+            {' '}
+            {s.max_active_orders_per_rider > 0
+              ? <>Currently capped at <b>{s.max_active_orders_per_rider}</b>.</>
+              : <>Set to <b>0</b> for no limit (unlimited).</>}
+          </span>
+        </Field>
       </Card>
 
       {/* Fees & commission */}

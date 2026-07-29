@@ -23,6 +23,8 @@ export interface AppSettings {
   service_food: boolean;
   service_pabili: boolean;
   service_padala: boolean;
+  /** Max active (not delivered/cancelled) orders a rider may hold. 0 = unlimited. */
+  max_active_orders_per_rider: number;
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {

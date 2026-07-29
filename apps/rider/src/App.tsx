@@ -65,6 +65,16 @@ export function App({ riderId }: { riderId?: string } = {}) {
   const locked = isLockedOut(ledger, today);
   const overdue = overdueBalance(ledger, today);
 
+  async function accept(orderId: string) {
+    try {
+      await data.accept(orderId);
+      setTab('active');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    await refresh();
+  }
+
   async function settleNow() {
     const day = ledger.find((e) => !e.settled && e.businessDay < today)?.businessDay;
     if (!day) return;
@@ -118,8 +128,7 @@ export function App({ riderId }: { riderId?: string } = {}) {
                 : open.length === 0
                   ? <Empty>No orders in the pool right now.</Empty>
                   : open.map((o) => (
-                      <PoolCard key={o.id} order={o}
-                        onAccept={async () => { await data.accept(o.id); setTab('active'); await refresh(); }} />
+                      <PoolCard key={o.id} order={o} onAccept={() => accept(o.id)} />
                     ))
             ) : (
               active.length === 0
