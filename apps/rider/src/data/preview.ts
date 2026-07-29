@@ -87,7 +87,8 @@ export function createPreviewData(): RiderData {
       };
     },
     async settle(businessDay) {
-      for (const e of ledger) if (e.businessDay === businessDay) e.settled = true;
+      // Preview: clear everything up to and including the paid day.
+      for (const e of ledger) if (e.businessDay <= businessDay) e.settled = true;
     },
   };
 }

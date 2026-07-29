@@ -86,11 +86,13 @@ export async function confirmSettlement(
     .eq('id', params.settlementId);
   if (upd.error) throw upd.error;
 
+  // Settle everything up to and including the paid day, so one payment clears
+  // all the rider's overdue commission (not just that single day).
   const led = await db
     .from('commission_ledger')
     .update({ settled: true })
     .eq('rider_id', params.riderId)
-    .eq('business_day', params.businessDay);
+    .lte('business_day', params.businessDay);
   if (led.error) throw led.error;
 
   // Recompute lock from whatever remains unsettled.

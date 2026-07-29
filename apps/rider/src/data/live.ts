@@ -78,8 +78,11 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
         amount,
       );
     },
-    async settle(businessDay, amount) {
-      await createSettlement(db, { riderId, businessDay, amountDue: amount });
+    async settle(businessDay, amount, extra) {
+      await createSettlement(db, {
+        riderId, businessDay, amountDue: amount,
+        method: 'gcash', reference: extra?.reference, receiptUrl: extra?.receiptUrl,
+      });
     },
   };
 }

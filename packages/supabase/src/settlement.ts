@@ -40,6 +40,7 @@ export interface SettlementRowInput {
   amountDue: number;
   method?: string;
   reference?: string;
+  receiptUrl?: string;
 }
 
 export interface SettlementRow {
@@ -48,6 +49,7 @@ export interface SettlementRow {
   amount_due: number;
   method: string | null;
   reference: string | null;
+  receipt_url: string | null;
   status: 'pending';
 }
 
@@ -60,8 +62,31 @@ export function buildSettlementRow(input: SettlementRowInput): SettlementRow {
     amount_due: input.amountDue,
     method: input.method ?? null,
     reference: input.reference ?? null,
+    receipt_url: input.receiptUrl ?? null,
     status: 'pending',
   };
+}
+
+/** Upload a settlement receipt to the public store-assets bucket; returns its URL. */
+export async function uploadSettlementReceipt(db: SupabaseClient, file: File): Promise<string> {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `settlement-receipts/${user.id}/${Date.now()}.${ext}`;
+  const { error } = await db.storage.from('store-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (error) throw error;
+  return db.storage.from('store-assets').getPublicUrl(path).data.publicUrl;
+}
+
+/** Upload the operator's settlement QR image (admin). Returns its public URL. */
+export async function uploadSettlementQr(db: SupabaseClient, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+  const path = `settlement-qr/${Date.now()}.${ext}`;
+  const { error } = await db.storage.from('store-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (error) throw error;
+  return db.storage.from('store-assets').getPublicUrl(path).data.publicUrl;
 }
 
 /**

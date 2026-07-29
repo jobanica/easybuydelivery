@@ -13,6 +13,7 @@ interface PendingRow {
   amount_due: number;
   method: string | null;
   reference: string | null;
+  receipt_url: string | null;
 }
 
 /** Preview sample so the operator view is demoable without a backend. */
@@ -115,13 +116,23 @@ export function Settlements() {
         ) : (
           <div className="space-y-2">
             {pending.map((row) => (
-              <div key={row.id} className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-                <div className="text-sm">
-                  <span className="font-medium">{peso(row.amount_due)}</span>
-                  <span className="text-black/50"> · {row.business_day} · {row.method ?? '—'}{row.reference ? ` (${row.reference})` : ''}</span>
+              <div key={row.id} className="flex items-center justify-between gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                <div className="flex min-w-0 items-center gap-3">
+                  {row.receipt_url ? (
+                    <a href={row.receipt_url} target="_blank" rel="noreferrer" className="shrink-0">
+                      <img src={row.receipt_url} alt="Receipt" className="h-14 w-14 rounded-lg object-cover ring-1 ring-black/10" />
+                    </a>
+                  ) : (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] text-[10px] text-black/30">No receipt</span>
+                  )}
+                  <div className="min-w-0 text-sm">
+                    <span className="font-medium">{peso(row.amount_due)}</span>
+                    <span className="block text-black/50">{row.business_day} · {row.method ?? '—'}{row.reference ? ` · ref ${row.reference}` : ''}</span>
+                    {row.receipt_url && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="text-xs font-medium text-brand-purple">View receipt →</a>}
+                  </div>
                 </div>
                 <button onClick={() => confirm(row)}
-                  className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white">
+                  className="shrink-0 rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white">
                   Mark paid
                 </button>
               </div>

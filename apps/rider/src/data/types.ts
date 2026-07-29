@@ -34,5 +34,5 @@ export interface RiderData {
   accept(orderId: string): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
-  settle(businessDay: string, amount: number): Promise<void>;
+  settle(businessDay: string, amount: number, extra?: { reference?: string; receiptUrl?: string }): Promise<void>;
 }

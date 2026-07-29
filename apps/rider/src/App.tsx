@@ -12,6 +12,7 @@ import {
 import {
   subscribeToNewOrders, signOut,
   getRiderProfile, updateRiderProfile, uploadRiderPhoto, type RiderProfile,
+  getAppSettings, uploadSettlementReceipt, type AppSettings,
 } from '@ebd/supabase';
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
@@ -85,10 +86,12 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
     await refresh();
   }
 
-  async function settleNow() {
-    const day = ledger.find((e) => !e.settled && e.businessDay < today)?.businessDay;
+  async function submitSettlement(extra?: { reference?: string; receiptUrl?: string }) {
+    // Settle the latest overdue day; confirmSettlement clears everything up to it.
+    const overdueDays = ledger.filter((e) => !e.settled && e.businessDay < today).map((e) => e.businessDay).sort();
+    const day = overdueDays.length ? overdueDays[overdueDays.length - 1] : ledger.find((e) => !e.settled)?.businessDay;
     if (!day) return;
-    await data.settle(day, overdue);
+    await data.settle(day, overdue || owed, extra);
     await refresh();
   }
 
@@ -131,7 +134,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
         )}
 
         {tab === 'requests' && (
-          locked ? <LockCard overdue={overdue} onSettle={settleNow} />
+          locked ? <LockCard overdue={overdue} onSettle={() => setTab('earnings')} />
             : !online ? <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} />
             : pool.length === 0 ? <Empty icon="📭">No requests in the pool right now.</Empty>
             : <div className="space-y-3">
@@ -153,7 +156,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
               </div>
         )}
 
-        {tab === 'earnings' && <EarningsView ledger={ledger} owed={owed} overdue={overdue} onSettle={settleNow} />}
+        {tab === 'earnings' && <EarningsView live={data.live} ledger={ledger} owed={owed} overdue={overdue} onSettle={submitSettlement} />}
 
         {tab === 'settings' && (
           <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline}
@@ -443,9 +446,13 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
 // Earnings / settlement
 // ---------------------------------------------------------------------------
 
-function EarningsView({ ledger, owed, overdue, onSettle }:
-  { ledger: LedgerEntry[]; owed: number; overdue: number; onSettle: () => void }) {
+function EarningsView({ live, ledger, owed, overdue, onSettle }:
+  { live: boolean; ledger: LedgerEntry[]; owed: number; overdue: number; onSettle: (extra?: { reference?: string; receiptUrl?: string }) => Promise<void> }) {
   const history = useMemo(() => [...ledger].sort((a, b) => b.businessDay.localeCompare(a.businessDay)), [ledger]);
+  const [payOpen, setPayOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  useEffect(() => { if (live && supabase) getAppSettings(supabase).then(setSettings).catch(() => {}); }, [live]);
+
   return (
     <div className="space-y-4">
       <SectionTitle>Earnings &amp; settlement</SectionTitle>
@@ -456,11 +463,17 @@ function EarningsView({ ledger, owed, overdue, onSettle }:
           You keep every delivery &amp; convenience fee; the operator's commission is settled per day.
         </p>
         {overdue > 0 && (
-          <button onClick={onSettle} className="mt-3 w-full rounded-xl bg-white py-2.5 text-sm font-bold text-brand-purple">
+          <button onClick={() => setPayOpen(true)} className="mt-3 w-full rounded-xl bg-white py-2.5 text-sm font-bold text-brand-purple">
             Settle {peso(overdue)} now
           </button>
         )}
       </div>
+
+      {payOpen && (
+        <SettleModal amount={overdue} settings={settings} live={live}
+          onClose={() => setPayOpen(false)}
+          onSubmit={async (extra) => { await onSettle(extra); setPayOpen(false); }} />
+      )}
 
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
         <p className="mb-2 text-sm font-semibold">Commission history</p>
@@ -481,6 +494,108 @@ function EarningsView({ ledger, owed, overdue, onSettle }:
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Payment sheet: shows the operator's GCash/QR and takes a receipt + reference. */
+function SettleModal({ amount, settings, live, onClose, onSubmit }: {
+  amount: number; settings: AppSettings | null; live: boolean;
+  onClose: () => void; onSubmit: (extra?: { reference?: string; receiptUrl?: string }) => Promise<void>;
+}) {
+  const [reference, setReference] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const num = settings?.settlement_gcash_number ?? null;
+
+  async function upload(file: File) {
+    if (!supabase) return;
+    setUploading(true); setErr(null);
+    try { setReceiptUrl(await uploadSettlementReceipt(supabase, file)); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setUploading(false); }
+  }
+  async function submit() {
+    setSubmitting(true); setErr(null);
+    try { await onSubmit({ reference: reference.trim() || undefined, receiptUrl: receiptUrl ?? undefined }); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setSubmitting(false); }
+  }
+  function copyNum() {
+    if (!num) return;
+    void navigator.clipboard?.writeText(num).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white sm:max-w-md sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
+          <h3 className="text-lg font-extrabold">Settle {peso(amount)}</h3>
+          <button onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-black/60">✕</button>
+        </div>
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-black/60">Send your commission to the operator, then submit your proof of payment.</p>
+
+          {/* Operator GCash / QR */}
+          <div className="rounded-2xl bg-brand-purple/[0.06] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-purple">Pay via GCash / Maya</p>
+            {num ? (
+              <>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-black text-brand-ink">{num}</p>
+                    {settings?.settlement_gcash_name && <p className="text-sm text-black/55">{settings.settlement_gcash_name}</p>}
+                  </div>
+                  <button onClick={copyNum} className="shrink-0 rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-bold text-white">
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                {settings?.settlement_qr_url && (
+                  <img src={settings.settlement_qr_url} alt="GCash QR"
+                    className="mx-auto mt-3 h-56 w-56 rounded-xl bg-white object-contain p-2 ring-1 ring-black/5" />
+                )}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-black/50">
+                {live ? 'The operator hasn’t set their payment details yet — please contact them for where to send payment.'
+                      : 'Payment details appear here once the operator sets them.'}
+              </p>
+            )}
+          </div>
+
+          {/* Proof of payment */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">Reference number <span className="font-normal text-black/40">(optional)</span></label>
+            <input value={reference} onChange={(e) => setReference(e.target.value)}
+              placeholder="GCash reference #"
+              className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand-green" />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Receipt / screenshot</label>
+            {receiptUrl ? (
+              <div className="flex items-center gap-3">
+                <img src={receiptUrl} alt="Receipt" className="h-20 w-20 rounded-lg object-cover ring-1 ring-black/10" />
+                <button onClick={() => setReceiptUrl(null)} className="text-sm font-medium text-red-600">Remove</button>
+              </div>
+            ) : (
+              <label className={`flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-black/20 py-3 text-sm font-medium text-black/60 ${!live ? 'pointer-events-none opacity-50' : ''}`}>
+                {uploading ? 'Uploading…' : '＋ Upload receipt'}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} />
+              </label>
+            )}
+          </div>
+
+          {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
+
+          <button onClick={submit} disabled={submitting || uploading}
+            className="w-full rounded-xl bg-brand-green py-3 font-bold text-white disabled:opacity-50">
+            {submitting ? 'Submitting…' : `I’ve paid ${peso(amount)} — submit`}
+          </button>
+          <p className="text-center text-xs text-black/40">The operator confirms your payment; your balance clears once confirmed.</p>
+        </div>
       </div>
     </div>
   );

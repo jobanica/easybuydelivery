@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getAppSettings, updateAppSettings, type AppSettings } from '@ebd/supabase';
+import { getAppSettings, updateAppSettings, uploadSettlementQr, type AppSettings } from '@ebd/supabase';
 import { commission, distanceDeliveryFee } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, peso } from './ui.tsx';
@@ -11,6 +11,7 @@ const SAMPLE: AppSettings = {
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
   service_food: true, service_pabili: true, service_padala: true,
   max_active_orders_per_rider: 0,
+  settlement_gcash_number: null, settlement_gcash_name: null, settlement_qr_url: null,
 };
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -21,6 +22,15 @@ export function Settings() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewKm, setPreviewKm] = useState(5);
+  const [qrBusy, setQrBusy] = useState(false);
+
+  async function uploadQr(file: File) {
+    if (!supabase) return;
+    setQrBusy(true); setError(null);
+    try { set('settlement_qr_url', await uploadSettlementQr(supabase, file)); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setQrBusy(false); }
+  }
 
   useEffect(() => {
     (async () => {
@@ -95,6 +105,42 @@ export function Settings() {
               : <>Set to <b>0</b> for no limit (unlimited).</>}
           </span>
         </Field>
+      </Card>
+
+      {/* Rider settlement destination */}
+      <Card title="Rider settlement (GCash / Maya)">
+        <p className="mb-3 text-sm text-black/60">
+          Shown to riders when they settle their daily commission — they pay here and upload a receipt.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="GCash / Maya number">
+            <input className={inp} placeholder="0917 000 0000" value={s.settlement_gcash_number ?? ''}
+              onChange={(e) => set('settlement_gcash_number', e.target.value || null)} />
+          </Field>
+          <Field label="Account name">
+            <input className={inp} placeholder="Operator name" value={s.settlement_gcash_name ?? ''}
+              onChange={(e) => set('settlement_gcash_name', e.target.value || null)} />
+          </Field>
+        </div>
+        <div className="mt-4">
+          <span className="mb-1 block text-sm font-medium text-black/70">QR code image</span>
+          <div className="flex items-center gap-3">
+            <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/[0.04] ring-1 ring-black/10">
+              {s.settlement_qr_url ? <img src={s.settlement_qr_url} alt="QR" className="h-full w-full object-contain" /> : <span className="text-2xl text-black/25">🏷️</span>}
+            </span>
+            <div className="space-y-1.5">
+              <label className="inline-block cursor-pointer rounded-lg border border-black/10 px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/[0.03]">
+                {qrBusy ? 'Uploading…' : s.settlement_qr_url ? 'Replace QR' : 'Upload QR'}
+                <input type="file" accept="image/*" className="hidden" disabled={!supabase || qrBusy}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadQr(f); }} />
+              </label>
+              {s.settlement_qr_url && (
+                <button onClick={() => set('settlement_qr_url', null)} className="block text-xs font-medium text-red-600">Remove QR</button>
+              )}
+              <p className="text-xs text-black/40">Save settings to apply.</p>
+            </div>
+          </div>
+        </div>
       </Card>
 
       {/* Fees & commission */}

@@ -25,6 +25,10 @@ export interface AppSettings {
   service_padala: boolean;
   /** Max active (not delivered/cancelled) orders a rider may hold. 0 = unlimited. */
   max_active_orders_per_rider: number;
+  /** Where riders send their daily commission settlement (GCash/Maya). */
+  settlement_gcash_number: string | null;
+  settlement_gcash_name: string | null;
+  settlement_qr_url: string | null;
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {
