@@ -7,5 +7,6 @@ export * from './tracking.ts';
 export * from './sms.ts';
 export * from './csv.ts';
 export * from './roles.ts';
+export * from './hours.ts';
 export * from './settlement.ts';
 export * from './types.ts';

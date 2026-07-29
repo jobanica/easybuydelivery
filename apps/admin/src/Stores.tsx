@@ -20,10 +20,14 @@ import {
   deleteStore,
   deleteMenuItem,
 } from '@ebd/supabase';
+import { isOpenNow, scheduleLabel } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
 import { Toggle } from './ui.tsx';
+
+/** Time value normaliser: "" → null, otherwise the HH:MM string. */
+const hm = (v: string): string | null => (v.trim() ? v : null);
 
 interface StoreRow {
   id: string;
@@ -35,6 +39,8 @@ interface StoreRow {
   lat: number | null;
   lng: number | null;
   logo_url: string | null;
+  opens_at: string | null;
+  closes_at: string | null;
 }
 interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null; description: string | null }
 interface CatRow { id: string; title: string; sort_order: number }
@@ -54,6 +60,8 @@ export function Stores() {
   const [category, setCategory] = useState('');
   const [contact, setContact] = useState('');
   const [address, setAddress] = useState('');
+  const [opensAt, setOpensAt] = useState('');
+  const [closesAt, setClosesAt] = useState('');
   const [pin, setPin] = useState<MapValue | null>(null);
 
   async function load() {
@@ -81,8 +89,10 @@ export function Stores() {
         address: address.trim() || undefined,
         lat: pin?.lat,
         lng: pin?.lng,
+        opensAt: hm(opensAt),
+        closesAt: hm(closesAt),
       });
-      setName(''); setCategory(''); setContact(''); setAddress(''); setPin(null); setError(null);
+      setName(''); setCategory(''); setContact(''); setAddress(''); setOpensAt(''); setClosesAt(''); setPin(null); setError(null);
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -129,6 +139,17 @@ export function Stores() {
           <input className={inp} placeholder="Contact #" value={contact} onChange={(e) => setContact(e.target.value)} />
         </div>
         <input className={inp + ' mt-3 w-full'} placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-black/70">Opens at</span>
+            <input type="time" className={inp} value={opensAt} onChange={(e) => setOpensAt(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-black/70">Closes at</span>
+            <input type="time" className={inp} value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-black/40">Leave both blank for a store that’s always open. The store auto-opens and auto-closes on this schedule (Philippine time).</p>
         <div className="mt-3">
           <p className="mb-1.5 text-sm font-medium text-black/70">Store location</p>
           <MapPicker value={pin} onChange={setPin} />
@@ -161,9 +182,7 @@ export function Stores() {
                 </span>
               </button>
               <div className="flex items-center gap-2 text-sm">
-                <span className={`text-xs font-medium ${s.is_available ? 'text-green-700' : 'text-black/40'}`}>
-                  {s.is_available ? 'Open' : 'Closed'}
-                </span>
+                <StoreStatus store={s} />
                 <Toggle on={s.is_available} onChange={(v) => toggle(s.id, v)} />
               </div>
             </div>
@@ -195,17 +214,42 @@ export function Stores() {
   );
 }
 
+/** Current open/closed status for a store: manual toggle × opening hours. */
+function StoreStatus({ store }: { store: StoreRow }) {
+  const openByHours = isOpenNow(store.opens_at, store.closes_at);
+  if (!store.is_available) return <span className="text-xs font-medium text-black/40">Closed</span>;
+  if (!openByHours) {
+    return (
+      <span className="text-right text-xs font-medium text-yellow-700" title={scheduleLabel(store.opens_at, store.closes_at)}>
+        Closed now
+        <span className="block font-normal text-black/40">{scheduleLabel(store.opens_at, store.closes_at)}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="text-right text-xs font-medium text-green-700">
+      Open
+      {(store.opens_at || store.closes_at) && (
+        <span className="block font-normal text-black/40">{scheduleLabel(store.opens_at, store.closes_at)}</span>
+      )}
+    </span>
+  );
+}
+
 function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () => void }) {
   const [name, setName] = useState(store.name);
   const [category, setCategory] = useState(store.category ?? '');
   const [contact, setContact] = useState(store.contact_number ?? '');
   const [address, setAddress] = useState(store.address ?? '');
+  const [opensAt, setOpensAt] = useState(store.opens_at?.slice(0, 5) ?? '');
+  const [closesAt, setClosesAt] = useState(store.closes_at?.slice(0, 5) ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const dirty = name.trim() !== store.name || category !== (store.category ?? '')
-    || contact !== (store.contact_number ?? '') || address !== (store.address ?? '');
+    || contact !== (store.contact_number ?? '') || address !== (store.address ?? '')
+    || opensAt !== (store.opens_at?.slice(0, 5) ?? '') || closesAt !== (store.closes_at?.slice(0, 5) ?? '');
 
   async function save() {
     if (!supabase || !name.trim()) return;
@@ -216,6 +260,8 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
         category: category.trim() || null,
         contactNumber: contact.trim() || null,
         address: address.trim() || null,
+        opensAt: hm(opensAt),
+        closesAt: hm(closesAt),
       });
       setSaved(true); onSaved();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -237,6 +283,17 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
         <input className={inp} placeholder="Contact #" value={contact} onChange={(e) => { setContact(e.target.value); setSaved(false); }} />
       </div>
       <input className={inp + ' mt-2 w-full'} placeholder="Address (optional)" value={address} onChange={(e) => { setAddress(e.target.value); setSaved(false); }} />
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-black/60">Opens at</span>
+          <input type="time" className={inp} value={opensAt} onChange={(e) => { setOpensAt(e.target.value); setSaved(false); }} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-black/60">Closes at</span>
+          <input type="time" className={inp} value={closesAt} onChange={(e) => { setClosesAt(e.target.value); setSaved(false); }} />
+        </label>
+      </div>
+      <p className="mt-1 text-xs text-black/40">Blank = always open. Auto-opens/closes on schedule (Philippine time).</p>
       {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
     </div>
   );

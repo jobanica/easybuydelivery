@@ -118,6 +118,20 @@ export async function listOpenOrders(db: SupabaseClient) {
   return data ?? [];
 }
 
+/**
+ * Admin live board: all in-progress orders (not delivered/cancelled), newest
+ * first, with the assigned rider embedded (null until someone accepts).
+ */
+export async function listActiveOrdersAdmin(db: SupabaseClient) {
+  const { data, error } = await db
+    .from('orders')
+    .select('*, rider:riders(id, name, mobile_number)')
+    .not('status', 'in', '(delivered,cancelled)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** A rider accepts an order: claim it and move to `accepted`. */
 export async function acceptOrder(db: SupabaseClient, orderId: string, riderId: string) {
   const { error } = await db

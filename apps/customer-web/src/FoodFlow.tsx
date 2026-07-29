@@ -8,6 +8,9 @@ import {
   DEFAULT_DISTANCE_FEE_CONFIG,
   DEFAULT_FEE_CONFIG,
   MAX_STORES_PER_ORDER,
+  isOpenNow,
+  scheduleLabel,
+  formatHm,
   type CartLine,
   type CartOption,
   type DeliveryFeeModel,
@@ -27,7 +30,7 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 interface Category { id: string; title: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; loaded: boolean }
+interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
 function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categories: Category[]; items: MenuItem[] } {
@@ -124,10 +127,11 @@ export function FoodFlow() {
             });
           }
           // Only the store list up front — each menu loads lazily when opened.
-          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null }[])
+          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null }[])
             .map((s) => ({
               id: s.id, name: s.name, category: s.category ?? '',
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
+              opens_at: s.opens_at, closes_at: s.closes_at,
               categories: [], items: [], loaded: false,
             })));
         } else {
@@ -192,13 +196,14 @@ export function FoodFlow() {
     return [...set].sort();
   }, [stores]);
 
-  // Restaurants filtered by search box (name or category) + selected cuisine chip.
+  // Restaurants filtered by search box (name or category) + selected cuisine
+  // chip, with currently-open stores sorted ahead of closed ones.
   const shownStores = stores.filter((s) => {
     if (cuisine && s.category.trim() !== cuisine) return false;
     const q = storeSearch.trim().toLowerCase();
     if (!q) return true;
     return s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
-  });
+  }).sort((a, b) => Number(isOpenNow(b.opens_at, b.closes_at)) - Number(isOpenNow(a.opens_at, a.closes_at)));
 
   // Menu items filtered by the selected category + search box.
   const menuItems = (openStore?.items ?? []).filter((it) => {
@@ -356,31 +361,43 @@ export function FoodFlow() {
           </div>
 
           <div className="space-y-4">
-            {shownStores.map((s) => (
-              <button key={s.id} onClick={() => setOpenStoreId(s.id)}
-                className="block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+            {shownStores.map((s) => {
+              const open = isOpenNow(s.opens_at, s.closes_at);
+              return (
+              <button key={s.id} onClick={() => open && setOpenStoreId(s.id)} disabled={!open}
+                className={`block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition ${open ? 'hover:shadow-md' : 'cursor-not-allowed'}`}>
                 <div className="relative h-36 w-full">
                   {s.logo_url ? (
-                    <img src={s.logo_url} alt="" className="h-full w-full object-cover" />
+                    <img src={s.logo_url} alt="" className={`h-full w-full object-cover ${open ? '' : 'grayscale'}`} />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green/15 to-brand-purple/15 text-5xl">
+                    <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green/15 to-brand-purple/15 text-5xl ${open ? '' : 'grayscale'}`}>
                       {cuisineEmoji(s.category)}
                     </div>
                   )}
-                  <span className="absolute left-3 top-3 rounded-full bg-brand-green px-2.5 py-1 text-[11px] font-bold text-white shadow">● Open now</span>
+                  {!open && <div className="absolute inset-0 bg-white/50" />}
+                  {open ? (
+                    <span className="absolute left-3 top-3 rounded-full bg-brand-green px-2.5 py-1 text-[11px] font-bold text-white shadow">● Open now</span>
+                  ) : (
+                    <span className="absolute left-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-bold text-white shadow">
+                      Closed{s.opens_at ? ` · opens ${formatHm(s.opens_at)}` : ''}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 p-3.5">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-lg shadow ring-1 ring-black/5">
-                    {s.logo_url ? <img src={s.logo_url} alt="" className="h-full w-full object-cover" /> : cuisineEmoji(s.category)}
+                    {s.logo_url ? <img src={s.logo_url} alt="" className={`h-full w-full object-cover ${open ? '' : 'grayscale'}`} /> : cuisineEmoji(s.category)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-bold">{s.name}</span>
-                    <span className="text-xs text-black/50">{s.category || 'Restaurant'}</span>
+                    <span className={`block truncate font-bold ${open ? '' : 'text-black/50'}`}>{s.name}</span>
+                    <span className="text-xs text-black/50">
+                      {s.category || 'Restaurant'}
+                      {(s.opens_at || s.closes_at) && <span className="text-black/35"> · {scheduleLabel(s.opens_at, s.closes_at)}</span>}
+                    </span>
                   </span>
-                  <span className="text-brand-purple">→</span>
+                  <span className={open ? 'text-brand-purple' : 'text-black/25'}>→</span>
                 </div>
               </button>
-            ))}
+            ); })}
             {shownStores.length === 0 && (
               <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
                 {storeSearch ? `No restaurants match “${storeSearch}”.`
@@ -558,7 +575,14 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-xl font-black">{store.name}</h2>
-              <p className="text-sm text-black/50">{store.category || 'Restaurant'} · <span className="text-brand-green font-semibold">Open now</span></p>
+              <p className="text-sm text-black/50">
+                {store.category || 'Restaurant'} · {isOpenNow(store.opens_at, store.closes_at)
+                  ? <span className="font-semibold text-brand-green">Open now</span>
+                  : <span className="font-semibold text-black/50">Closed</span>}
+              </p>
+              {(store.opens_at || store.closes_at) && (
+                <p className="text-xs text-black/40">🕒 {scheduleLabel(store.opens_at, store.closes_at)}</p>
+              )}
             </div>
           </div>
           {/* Info strip */}
