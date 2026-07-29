@@ -18,27 +18,18 @@ import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
 
 const today = new Date().toISOString().slice(0, 10);
+type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
 
-export function App({ riderId }: { riderId?: string } = {}) {
+export function App({ riderId, riderName }: { riderId?: string; riderName?: string } = {}) {
   const [data] = useState<RiderData>(() => makeRiderData(riderId));
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [open, setOpen] = useState<RiderOrder[]>([]);
   const [active, setActive] = useState<RiderOrder[]>([]);
-  const [tab, setTab] = useState<'available' | 'active'>('available');
+  const [tab, setTab] = useState<Tab>('dashboard');
   const [error, setError] = useState<string | null>(null);
-  const [incoming, setIncoming] = useState<number>(0);
   const [online, setOnline] = useState(false);
   const [onlineBusy, setOnlineBusy] = useState(false);
-
-  // Load the rider's saved online/offline availability.
-  useEffect(() => { data.getOnline().then(setOnline).catch(() => {}); }, [data]);
-
-  async function toggleOnline() {
-    setOnlineBusy(true);
-    try { setOnline(await data.setOnline(!online)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setOnlineBusy(false); }
-  }
+  const [declined, setDeclined] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -50,29 +41,29 @@ export function App({ riderId }: { riderId?: string } = {}) {
   }, [data]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-
-  // Register for push (native) so incoming orders reach the rider app-closed.
+  useEffect(() => { data.getOnline().then(setOnline).catch(() => {}); }, [data]);
   usePushRegistration(riderId);
 
-  // Live: new orders entering the pool while the app is open.
   useEffect(() => {
     if (!supabase) return;
-    return subscribeToNewOrders(supabase, () => {
-      setIncoming((n) => n + 1);
-      void refresh();
-    });
+    return subscribeToNewOrders(supabase, () => void refresh());
   }, [refresh]);
 
   const locked = isLockedOut(ledger, today);
   const overdue = overdueBalance(ledger, today);
+  const owed = owedBalance(ledger);
+  const pool = open.filter((o) => !declined.has(o.id));
+
+  async function toggleOnline() {
+    setOnlineBusy(true);
+    try { setOnline(await data.setOnline(!online)); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setOnlineBusy(false); }
+  }
 
   async function accept(orderId: string) {
-    try {
-      await data.accept(orderId);
-      setTab('active');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    try { await data.accept(orderId); setTab('deliveries'); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     await refresh();
   }
 
@@ -83,145 +74,202 @@ export function App({ riderId }: { riderId?: string } = {}) {
     await refresh();
   }
 
+  const firstName = (riderName ?? '').trim().split(/\s+/)[0] || 'Rider';
+
   return (
-    <div className="min-h-screen">
-      <header className="bg-brand-purple text-white">
-        <div className="mx-auto max-w-lg px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold">Easy Buy Delivery — Rider</h1>
-              <p className="text-xs opacity-90">{data.live ? 'Live' : 'Preview mode'}</p>
+    <div className="min-h-screen bg-[#f6f7f4] pb-24">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3.5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-green/15 text-lg">🛵</span>
+            <div className="leading-tight">
+              <p className="text-xs text-black/45">Welcome back!</p>
+              <h1 className="text-base font-extrabold">{firstName}</h1>
             </div>
-            <BalancePill owed={owedBalance(ledger)} />
           </div>
-          <OnlineToggle online={online} busy={onlineBusy} onToggle={toggleOnline} />
+          <button onClick={() => setTab('requests')}
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.04]">
+            <BellIcon />
+            {online && pool.length > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-purple px-1 text-[10px] font-bold text-white">
+                {pool.length}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-lg px-5 py-5">
-        {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <main className="mx-auto max-w-lg px-5 py-4">
+        {error && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        {incoming > 0 && !locked && online && (
-          <button
-            onClick={() => { setIncoming(0); setTab('available'); }}
-            className="mb-4 flex w-full items-center justify-between rounded-lg bg-brand-green px-4 py-3 text-sm font-semibold text-white shadow">
-            <span>🔔 {incoming} new order{incoming > 1 ? 's' : ''} in the pool</span>
-            <span className="text-xs opacity-90">View →</span>
-          </button>
+        {tab === 'dashboard' && (
+          <Dashboard
+            online={online} onlineBusy={onlineBusy} onToggleOnline={toggleOnline}
+            pool={pool} active={active} owed={owed} locked={locked}
+            onGo={setTab} onAccept={accept} data={data} onChange={refresh} />
         )}
 
-        {locked ? (
-          <LockScreen overdue={overdue} onSettle={settleNow} />
-        ) : (
-          <>
-            <nav className="mb-4 flex gap-2">
-              <Tab active={tab === 'available'} onClick={() => setTab('available')}>
-                Available ({open.length})
-              </Tab>
-              <Tab active={tab === 'active'} onClick={() => setTab('active')}>
-                My deliveries ({active.length})
-              </Tab>
-            </nav>
+        {tab === 'requests' && (
+          locked ? <LockCard overdue={overdue} onSettle={settleNow} />
+            : !online ? <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} />
+            : pool.length === 0 ? <Empty icon="📭">No requests in the pool right now.</Empty>
+            : <div className="space-y-3">
+                <SectionTitle>Available requests</SectionTitle>
+                {pool.map((o) => (
+                  <RequestCard key={o.id} order={o}
+                    onAccept={() => accept(o.id)}
+                    onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
+                ))}
+              </div>
+        )}
 
-            {tab === 'available' ? (
-              !online
-                ? <OfflineNotice onGoOnline={toggleOnline} busy={onlineBusy} />
-                : open.length === 0
-                  ? <Empty>No orders in the pool right now.</Empty>
-                  : open.map((o) => (
-                      <PoolCard key={o.id} order={o} onAccept={() => accept(o.id)} />
-                    ))
-            ) : (
-              active.length === 0
-                ? <Empty>No active deliveries. Accept one from the pool.</Empty>
-                : active.map((o) => (
-                    <ActiveCard key={o.id} order={o} data={data} onChange={refresh} />
-                  ))
-            )}
-          </>
+        {tab === 'deliveries' && (
+          active.length === 0
+            ? <Empty icon="✅">No active deliveries. Accept one from Requests.</Empty>
+            : <div className="space-y-4">
+                <SectionTitle>My deliveries</SectionTitle>
+                {active.map((o) => <DeliveryCard key={o.id} order={o} data={data} onChange={refresh} />)}
+              </div>
+        )}
+
+        {tab === 'earnings' && <EarningsView ledger={ledger} owed={owed} overdue={overdue} onSettle={settleNow} />}
+
+        {tab === 'settings' && (
+          <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline} />
         )}
       </main>
+
+      <BottomNav tab={tab} onTab={setTab} requests={online ? pool.length : 0} deliveries={active.length} />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
 
-function LockScreen({ overdue, onSettle }: { overdue: number; onSettle: () => void }) {
+function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, locked, onGo, onAccept, data, onChange }: {
+  online: boolean; onlineBusy: boolean; onToggleOnline: () => void;
+  pool: RiderOrder[]; active: RiderOrder[]; owed: number; locked: boolean;
+  onGo: (t: Tab) => void; onAccept: (id: string) => void; data: RiderData; onChange: () => Promise<void>;
+}) {
+  const todaysPotential = active.reduce((s, o) => s + riderEarn(o), 0);
   return (
-    <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl">🔒</div>
-      <h2 className="text-lg font-bold">Account locked</h2>
-      <p className="mt-1 text-sm text-black/60">
-        Settle yesterday's commission balance to accept new orders.
-      </p>
-      <p className="my-4 text-3xl font-bold text-brand-purple">{peso(overdue)}</p>
-      <p className="text-xs text-black/50">
-        Pay via GCash/Maya to the operator, then confirm below. (In production the
-        admin marks it paid.)
-      </p>
-      <button onClick={onSettle}
-        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white">
-        Settle {peso(overdue)} to continue
-      </button>
+    <div className="space-y-4">
+      <OnlineToggle online={online} busy={onlineBusy} onToggle={onToggleOnline} />
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="In the pool" value={String(pool.length)} tint="green"
+          hint={online ? 'Tap to view' : 'Go online to see'} onClick={() => onGo('requests')} icon={<InboxIcon />} />
+        <StatCard label="My deliveries" value={String(active.length)} tint="purple"
+          hint="In progress" onClick={() => onGo('deliveries')} icon={<BoxIcon />} />
+      </div>
+
+      {/* Owed / earnings */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+          <p className="text-xs text-black/45">On your plate</p>
+          <p className="mt-1 text-2xl font-black text-brand-ink">{peso(todaysPotential)}</p>
+          <p className="text-[11px] text-black/40">Earnings from active deliveries</p>
+        </div>
+        <button onClick={() => onGo('earnings')}
+          className={`rounded-2xl p-4 text-left shadow-sm ring-1 ${owed > 0 ? 'bg-brand-yellow/20 ring-brand-yellow/40' : 'bg-white ring-black/5'}`}>
+          <p className="text-xs text-black/45">Commission owed</p>
+          <p className={`mt-1 text-2xl font-black ${owed > 0 ? 'text-yellow-800' : 'text-brand-ink'}`}>{peso(owed)}</p>
+          <p className="text-[11px] text-black/40">{owed > 0 ? 'Tap to settle' : 'All settled'}</p>
+        </button>
+      </div>
+
+      {locked && <LockCard overdue={owed} onSettle={async () => onGo('earnings')} compact />}
+
+      {/* Next up */}
+      {active.length > 0 ? (
+        <div>
+          <SectionTitle>Continue delivery</SectionTitle>
+          <DeliveryCard order={active[0]!} data={data} onChange={onChange} />
+        </div>
+      ) : online && !locked && pool.length > 0 ? (
+        <div>
+          <SectionTitle>New request</SectionTitle>
+          <RequestCard order={pool[0]!} onAccept={() => onAccept(pool[0]!.id)} onDecline={() => onGo('requests')} declineLabel="See all" />
+        </div>
+      ) : (
+        <Empty icon={online ? '📭' : '😴'}>
+          {online ? 'No requests yet — new orders appear here.' : "You're offline. Go online to receive orders."}
+        </Empty>
+      )}
     </div>
   );
 }
 
-/** The next forward status for an order, or null if terminal. */
-function nextStatus(order: RiderOrder): OrderStatus | null {
-  const flow = ORDER_FLOW[order.service_type];
-  const i = flow.indexOf(order.status);
-  return i >= 0 && i < flow.length - 1 ? flow[i + 1]! : null;
+function StatCard({ label, value, hint, tint, icon, onClick }: {
+  label: string; value: string; hint: string; tint: 'green' | 'purple'; icon: React.ReactNode; onClick: () => void;
+}) {
+  const tintCls = tint === 'green' ? 'bg-brand-green/15 text-green-800' : 'bg-brand-purple/15 text-brand-purple';
+  return (
+    <button onClick={onClick} className="rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+      <div className="flex items-center justify-between">
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full ${tintCls}`}>{icon}</span>
+        <span className="text-3xl font-black text-brand-ink">{value}</span>
+      </div>
+      <p className="mt-2 text-sm font-semibold">{label}</p>
+      <p className="text-[11px] text-black/40">{hint}</p>
+    </button>
+  );
 }
 
-const STATUS_ACTION: Record<OrderStatus, string> = {
-  pending: 'Accept',
-  accepted: 'Accepted',
-  preparing: 'Mark preparing',
-  picked_up: 'Picked up',
-  on_the_way: 'On the way',
-  delivered: 'Delivered & collected',
-  cancelled: 'Cancelled',
-};
-
-function amountToCollect(o: RiderOrder): number | null {
-  // Fees prepaid online → rider collects only the goods they fronted.
-  if (o.payment_method === 'online') {
-    if (o.service_type === 'pabili') return o.actual_amount; // null until bought
-    return o.goods_cost; // food goods; 0 for padala
-  }
-  // Paid to the rider via QR → nothing collected at the door.
-  if (o.payment_method === 'rider_qr') return 0;
-  // Cash on delivery.
-  if (o.service_type === 'padala') return o.delivery_fee;
-  if (o.service_type === 'pabili') {
-    if (o.actual_amount == null) return null; // unknown until bought
-    return pabiliCollectible(o.actual_amount, o.delivery_fee);
-  }
-  return o.goods_cost + o.delivery_fee; // food
-}
+// ---------------------------------------------------------------------------
+// Request (pool) card
+// ---------------------------------------------------------------------------
 
 function riderEarn(o: RiderOrder): number {
   return riderEarnings({
-    deliveryFee: o.delivery_fee,
-    storeFeeTotal: o.store_fee_total,
-    convenienceFee: o.convenience_fee,
-    commission: o.commission_amount,
+    deliveryFee: o.delivery_fee, storeFeeTotal: o.store_fee_total,
+    convenienceFee: o.convenience_fee, commission: o.commission_amount,
   });
 }
 
-function PoolCard({ order, onAccept }: { order: RiderOrder; onAccept: () => void }) {
+const serviceTint: Record<string, string> = {
+  food: 'bg-brand-green/15 text-green-800',
+  pabili: 'bg-brand-purple/15 text-brand-purple',
+  padala: 'bg-brand-yellow/30 text-yellow-800',
+};
+
+function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
+  order: RiderOrder; onAccept: () => void; onDecline: () => void; declineLabel?: string;
+}) {
   return (
-    <div className="mb-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-      <CardHead order={order} />
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm">
-          <span className="font-bold text-green-700">Earn {peso(riderEarn(order))}</span>
-          <span className="ml-1 text-xs text-black/40">after ₱{order.commission_amount.toFixed(2)} commission</span>
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+      <div className="flex items-center justify-between px-4 pt-4">
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${serviceTint[order.service_type] ?? 'bg-black/5'}`}>
+          {order.service_type}
         </span>
+        <span className="rounded-full bg-brand-ink px-2.5 py-1 text-xs font-bold text-white">{peso(riderEarn(order))}</span>
+      </div>
+      <div className="px-4 py-3">
+        <p className="text-sm font-semibold">
+          {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
+        </p>
+        <a href={`tel:${order.customer_contact}`} className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-purple">
+          <PhoneIcon /> {order.customer_contact}
+        </a>
+        {order.notes && (
+          <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
+        )}
+        <p className="mt-2 text-xs text-black/45">
+          You earn <span className="font-bold text-green-700">{peso(riderEarn(order))}</span>
+          <span className="text-black/35"> · after {peso(order.commission_amount)} commission</span>
+        </p>
+      </div>
+      <div className="flex gap-2 border-t border-black/5 p-3">
+        <button onClick={onDecline}
+          className="flex-1 rounded-xl border border-black/10 py-2.5 text-sm font-semibold text-black/60 hover:bg-black/[0.03]">
+          {declineLabel}
+        </button>
         <button onClick={onAccept}
-          className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white">
+          className="flex-1 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:brightness-95">
           Accept
         </button>
       </div>
@@ -229,15 +277,43 @@ function PoolCard({ order, onAccept }: { order: RiderOrder; onAccept: () => void
   );
 }
 
-function ActiveCard({ order, data, onChange }:
-  { order: RiderOrder; data: RiderData; onChange: () => Promise<void> }) {
+// ---------------------------------------------------------------------------
+// Active delivery card
+// ---------------------------------------------------------------------------
+
+function nextStatus(order: RiderOrder): OrderStatus | null {
+  const flow = ORDER_FLOW[order.service_type];
+  const i = flow.indexOf(order.status);
+  return i >= 0 && i < flow.length - 1 ? flow[i + 1]! : null;
+}
+
+const STATUS_ACTION: Record<OrderStatus, string> = {
+  pending: 'Accept', accepted: 'Accepted', preparing: 'Mark preparing',
+  picked_up: 'Picked up', on_the_way: 'On the way',
+  delivered: 'Mark as completed', cancelled: 'Cancelled',
+};
+
+function amountToCollect(o: RiderOrder): number | null {
+  if (o.payment_method === 'online') {
+    if (o.service_type === 'pabili') return o.actual_amount;
+    return o.goods_cost;
+  }
+  if (o.payment_method === 'rider_qr') return 0;
+  if (o.service_type === 'padala') return o.delivery_fee;
+  if (o.service_type === 'pabili') {
+    if (o.actual_amount == null) return null;
+    return pabiliCollectible(o.actual_amount, o.delivery_fee);
+  }
+  return o.goods_cost + o.delivery_fee;
+}
+
+function DeliveryCard({ order, data, onChange }: { order: RiderOrder; data: RiderData; onChange: () => Promise<void> }) {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const next = nextStatus(order);
   const collect = amountToCollect(order);
   const needsActual = order.service_type === 'pabili' && order.actual_amount == null;
 
-  // Share GPS to the customer's map while in transit (live mode only).
   useLocationPublisher(order.id, order.status);
 
   async function saveActual() {
@@ -249,139 +325,256 @@ function ActiveCard({ order, data, onChange }:
   }
 
   return (
-    <div className="mb-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-      <CardHead order={order} />
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+      {/* Status banner */}
+      <div className="flex items-center justify-between bg-brand-green/10 px-4 py-2.5">
+        <span className="flex items-center gap-1.5 text-sm font-bold text-green-800">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-brand-green" />
+          {order.status.replaceAll('_', ' ').replace(/^\w/, (c) => c.toUpperCase())}
+        </span>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${serviceTint[order.service_type] ?? 'bg-black/5'}`}>
+          {order.service_type}
+        </span>
+      </div>
 
-      {order.store_contact && (
-        <a href={`tel:${order.store_contact}`}
-          className="mt-2 inline-block text-sm text-brand-purple">📞 Call store {order.store_contact}</a>
-      )}
+      <div className="p-4">
+        <p className="text-sm font-semibold">
+          {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
+        </p>
 
-      {needsActual && (
-        <div className="mt-3 rounded-lg bg-brand-yellow/15 p-3">
-          <p className="mb-1 text-xs font-medium">Enter the receipt total (cap {peso(order.budget_cap ?? 0)})</p>
+        {/* Customer + store contacts */}
+        <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-xs text-black/45">Customer</p>
+            <p className="truncate text-sm font-medium">{order.customer_contact}</p>
+          </div>
           <div className="flex gap-2">
-            <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm" placeholder="Actual ₱" />
-            <button onClick={saveActual}
-              className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Save</button>
+            <a href={`tel:${order.customer_contact}`} aria-label="Call customer"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-white"><PhoneIcon /></a>
+            <a href={`sms:${order.customer_contact}`} aria-label="Message customer"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
           </div>
         </div>
-      )}
+        {order.store_contact && (
+          <a href={`tel:${order.store_contact}`} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-purple">
+            <PhoneIcon /> Call store {order.store_contact}
+          </a>
+        )}
+        {order.notes && (
+          <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
+        )}
 
-      {note && (
-        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>
-      )}
+        {needsActual && (
+          <div className="mt-3 rounded-xl bg-brand-yellow/15 p-3">
+            <p className="mb-1 text-xs font-medium">Enter the receipt total (cap {peso(order.budget_cap ?? 0)})</p>
+            <div className="flex gap-2">
+              <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)}
+                className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm" placeholder="Actual ₱" />
+              <button onClick={saveActual} className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Save</button>
+            </div>
+          </div>
+        )}
+        {note && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>}
 
-      {/* At drop-off, show the rider QR for unpaid COD orders so the customer
-          can pay online instead of cash. */}
-      {order.payment_status !== 'paid' && order.status === 'on_the_way' && (
-        <div className="mt-3 flex flex-col items-center rounded-lg bg-black/[0.02] p-3">
-          <p className="mb-2 text-xs font-medium text-black/60">Or let the customer scan to pay</p>
-          <Qr payload={`ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+        {order.payment_status !== 'paid' && order.status === 'on_the_way' && (
+          <div className="mt-3 flex flex-col items-center rounded-xl bg-black/[0.02] p-3">
+            <p className="mb-2 text-xs font-medium text-black/60">Let the customer scan to pay</p>
+            <Qr payload={`ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+          </div>
+        )}
+
+        {/* Collect + advance */}
+        <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
+          <span className="text-sm">
+            {order.payment_status === 'paid'
+              ? <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
+              : collect == null
+                ? <span className="text-black/50">Collect: enter actual first</span>
+                : <>Collect <span className="font-bold">{peso(collect)}</span></>}
+          </span>
+          {next && (
+            <button disabled={next === 'delivered' && needsActual}
+              onClick={async () => { await data.advance(order, next); await onChange(); }}
+              className="rounded-xl bg-brand-green px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+              {STATUS_ACTION[next]}
+            </button>
+          )}
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
 
-      <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
-        <span className="text-sm">
-          {order.payment_status === 'paid'
-            ? <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
-            : collect == null
-              ? <span className="text-black/50">Collect: enter actual first</span>
-              : <>Collect <span className="font-bold">{peso(collect)}</span></>}
-        </span>
-        {next && (
-          <button
-            disabled={next === 'delivered' && needsActual}
-            onClick={async () => { await data.advance(order, next); await onChange(); }}
-            className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {STATUS_ACTION[next]}
+// ---------------------------------------------------------------------------
+// Earnings / settlement
+// ---------------------------------------------------------------------------
+
+function EarningsView({ ledger, owed, overdue, onSettle }:
+  { ledger: LedgerEntry[]; owed: number; overdue: number; onSettle: () => void }) {
+  const history = useMemo(() => [...ledger].sort((a, b) => b.businessDay.localeCompare(a.businessDay)), [ledger]);
+  return (
+    <div className="space-y-4">
+      <SectionTitle>Earnings &amp; settlement</SectionTitle>
+      <div className="rounded-2xl bg-gradient-to-br from-brand-green to-brand-purple p-5 text-white shadow-md">
+        <p className="text-xs uppercase tracking-wide text-white/80">Commission owed to operator</p>
+        <p className="mt-1 text-3xl font-black">{peso(owed)}</p>
+        <p className="mt-1 text-xs text-white/85">
+          You keep every delivery &amp; convenience fee; the operator's commission is settled per day.
+        </p>
+        {overdue > 0 && (
+          <button onClick={onSettle} className="mt-3 w-full rounded-xl bg-white py-2.5 text-sm font-bold text-brand-purple">
+            Settle {peso(overdue)} now
           </button>
         )}
       </div>
+
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <p className="mb-2 text-sm font-semibold">Commission history</p>
+        {history.length === 0 ? (
+          <p className="py-4 text-center text-sm text-black/40">No commission recorded yet.</p>
+        ) : (
+          <ul className="divide-y divide-black/5">
+            {history.map((e) => (
+              <li key={e.businessDay} className="flex items-center justify-between py-2.5 text-sm">
+                <span className="text-black/60">{e.businessDay}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-semibold">{peso(e.amount)}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${e.settled ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>
+                    {e.settled ? 'Settled' : 'Unsettled'}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
 
-function CardHead({ order }: { order: RiderOrder }) {
+function SettingsView({ live, online, busy, onToggleOnline }:
+  { live: boolean; online: boolean; busy: boolean; onToggleOnline: () => void }) {
   return (
-    <div className="flex items-start justify-between">
-      <div>
-        <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-xs font-semibold capitalize text-green-800">
-          {order.service_type}
-        </span>
-        <p className="mt-1 text-sm font-medium">
-          {order.item_description ?? (order.service_type === 'food' ? 'Food order' : '—')}
-        </p>
-        <a href={`tel:${order.customer_contact}`} className="text-xs text-brand-purple">
-          📞 {order.customer_contact}
-        </a>
-        {order.notes && (
-          <p className="mt-1 rounded-lg bg-brand-yellow/20 px-2 py-1 text-xs text-yellow-900">📝 {order.notes}</p>
-        )}
-      </div>
-      <div className="text-right">
-        <span className="block text-xs capitalize text-black/50">{order.status.replaceAll('_', ' ')}</span>
-        {order.payment_status === 'paid' && (
-          <span className="mt-1 inline-block rounded-full bg-brand-green/15 px-2 py-0.5 text-[10px] font-semibold text-green-800">
-            PAID online
+    <div className="space-y-4">
+      <SectionTitle>Settings</SectionTitle>
+      <OnlineToggle online={online} busy={busy} onToggle={onToggleOnline} />
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Connection</span>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${live ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>
+            {live ? 'Live' : 'Preview mode'}
           </span>
-        )}
+        </div>
       </div>
+      <p className="px-1 text-xs text-black/40">Easy Buy Delivery — Rider</p>
     </div>
   );
 }
 
-/** Online/offline availability switch shown in the header. */
-function OnlineToggle({ online, busy, onToggle }:
-  { online: boolean; busy: boolean; onToggle: () => void }) {
+// ---------------------------------------------------------------------------
+// Shared bits
+// ---------------------------------------------------------------------------
+
+function OnlineToggle({ online, busy, onToggle }: { online: boolean; busy: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle} disabled={busy} aria-pressed={online}
-      className="mt-3 flex w-full items-center justify-between rounded-xl bg-white/15 px-4 py-2.5 text-left disabled:opacity-70">
-      <span className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-brand-green' : 'bg-white/50'}`} />
-        <span className="text-sm font-semibold">{busy ? 'Saving…' : online ? "You're online" : "You're offline"}</span>
+      className={`flex w-full items-center justify-between rounded-2xl px-4 py-3.5 text-left shadow-sm ring-1 transition disabled:opacity-70 ${
+        online ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-brand-ink ring-black/10'
+      }`}>
+      <span className="flex items-center gap-2.5">
+        <span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-white' : 'bg-black/30'}`} />
+        <span className="font-bold">{busy ? 'Saving…' : online ? "You're online" : "You're offline"}</span>
       </span>
-      <span className={`relative h-6 w-11 rounded-full transition ${online ? 'bg-brand-green' : 'bg-white/30'}`}>
+      <span className={`relative h-6 w-11 rounded-full transition ${online ? 'bg-white/30' : 'bg-black/15'}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${online ? 'left-[1.375rem]' : 'left-0.5'}`} />
       </span>
     </button>
   );
 }
 
-function OfflineNotice({ onGoOnline, busy }: { onGoOnline: () => void; busy: boolean }) {
+function LockCard({ overdue, onSettle, compact = false }: { overdue: number; onSettle: () => void; compact?: boolean }) {
   return (
-    <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
+    <div className={`rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5 ${compact ? '' : 'mt-2'}`}>
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl">🔒</div>
+      <h2 className="text-lg font-bold">Account locked</h2>
+      <p className="mt-1 text-sm text-black/60">Settle yesterday's commission balance to accept new orders.</p>
+      <p className="my-4 text-3xl font-black text-brand-purple">{peso(overdue)}</p>
+      <button onClick={onSettle} className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white">
+        {compact ? 'Go to settlement' : `Settle ${peso(overdue)} to continue`}
+      </button>
+    </div>
+  );
+}
+
+function OfflineCard({ onGoOnline, busy }: { onGoOnline: () => void; busy: boolean }) {
+  return (
+    <div className="rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-black/[0.05] text-2xl">😴</div>
       <h2 className="text-lg font-bold">You're offline</h2>
       <p className="mt-1 text-sm text-black/60">Go online to see the order pool and accept deliveries.</p>
       <button onClick={onGoOnline} disabled={busy}
-        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        className="mt-4 w-full rounded-xl bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Saving…' : 'Go online'}
       </button>
     </div>
   );
 }
 
-function BalancePill({ owed }: { owed: number }) {
+const SectionTitle = ({ children }: { children: React.ReactNode }) =>
+  <h2 className="mb-2 text-lg font-extrabold">{children}</h2>;
+
+const Empty = ({ children, icon = '📭' }: { children: React.ReactNode; icon?: string }) => (
+  <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-black/5">
+    <div className="mb-2 text-3xl">{icon}</div>
+    <p className="text-sm text-black/50">{children}</p>
+  </div>
+);
+
+function BottomNav({ tab, onTab, requests, deliveries }:
+  { tab: Tab; onTab: (t: Tab) => void; requests: number; deliveries: number }) {
   return (
-    <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium">
-      Owed: {peso(owed)}
-    </span>
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around px-2 py-1.5">
+        <NavBtn active={tab === 'dashboard'} onClick={() => onTab('dashboard')} label="Dashboard" icon={<HomeIcon />} />
+        <NavBtn active={tab === 'requests'} onClick={() => onTab('requests')} label="Requests" icon={<InboxIcon />} badge={requests} />
+        <NavBtn active={tab === 'deliveries'} onClick={() => onTab('deliveries')} label="Deliveries" icon={<BoxIcon />} badge={deliveries} />
+        <NavBtn active={tab === 'earnings'} onClick={() => onTab('earnings')} label="Earnings" icon={<WalletIcon />} />
+        <NavBtn active={tab === 'settings'} onClick={() => onTab('settings')} label="Settings" icon={<GearIcon />} />
+      </div>
+    </nav>
   );
 }
 
-function Tab({ active, onClick, children }:
-  { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function NavBtn({ active, onClick, label, icon, badge = 0 }:
+  { active: boolean; onClick: () => void; label: string; icon: React.ReactNode; badge?: number }) {
   return (
     <button onClick={onClick}
-      className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-        active ? 'bg-brand-green text-white' : 'bg-white text-black/60 ring-1 ring-black/10'
+      className={`relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition ${
+        active ? 'text-brand-green' : 'text-black/45 hover:text-black/70'
       }`}>
-      {children}
+      <span className={`relative flex h-7 w-7 items-center justify-center rounded-full transition ${active ? 'bg-brand-green/15' : ''}`}>
+        {icon}
+        {badge > 0 && (
+          <span className="absolute -right-1.5 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-brand-purple px-1 text-[9px] font-bold text-white">
+            {badge}
+          </span>
+        )}
+      </span>
+      {label}
     </button>
   );
 }
 
-const Empty = ({ children }: { children: React.ReactNode }) =>
-  <p className="rounded-xl bg-white p-6 text-center text-sm text-black/50 shadow-sm ring-1 ring-black/5">{children}</p>;
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
+const ic = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+function HomeIcon() { return <svg {...ic}><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>; }
+function InboxIcon() { return <svg {...ic}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13l3.5 7v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6z" /></svg>; }
+function BoxIcon() { return <svg {...ic}><path d="M21 8V6a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 6v12a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 18z" /><path d="m3.3 7 8.7 5 8.7-5M12 22V12" /></svg>; }
+function WalletIcon() { return <svg {...ic}><path d="M20 7H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" /><path d="M2 9V7a2 2 0 0 1 2-2h13M17 13h.01" /></svg>; }
+function GearIcon() { return <svg {...ic}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" /></svg>; }
+function BellIcon() { return <svg {...ic} width="20" height="20"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>; }
+function PhoneIcon() { return <svg {...ic} width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>; }
+function ChatIcon() { return <svg {...ic} width="14" height="14"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" /></svg>; }

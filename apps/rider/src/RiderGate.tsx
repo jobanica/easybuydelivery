@@ -20,7 +20,7 @@ const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm
 
 function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
-  const [rider, setRider] = useState<{ id: string; application_status: string } | null>(null);
+  const [rider, setRider] = useState<{ id: string; application_status: string; name?: string } | null>(null);
   const [checked, setChecked] = useState(false);
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
@@ -36,8 +36,8 @@ function LiveGate() {
   useEffect(() => {
     if (!userId) { setRider(null); setChecked(userId === null && REQUIRE_ACCOUNT); return; }
     setChecked(false);
-    supabase!.from('riders').select('id, application_status').eq('profile_id', userId).maybeSingle()
-      .then(({ data }) => { setRider((data as { id: string; application_status: string } | null) ?? null); setChecked(true); });
+    supabase!.from('riders').select('id, application_status, name').eq('profile_id', userId).maybeSingle()
+      .then(({ data }) => { setRider((data as { id: string; application_status: string; name?: string } | null) ?? null); setChecked(true); });
   }, [userId]);
 
   if (userId === undefined || (userId && !checked) || (!userId && !REQUIRE_ACCOUNT)) {
@@ -45,7 +45,7 @@ function LiveGate() {
   }
   if (!userId) return <OtpSignIn />;
   if (!rider) return <Onboard onDone={setRider} />;
-  if (rider.application_status === 'approved') return <App riderId={rider.id} />;
+  if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
 }
 
