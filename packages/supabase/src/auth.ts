@@ -21,6 +21,27 @@ export async function sendOtp(db: SupabaseClient, contact: OtpContact) {
   if (error) throw error;
 }
 
+/**
+ * Send a 6-digit sign-in code to an email (creates the account on first use).
+ * Uses Supabase's built-in mailer — no SMS provider needed.
+ */
+export async function sendEmailOtp(db: SupabaseClient, email: string) {
+  const { error } = await db.auth.signInWithOtp({
+    email: email.trim().toLowerCase(),
+    options: { shouldCreateUser: true },
+  });
+  if (error) throw error;
+}
+
+/** Verify an email OTP code and establish a session; returns the user. */
+export async function verifyEmailOtp(db: SupabaseClient, email: string, token: string) {
+  const { data, error } = await db.auth.verifyOtp({
+    email: email.trim().toLowerCase(), token: token.trim(), type: 'email',
+  });
+  if (error) throw error;
+  return data.user;
+}
+
 /** Verify the OTP code and establish a session. */
 export async function verifyOtp(db: SupabaseClient, contact: OtpContact, token: string) {
   const params =
