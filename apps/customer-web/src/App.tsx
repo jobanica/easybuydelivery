@@ -7,6 +7,7 @@ import { FoodFlow } from './FoodFlow.tsx';
 import { TrackingMap } from './tracking/TrackingMap.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 import { REQUIRE_ACCOUNT } from './config.ts';
+import { Welcome } from './Welcome.tsx';
 
 type Service = 'food' | 'pabili' | 'padala';
 type Tab = Service | 'track';
@@ -20,6 +21,7 @@ const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
 export function App() {
   const { live, mobile, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('food');
+  const [entered, setEntered] = useState(false);
   const [enabled, setEnabled] = useState<ServiceAvailability>(ALL_ON);
 
   useEffect(() => {
@@ -39,6 +41,10 @@ export function App() {
   const noneEnabled = !enabled.food && !enabled.pabili && !enabled.padala;
   const tracking = tab === 'track';
   const service = tracking ? 'food' : tab;
+
+  if (!entered) {
+    return <Welcome onOrder={() => setEntered(true)} onTrack={() => { setEntered(true); setTab('track'); }} />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
