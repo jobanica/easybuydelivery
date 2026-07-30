@@ -89,18 +89,69 @@ export interface RiderProfile {
   services_accepted: string[] | null;
   push_enabled: boolean;
   application_status: string;
+  orcr_doc: string | null;
+  license_doc: string | null;
+  proof_address_doc: string | null;
+  documents_verified: boolean;
 }
 
 /** Read the signed-in rider's full profile (own row, via riders_self_read). */
 export async function getRiderProfile(db: SupabaseClient, riderId: string): Promise<RiderProfile | null> {
   const { data, error } = await db
     .from('riders')
-    .select('id, name, mobile_number, vehicle, photo_url, payout_number, services_accepted, push_enabled, application_status')
+    .select('id, name, mobile_number, vehicle, photo_url, payout_number, services_accepted, push_enabled, application_status, orcr_doc, license_doc, proof_address_doc, documents_verified')
     .eq('id', riderId)
     .maybeSingle();
   if (error) throw error;
   return (data as RiderProfile | null) ?? null;
 }
+
+/** The three verification documents a rider must file before going online. */
+export type RiderDocumentKind = 'orcr' | 'license' | 'proof_address';
+
+export const RIDER_DOCUMENT_LABELS: Record<RiderDocumentKind, string> = {
+  orcr: 'OR/CR',
+  license: "Driver's license",
+  proof_address: 'Proof of address',
+};
+
+/**
+ * Upload a rider verification document to the private `rider-docs` bucket and
+ * record its path on the caller's own rider row. Returns the storage path.
+ * Files live under `{uid}/{kind}.{ext}` and overwrite any previous upload.
+ */
+export async function uploadRiderDocument(
+  db: SupabaseClient,
+  kind: RiderDocumentKind,
+  file: File,
+): Promise<string> {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `${user.id}/${kind}.${ext}`;
+  const { error: upErr } = await db.storage.from('rider-docs')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const { error } = await db.rpc('set_rider_documents', {
+    p_orcr: kind === 'orcr' ? path : null,
+    p_license: kind === 'license' ? path : null,
+    p_proof_address: kind === 'proof_address' ? path : null,
+  });
+  if (error) throw error;
+  return path;
+}
+
+/** A short-lived signed URL to view a rider document (own docs or, for staff, any). */
+export async function getRiderDocumentUrl(db: SupabaseClient, path: string): Promise<string> {
+  const { data, error } = await db.storage.from('rider-docs').createSignedUrl(path, 300);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/** True when all three verification documents are on file. */
+export const riderDocumentsComplete = (r: {
+  orcr_doc: string | null; license_doc: string | null; proof_address_doc: string | null;
+}): boolean => Boolean(r.orcr_doc && r.license_doc && r.proof_address_doc);
 
 export interface RiderProfilePatch {
   name: string;

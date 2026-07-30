@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
-import { onAuthChange, sendEmailOtp, ensureRider, signOut } from '@ebd/supabase';
+import {
+  onAuthChange, sendEmailOtp, ensureRider, signOut,
+  uploadRiderDocument, riderDocumentsComplete, RIDER_DOCUMENT_LABELS, type RiderDocumentKind,
+} from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
+
+interface RiderRec {
+  id: string;
+  application_status: string;
+  name?: string;
+  orcr_doc: string | null;
+  license_doc: string | null;
+  proof_address_doc: string | null;
+}
+const DOC_KINDS: RiderDocumentKind[] = ['orcr', 'license', 'proof_address'];
 
 /**
  * Rider auth + onboarding gate.
@@ -16,21 +29,30 @@ export function RiderGate() {
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
+const RIDER_COLS = 'id, application_status, name, orcr_doc, license_doc, proof_address_doc';
+
 function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
-  const [rider, setRider] = useState<{ id: string; application_status: string; name?: string } | null>(null);
+  const [rider, setRider] = useState<RiderRec | null>(null);
   const [checked, setChecked] = useState(false);
   const [screen, setScreen] = useState<'landing' | 'signin'>('landing');
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
+  async function loadRider(uid: string) {
+    const { data } = await supabase!.from('riders').select(RIDER_COLS).eq('profile_id', uid).maybeSingle();
+    setRider((data as RiderRec | null) ?? null);
+    setChecked(true);
+  }
+
   // Load this rider's application/status once signed in.
   useEffect(() => {
     if (!userId) { setRider(null); setChecked(false); return; }
     setChecked(false);
-    supabase!.from('riders').select('id, application_status, name').eq('profile_id', userId).maybeSingle()
-      .then(({ data }) => { setRider((data as { id: string; application_status: string; name?: string } | null) ?? null); setChecked(true); });
+    void loadRider(userId);
   }, [userId]);
+
+  const reload = () => userId ? loadRider(userId) : Promise.resolve();
 
   if (userId === undefined) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
@@ -43,9 +65,66 @@ function LiveGate() {
   if (!checked) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
-  if (!rider) return <Onboard onDone={setRider} />;
+  if (!rider) return <Onboard onDone={reload} />;
+  if (rider.application_status === 'rejected') return <StatusScreen status="rejected" />;
+  // Documents are required before a rider can accept bookings — collect them
+  // while the application is reviewed, and block entry if still missing.
+  if (!riderDocumentsComplete(rider)) return <DocumentsGate rider={rider} onChange={reload} />;
   if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
+}
+
+/**
+ * Verification documents step. A rider must upload their OR/CR, driver's
+ * license, and proof of address before they can go online and accept bookings.
+ * Shown after applying (while pending) and gates entry to the app.
+ */
+function DocumentsGate({ rider, onChange }: { rider: RiderRec; onChange: () => Promise<void> }) {
+  const paths: Record<RiderDocumentKind, string | null> = {
+    orcr: rider.orcr_doc, license: rider.license_doc, proof_address: rider.proof_address_doc,
+  };
+  const [busy, setBusy] = useState<RiderDocumentKind | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const done = riderDocumentsComplete(rider);
+
+  async function upload(kind: RiderDocumentKind, file: File) {
+    setBusy(kind); setError(null);
+    try { await uploadRiderDocument(supabase!, kind, file); await onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <Shell title="Upload your documents" sub="Verification required">
+      <p className="mb-4 text-sm text-black/60">
+        Before you can accept bookings, please upload clear photos of the following.
+      </p>
+      <div className="space-y-3">
+        {DOC_KINDS.map((k) => (
+          <div key={k} className="flex items-center justify-between gap-3 rounded-lg border border-black/10 p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{RIDER_DOCUMENT_LABELS[k]}</p>
+              <p className={`text-xs ${paths[k] ? 'text-brand-green' : 'text-black/45'}`}>
+                {busy === k ? 'Uploading…' : paths[k] ? '✓ Uploaded — tap to replace' : 'Not uploaded yet'}
+              </p>
+            </div>
+            <label className="shrink-0 cursor-pointer rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white">
+              {paths[k] ? 'Replace' : 'Upload'}
+              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy !== null}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(k, f); e.target.value = ''; }} />
+            </label>
+          </div>
+        ))}
+      </div>
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <div className="mt-4 rounded-lg bg-brand-yellow/15 px-3 py-2 text-xs text-yellow-900">
+        {done
+          ? 'All documents uploaded. An admin will review your application — you can accept bookings once approved.'
+          : 'Upload all three documents to continue.'}
+      </div>
+      <button onClick={() => void signOut(supabase!)} className="mt-3 w-full text-sm text-black/50">Sign out</button>
+    </Shell>
+  );
 }
 
 /** First-run welcome screen. */
@@ -160,7 +239,7 @@ function EmailSignIn({ onBack }: { onBack: () => void }) {
   );
 }
 
-function Onboard({ onDone }: { onDone: (r: { id: string; application_status: string }) => void }) {
+function Onboard({ onDone }: { onDone: () => void | Promise<void> }) {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [vehicle, setVehicle] = useState('');
@@ -169,9 +248,8 @@ function Onboard({ onDone }: { onDone: (r: { id: string; application_status: str
 
   async function apply() {
     setBusy(true); setError(null);
-    try { onDone(await ensureRider(supabase!, { name, mobile, vehicle })); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    try { await ensureRider(supabase!, { name, mobile, vehicle }); await onDone(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
   }
 
   return (
