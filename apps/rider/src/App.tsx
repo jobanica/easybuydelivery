@@ -17,6 +17,7 @@ import {
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
+import { DeliveryMap } from './DeliveryMap.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
 import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
@@ -381,6 +382,40 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         <p className="text-sm font-semibold">
           {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
         </p>
+
+        {/* Live tracking map + navigation */}
+        {(order.deliveryLat != null || order.stores.some((s) => s.lat != null)) && (
+          <div className="mt-3">
+            <DeliveryMap
+              dropoff={order.deliveryLat != null && order.deliveryLng != null ? { lat: order.deliveryLat, lng: order.deliveryLng } : null}
+              stores={order.stores} />
+            {order.deliveryLat != null && order.deliveryLng != null && (
+              <a href={`https://www.google.com/maps/dir/?api=1&destination=${order.deliveryLat},${order.deliveryLng}`}
+                target="_blank" rel="noreferrer"
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand-purple py-2.5 text-sm font-bold text-white">
+                🧭 Navigate to drop-off
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* What the customer ordered */}
+        {order.items.length > 0 && (
+          <div className="mt-3 rounded-xl bg-black/[0.03] p-3">
+            <p className="mb-1.5 text-xs font-semibold text-black/60">Order</p>
+            <ul className="space-y-1 text-sm">
+              {order.items.map((it, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="font-medium">{it.qty}×</span> {it.name}
+                    {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
+                  </span>
+                  {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Customer + store contacts */}
         <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">

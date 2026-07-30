@@ -22,7 +22,9 @@ export function createPreviewData(): RiderData {
       delivery_fee: 50, store_fee_total: 0, convenience_fee: 0, goods_cost: 280, commission_amount: 7.5,
       customer_contact: '0917 111 2222', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null,
-      store_contact: '0918 555 0100', stores: [{ name: 'Barrio Diner', contact: '0918 555 0100' }], notes: 'Extra spicy, leave at the gate.',
+      store_contact: '0918 555 0100', stores: [{ name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
+      items: [{ name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
+      deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
     },
     {
       id: 'ord-pabili-1', service_type: 'pabili', status: 'pending',
@@ -30,7 +32,9 @@ export function createPreviewData(): RiderData {
       delivery_fee: 60, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
-      budget_cap: 600, actual_amount: null, store_contact: null, stores: [], notes: null,
+      budget_cap: 600, actual_amount: null, store_contact: null, stores: [],
+      items: [{ name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
+      deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
     },
     {
       id: 'ord-padala-1', service_type: 'padala', status: 'pending',
@@ -38,7 +42,9 @@ export function createPreviewData(): RiderData {
       delivery_fee: 40, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 6,
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null,
-      store_contact: null, stores: [], notes: null,
+      store_contact: null, stores: [],
+      items: [{ name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
+      deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
     },
   ];
   let active: RiderOrder[] = [];
