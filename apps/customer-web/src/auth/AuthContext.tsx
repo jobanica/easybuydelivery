@@ -1,29 +1,38 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ensureCustomer, onAuthChange, signOut as sbSignOut } from '@ebd/supabase';
+import { ensureCustomer, getMyCustomer, onAuthChange, signOut as sbSignOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
 import { REQUIRE_ACCOUNT } from '../config.ts';
 
 interface AuthValue {
   /** Whether the app is wired to a real backend (vs preview sample mode). */
   live: boolean;
-  /** True once the customer has a verified account and may place orders. */
+  /** Still resolving the current session (avoid flashing the sign-in screen). */
+  loading: boolean;
+  /** Signed in with a verified email. */
   authed: boolean;
-  /** The signed-in customer's id (used on orders). */
+  /** Signed in but hasn't added a phone number yet (required before ordering). */
+  needsPhone: boolean;
+  /** The signed-in user's email. */
+  email: string;
+  /** The customer's id (used on orders). */
   customerId: string | null;
-  /** The account's verified mobile number (E.164 digits). */
+  /** The customer's saved mobile number. */
   mobile: string;
-  /** Ensure/refresh the customer record (name / contact) and return its id. */
+  /** Save the customer's phone (and optional name); returns the customer id. */
   ensureContact: (mobile: string, name?: string) => Promise<string>;
   signOut: () => Promise<void>;
 }
 
 const PREVIEW: AuthValue = {
-  live: false, authed: true, customerId: 'preview-customer', mobile: '',
+  live: false, loading: false, authed: true, needsPhone: false, email: '',
+  customerId: 'preview-customer', mobile: '',
   ensureContact: async () => 'preview-customer', signOut: async () => {},
 };
 
 const Ctx = createContext<AuthValue>(PREVIEW);
 export const useAuth = () => useContext(Ctx);
+
+const hasRealPhone = (m: string | null | undefined) => !!m && m.trim() !== '' && m !== 'unknown';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!isSupabaseConfigured || !supabase) {
@@ -34,44 +43,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function LiveAuthProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
-  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [mobile, setMobile] = useState('');
   const inflight = useRef<Promise<string> | null>(null);
 
   useEffect(() => onAuthChange(supabase!, (u) => {
     setUserId(u?.id ?? null);
-    setMobile(u?.phone ?? '');
+    setEmail(u?.email ?? '');
+    if (!u) { setCustomerId(null); setMobile(''); setLoading(false); }
   }), []);
 
-  // With the account gate ON, a signed-in phone gets its customer row up front.
+  // Load the customer row (to know if a phone number is on file).
   useEffect(() => {
-    if (!REQUIRE_ACCOUNT || !userId) { if (!userId) setCustomerId(null); return; }
-    ensureCustomer(supabase!, { mobile: mobile || 'unknown' }).then(setCustomerId).catch(() => {});
-  }, [userId, mobile]);
+    if (!userId) return;
+    setLoading(true);
+    getMyCustomer(supabase!)
+      .then((c) => { setCustomerId(c?.id ?? null); setMobile(c?.mobile_number && c.mobile_number !== 'unknown' ? c.mobile_number : ''); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [userId]);
 
   async function ensureContact(m: string, name?: string): Promise<string> {
     if (inflight.current) return inflight.current;
     const run = (async () => {
-      // Gate OFF: order under a background anonymous session (no account needed).
-      let { data: { user } } = await supabase!.auth.getUser();
-      if (!user && !REQUIRE_ACCOUNT) {
-        await supabase!.auth.signInAnonymously();
-        ({ data: { user } } = await supabase!.auth.getUser());
-      }
       const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name });
       setCustomerId(id);
+      if (hasRealPhone(m)) setMobile(m);
       return id;
     })();
     inflight.current = run;
     try { return await run; } finally { inflight.current = null; }
   }
 
+  const authed = REQUIRE_ACCOUNT ? Boolean(userId) : true;
+  const needsPhone = REQUIRE_ACCOUNT ? Boolean(userId) && !hasRealPhone(mobile) : false;
+
   const value: AuthValue = {
-    live: true,
-    // When the gate is off, ordering is always allowed.
-    authed: REQUIRE_ACCOUNT ? Boolean(userId && customerId) : true,
-    customerId,
-    mobile,
+    live: true, loading: REQUIRE_ACCOUNT ? loading : false,
+    authed, needsPhone, email, customerId, mobile,
     ensureContact,
     signOut: async () => { await sbSignOut(supabase!); },
   };

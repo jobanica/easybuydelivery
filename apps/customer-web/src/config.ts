@@ -7,7 +7,7 @@
  * background anonymous session. Flip to true (and enable an SMS provider +
  * anonymous sign-ins off) to turn the account gate on.
  */
-export const REQUIRE_ACCOUNT = false;
+export const REQUIRE_ACCOUNT = true;
 
 /** Operator hotline shown in the customer Account → Help section. */
 export const SUPPORT_CONTACT = '0917 123 4567';

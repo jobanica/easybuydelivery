@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
-import { onAuthChange, sendOtp, verifyOtp, ensureRider, resumeRiderByMobile, signOut } from '@ebd/supabase';
+import { onAuthChange, sendEmailOtp, ensureRider, signOut } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
-import { REQUIRE_ACCOUNT } from './config.ts';
 
 /**
  * Rider auth + onboarding gate.
  *  - Preview mode (no backend): render the app with sample data.
- *  - Live: phone OTP sign-in → ensureRider → show status until approved.
- *
- * Phone OTP needs an SMS provider on the Supabase project.
+ *  - Live: email magic-link sign-in → apply (name, phone, vehicle) → show
+ *    status until an admin approves.
  */
 export function RiderGate() {
   if (!isSupabaseConfigured || !supabase) return <App />;
@@ -22,45 +20,36 @@ function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [rider, setRider] = useState<{ id: string; application_status: string; name?: string } | null>(null);
   const [checked, setChecked] = useState(false);
-  const [screen, setScreen] = useState<'landing' | 'login' | 'apply'>('landing');
+  const [screen, setScreen] = useState<'landing' | 'signin'>('landing');
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
-  // OTP off: start a background anonymous session so there's no sign-in screen.
+  // Load this rider's application/status once signed in.
   useEffect(() => {
-    if (REQUIRE_ACCOUNT || userId !== null) return;
-    void supabase!.auth.signInAnonymously().catch(() => {});
-  }, [userId]);
-
-  // Load this rider's application/status once signed in (so approved riders
-  // go straight to the app instead of re-applying every time).
-  useEffect(() => {
-    if (!userId) { setRider(null); setChecked(userId === null && REQUIRE_ACCOUNT); return; }
+    if (!userId) { setRider(null); setChecked(false); return; }
     setChecked(false);
     supabase!.from('riders').select('id, application_status, name').eq('profile_id', userId).maybeSingle()
       .then(({ data }) => { setRider((data as { id: string; application_status: string; name?: string } | null) ?? null); setChecked(true); });
   }, [userId]);
 
-  if (userId === undefined || (userId && !checked) || (!userId && !REQUIRE_ACCOUNT)) {
+  if (userId === undefined) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
-  if (!userId) return <OtpSignIn />;
-  if (!rider) {
-    if (screen === 'apply') return <Onboard onDone={setRider} onBack={() => setScreen('landing')} />;
-    if (screen === 'login') return <RiderLogin onResume={setRider} onBack={() => setScreen('landing')} onApply={() => setScreen('apply')} />;
-    return <Landing onLogin={() => setScreen('login')} onJoin={() => setScreen('apply')} />;
+  if (!userId) {
+    return screen === 'signin'
+      ? <EmailSignIn onBack={() => setScreen('landing')} />
+      : <Landing onStart={() => setScreen('signin')} />;
   }
+  if (!checked) {
+    return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
+  }
+  if (!rider) return <Onboard onDone={setRider} />;
   if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
 }
 
-/**
- * First-run welcome screen: a hero headline, a branded medallion, and the
- * primary calls to action. With phone OTP disabled, both "Login & Start
- * Riding" and "Join Us Now" lead to the rider application; "Learn More"
- * expands a short how-it-works panel.
- */
-function Landing({ onLogin, onJoin }: { onLogin: () => void; onJoin: () => void }) {
+/** First-run welcome screen. */
+function Landing({ onStart }: { onStart: () => void }) {
   const [learn, setLearn] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f7f4]">
@@ -83,7 +72,7 @@ function Landing({ onLogin, onJoin }: { onLogin: () => void; onJoin: () => void 
           <div className="mb-4 rounded-2xl bg-white p-4 text-sm text-black/60 shadow-sm ring-1 ring-black/5">
             <p className="font-semibold text-brand-ink">How it works</p>
             <ul className="mt-1 list-disc space-y-1 pl-4">
-              <li>Apply with your name, mobile number, and vehicle.</li>
+              <li>Sign in with your email, then apply with your name, phone, and vehicle.</li>
               <li>Once an admin approves you, go online to receive nearby orders.</li>
               <li>You keep the delivery &amp; convenience fees — a small commission is settled daily.</li>
             </ul>
@@ -91,11 +80,11 @@ function Landing({ onLogin, onJoin }: { onLogin: () => void; onJoin: () => void 
         )}
 
         <div className="space-y-3 pb-8">
-          <button onClick={onLogin}
+          <button onClick={onStart}
             className="w-full rounded-2xl bg-brand-green py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Login &amp; Start Riding
           </button>
-          <button onClick={onJoin}
+          <button onClick={onStart}
             className="w-full rounded-2xl bg-brand-purple py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Join Us Now
           </button>
@@ -128,39 +117,42 @@ function Shell({ title, sub, children }: { title: string; sub: string; children:
   );
 }
 
-function OtpSignIn() {
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
+function EmailSignIn({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const e164 = phone.startsWith('+') ? phone : phone.replace(/^0/, '+63');
+  const valid = /\S+@\S+\.\S+/.test(email.trim());
 
-  async function run(fn: () => Promise<void>) {
+  async function send() {
     setError(null); setBusy(true);
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    try { await sendEmailOtp(supabase!, email.trim(), window.location.origin); setSent(true); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
 
   return (
-    <Shell title="Sign in" sub="Rider access">
+    <Shell title={sent ? 'Check your email' : 'Sign in'} sub="Rider access">
       {!sent ? (
         <>
-          <input className={inp} value={phone} onChange={(e) => setPhone(e.target.value)}
-            placeholder="0917 123 4567" inputMode="tel" />
-          <button disabled={busy || phone.length < 7} onClick={() => run(async () => { await sendOtp(supabase!, { phone: e164 }); setSent(true); })}
+          <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
+          <label className="mb-1 block text-sm font-medium text-black/70">Your email</label>
+          <input className={inp} value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com" inputMode="email" autoCapitalize="none" />
+          <button disabled={busy || !valid} onClick={send}
             className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
-            {busy ? 'Sending…' : 'Send code'}
+            {busy ? 'Sending…' : 'Continue with email'}
           </button>
+          <p className="mt-3 text-xs text-black/40">We'll email you a secure sign-in link. No password needed.</p>
         </>
       ) : (
         <>
-          <input className={inp} value={code} onChange={(e) => setCode(e.target.value)}
-            placeholder="••••••" inputMode="numeric" maxLength={6} />
-          <button disabled={busy || code.length < 4} onClick={() => run(() => verifyOtp(supabase!, { phone: e164 }, code.trim()).then(() => {}))}
-            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
-            {busy ? 'Verifying…' : 'Verify & continue'}
+          <p className="text-sm text-black/60">We sent a sign-in link to <b>{email.trim()}</b>. Open it on this device to continue.</p>
+          <button disabled={busy} onClick={send}
+            className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple disabled:opacity-60">
+            {busy ? 'Resending…' : 'Resend link'}
           </button>
+          <button onClick={() => setSent(false)} className="mt-2 w-full text-sm text-black/50">Use a different email</button>
         </>
       )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -168,7 +160,7 @@ function OtpSignIn() {
   );
 }
 
-function Onboard({ onDone, onBack }: { onDone: (r: { id: string; application_status: string }) => void; onBack?: () => void }) {
+function Onboard({ onDone }: { onDone: (r: { id: string; application_status: string }) => void }) {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [vehicle, setVehicle] = useState('');
@@ -184,65 +176,16 @@ function Onboard({ onDone, onBack }: { onDone: (r: { id: string; application_sta
 
   return (
     <Shell title="Apply as a rider" sub="Tell us about you">
-      {onBack && (
-        <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
-      )}
       <div className="space-y-3">
         <input className={inp} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className={inp} placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} />
+        <input className={inp} placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} inputMode="tel" />
         <input className={inp} placeholder="Vehicle (e.g. motorcycle)" value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
       </div>
       <button disabled={busy || !name || !mobile} onClick={apply}
         className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Submitting…' : 'Submit application'}
       </button>
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-    </Shell>
-  );
-}
-
-/**
- * Stop-gap "login": resume an existing rider account by mobile number (no OTP
- * yet). Re-links the found rider to this session so approved riders go straight
- * to the app and pending ones see their status.
- */
-function RiderLogin({ onResume, onBack, onApply }: {
-  onResume: (r: { id: string; application_status: string; name?: string }) => void;
-  onBack: () => void;
-  onApply: () => void;
-}) {
-  const [mobile, setMobile] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-
-  async function login() {
-    setBusy(true); setError(null); setNotFound(false);
-    try {
-      const r = await resumeRiderByMobile(supabase!, mobile.trim());
-      if (!r) { setNotFound(true); return; }
-      onResume({ id: r.id, application_status: r.application_status, name: r.name ?? undefined });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { setBusy(false); }
-  }
-
-  return (
-    <Shell title="Log in" sub="Resume your rider account">
-      <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
-      <p className="mb-3 text-sm text-black/55">Enter the mobile number you applied with.</p>
-      <input className={inp} value={mobile} onChange={(e) => { setMobile(e.target.value); setNotFound(false); }}
-        placeholder="0917 123 4567" inputMode="tel" />
-      <button disabled={busy || mobile.trim().length < 7} onClick={login}
-        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
-        {busy ? 'Checking…' : 'Continue'}
-      </button>
-      {notFound && (
-        <div className="mt-3 rounded-lg bg-brand-yellow/20 px-3 py-2 text-sm text-yellow-900">
-          No rider found with that number.{' '}
-          <button onClick={onApply} className="font-semibold underline">Apply to ride</button> instead.
-        </div>
-      )}
+      <button onClick={() => void signOut(supabase!)} className="mt-2 w-full text-sm text-black/50">Sign out</button>
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </Shell>
   );

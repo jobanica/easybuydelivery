@@ -22,7 +22,9 @@ const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
 export function App() {
   const { live, mobile, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('food');
-  const [entered, setEntered] = useState(false);
+  // When the account gate is on, AuthGate is the branded entry — skip the
+  // in-app welcome so we don't show two landing screens.
+  const [entered, setEntered] = useState(REQUIRE_ACCOUNT);
   const [enabled, setEnabled] = useState<ServiceAvailability>(ALL_ON);
 
   useEffect(() => {
