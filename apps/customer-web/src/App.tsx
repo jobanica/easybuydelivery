@@ -8,9 +8,10 @@ import { TrackingMap } from './tracking/TrackingMap.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 import { REQUIRE_ACCOUNT } from './config.ts';
 import { Welcome } from './Welcome.tsx';
+import { Account } from './Account.tsx';
 
 type Service = 'food' | 'pabili' | 'padala';
-type Tab = Service | 'track';
+type Tab = Service | 'track' | 'account';
 type ServiceAvailability = Record<Service, boolean>;
 const ALL_ON: ServiceAvailability = { food: true, pabili: true, padala: true };
 
@@ -33,14 +34,15 @@ export function App() {
 
   // If the selected service gets turned off, fall back to the first enabled one.
   useEffect(() => {
-    if (tab === 'track' || enabled[tab]) return;
+    if (tab === 'track' || tab === 'account' || enabled[tab]) return;
     const firstOn = (['food', 'pabili', 'padala'] as Service[]).find((k) => enabled[k]);
     if (firstOn) setTab(firstOn);
   }, [enabled, tab]);
 
   const noneEnabled = !enabled.food && !enabled.pabili && !enabled.padala;
   const tracking = tab === 'track';
-  const service = tracking ? 'food' : tab;
+  const account = tab === 'account';
+  const service = tracking || account ? 'food' : tab;
 
   if (!entered) {
     return <Welcome onOrder={() => setEntered(true)} onTrack={() => { setEntered(true); setTab('track'); }} />;
@@ -73,7 +75,9 @@ export function App() {
             Preview mode — set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to place real orders.
           </p>
         )}
-        {tracking ? (
+        {account ? (
+          <Account />
+        ) : tracking ? (
           <TrackingMap pickup={DEMO_PICKUP} dropoff={DEMO_DROPOFF} onClose={() => setTab('food')} />
         ) : noneEnabled ? (
           <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/60 shadow-sm ring-1 ring-black/5">
@@ -99,6 +103,7 @@ export function App() {
           <TabButton label="Pabili" active={tab === 'pabili'} disabled={!enabled.pabili} onClick={() => setTab('pabili')} icon={<BagIcon />} />
           <TabButton label="Padala" active={tab === 'padala'} disabled={!enabled.padala} onClick={() => setTab('padala')} icon={<BoxIcon />} />
           <TabButton label="Track" active={tab === 'track'} onClick={() => setTab('track')} icon={<PinIcon />} />
+          <TabButton label="Account" active={tab === 'account'} onClick={() => setTab('account')} icon={<UserIcon />} />
         </div>
       </nav>
     </div>
@@ -127,3 +132,4 @@ function FoodIcon() { return <svg {...iconProps}><path d="M3 2v7a3 3 0 0 0 3 3v1
 function BagIcon() { return <svg {...iconProps}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></svg>; }
 function BoxIcon() { return <svg {...iconProps}><path d="M21 8V6a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 6v12a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 18z" /><path d="m3.3 7 8.7 5 8.7-5M12 22V12" /></svg>; }
 function PinIcon() { return <svg {...iconProps}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>; }
+function UserIcon() { return <svg {...iconProps}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>; }

@@ -3,6 +3,7 @@ export * from './auth.ts';
 export * from './padala.ts';
 export * from './pabili.ts';
 export * from './food.ts';
+export * from './customers.ts';
 export * from './orders.ts';
 export * from './stores.ts';
 export * from './import.ts';
