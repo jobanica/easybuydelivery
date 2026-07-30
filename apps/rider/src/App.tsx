@@ -87,11 +87,12 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   }
 
   async function submitSettlement(extra?: { reference?: string; receiptUrl?: string }) {
-    // Settle the latest overdue day; confirmSettlement clears everything up to it.
-    const overdueDays = ledger.filter((e) => !e.settled && e.businessDay < today).map((e) => e.businessDay).sort();
-    const day = overdueDays.length ? overdueDays[overdueDays.length - 1] : ledger.find((e) => !e.settled)?.businessDay;
+    // Settle the full owed balance: use the latest unsettled day (today's total
+    // included) — confirmSettlement clears everything up to it.
+    const unsettledDays = ledger.filter((e) => !e.settled).map((e) => e.businessDay).sort();
+    const day = unsettledDays[unsettledDays.length - 1];
     if (!day) return;
-    await data.settle(day, overdue || owed, extra);
+    await data.settle(day, owed, extra);
     await refresh();
   }
 
@@ -476,17 +477,23 @@ function EarningsView({ live, ledger, owed, overdue, onSettle }:
         <p className="text-xs uppercase tracking-wide text-white/80">Commission owed to operator</p>
         <p className="mt-1 text-3xl font-black">{peso(owed)}</p>
         <p className="mt-1 text-xs text-white/85">
-          You keep every delivery &amp; convenience fee; the operator's commission is settled per day.
+          Settle your commission before the end of the day — any unsettled balance locks
+          your account at midnight until it's paid.
         </p>
-        {overdue > 0 && (
+        {owed > 0 && (
           <button onClick={() => setPayOpen(true)} className="mt-3 w-full rounded-xl bg-white py-2.5 text-sm font-bold text-brand-purple">
-            Settle {peso(overdue)} now
+            Settle {peso(owed)} now
           </button>
+        )}
+        {overdue > 0 && (
+          <p className="mt-2 rounded-lg bg-black/20 px-3 py-1.5 text-xs font-medium text-white">
+            ⚠️ {peso(overdue)} overdue — your account is locked until you settle.
+          </p>
         )}
       </div>
 
       {payOpen && (
-        <SettleModal amount={overdue} settings={settings} live={live}
+        <SettleModal amount={owed} settings={settings} live={live}
           onClose={() => setPayOpen(false)}
           onSubmit={async (extra) => { await onSettle(extra); setPayOpen(false); }} />
       )}
