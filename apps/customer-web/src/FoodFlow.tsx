@@ -96,6 +96,7 @@ export function FoodFlow() {
   const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
   const [contact, setContact] = useState('');
+  const [custName, setCustName] = useState('');
   const [note, setNote] = useState('');
   const [cutlery, setCutlery] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // full-screen cart popup
@@ -258,10 +259,11 @@ export function FoodFlow() {
     const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
     try {
       if (supabase && isSupabaseConfigured) {
-        const customerId = await ensureContact(contact.trim());
+        const customerId = await ensureContact(contact.trim(), custName.trim() || undefined);
         setCreatedId(await createFoodOrder(supabase, {
           customerId,
           customerContact: contact.trim(),
+          customerName: custName.trim() || undefined,
           deliveryFee,
           lines: cart,
           notes: fullNote,
@@ -293,7 +295,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setNote(''); setCutlery(false); setCartOpen(false); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setCartOpen(false); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -480,6 +482,13 @@ export function FoodFlow() {
 
             <div className="mb-3 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               {fees.model === 'per_km' && <LocationPicker value={dropoff} onChange={setDropoff} />}
+              <div>
+                <label className="mb-1 block text-sm font-medium">Your name</label>
+                <input value={custName} onChange={(e) => setCustName(e.target.value)}
+                  placeholder="Juan Dela Cruz"
+                  className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+                <p className="mt-1 text-xs text-black/40">So the rider knows who to hand the order to.</p>
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Your mobile number</label>
                 <input value={contact} onChange={(e) => setContact(e.target.value)}

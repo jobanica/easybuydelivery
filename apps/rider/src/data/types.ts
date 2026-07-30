@@ -7,6 +7,7 @@ export interface RiderOrder {
   status: OrderStatus;
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
+  customerName: string | null;
   delivery_fee: number;
   store_fee_total: number;
   convenience_fee: number;

@@ -421,7 +421,8 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
           <div className="min-w-0">
             <p className="text-xs text-black/45">Customer</p>
-            <p className="truncate text-sm font-medium">{order.customer_contact}</p>
+            <p className="truncate text-sm font-medium">{order.customerName || order.customer_contact}</p>
+            {order.customerName && <p className="truncate text-xs text-black/45">{order.customer_contact}</p>}
           </div>
           <div className="flex gap-2">
             <a href={`tel:${order.customer_contact}`} aria-label="Call customer"
@@ -430,20 +431,19 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
               className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
           </div>
         </div>
-        {/* Call the restaurant/store to prepare the order. */}
-        {order.stores.filter((s) => s.contact).map((s, i) => (
+        {/* Restaurant / store — always show the name; call button when a number exists. */}
+        {order.stores.map((s, i) => (
           <div key={i} className="mt-2 flex items-center justify-between rounded-xl bg-brand-purple/[0.06] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-xs text-black/45">Restaurant / store</p>
-              <p className="truncate text-sm font-medium">{s.name ?? 'Store'} · {s.contact}</p>
+              <p className="truncate text-sm font-medium">{s.name ?? 'Store'}{s.contact ? ` · ${s.contact}` : ''}</p>
             </div>
-            <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white"><PhoneIcon /></a>
+            {s.contact
+              ? <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white"><PhoneIcon /></a>
+              : <span className="shrink-0 text-[11px] text-black/40">No number</span>}
           </div>
         ))}
-        {order.service_type === 'food' && order.stores.length > 0 && order.stores.every((s) => !s.contact) && (
-          <p className="mt-2 text-xs text-black/40">No store number on file — ask the operator to add it in the store settings.</p>
-        )}
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}

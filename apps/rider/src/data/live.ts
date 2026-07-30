@@ -21,6 +21,7 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     status: row.status as OrderStatus,
     payment_method: (row.payment_method as RiderOrder['payment_method']) ?? 'cod',
     payment_status: (row.payment_status as RiderOrder['payment_status']) ?? 'unpaid',
+    customerName: (row.customer_name as string) ?? null,
     delivery_fee: Number(row.delivery_fee ?? 0),
     store_fee_total: Number(row.store_fee_total ?? 0),
     convenience_fee: Number(row.convenience_fee ?? 0),

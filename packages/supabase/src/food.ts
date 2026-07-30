@@ -18,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export interface FoodCheckoutInput {
   customerId: string;
   customerContact: string;
+  customerName?: string;
   deliveryFee: number;
   lines: CartLine[];
   deliveryLat?: number;
@@ -41,6 +42,7 @@ export interface FoodOrderRow {
   delivery_lat: number | null;
   delivery_lng: number | null;
   customer_contact: string;
+  customer_name: string | null;
   notes: string | null;
 }
 
@@ -86,6 +88,7 @@ export function buildFoodOrder(
       delivery_lat: input.deliveryLat ?? null,
       delivery_lng: input.deliveryLng ?? null,
       customer_contact: input.customerContact,
+      customer_name: input.customerName?.trim() || null,
       notes: input.notes?.trim() || null,
     },
     storeIds: [...new Set(input.lines.map((l) => l.storeId))],
