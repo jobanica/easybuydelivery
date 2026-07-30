@@ -352,8 +352,13 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
     await onChange();
   }
 
+  const hasGoods = order.status === 'picked_up' || order.status === 'on_the_way';
+
   async function release() {
-    if (!window.confirm("Release this delivery back to the pool? Another rider can then accept it. Use this if you can't continue (e.g. a breakdown).")) return;
+    const msg = hasGoods
+      ? "You've already picked up the items for this order. Release it back to the pool? You'll need to coordinate handing the items over to the rider who takes it."
+      : "Release this delivery back to the pool? Another rider can then accept it. Use this if you can't continue (e.g. a breakdown).";
+    if (!window.confirm(msg)) return;
     setReleasing(true); setReleaseErr(null);
     try { await data.releaseOrder(order.id); await onChange(); }
     catch (e) { setReleaseErr(e instanceof Error ? e.message : String(e)); setReleasing(false); }
@@ -453,6 +458,11 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           className="mt-3 w-full rounded-xl border border-red-300 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
           {releasing ? 'Releasing…' : '⚠️ Can’t continue — release delivery'}
         </button>
+        {hasGoods && (
+          <p className="mt-1.5 text-center text-[11px] text-black/45">
+            You already have the items — coordinate the hand-over with the rider who takes it.
+          </p>
+        )}
         {releaseErr && <p className="mt-2 text-xs text-red-600">{releaseErr}</p>}
       </div>
     </div>
