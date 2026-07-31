@@ -34,12 +34,22 @@ const RIDER_COLS = 'id, application_status, name, orcr_doc, license_doc, proof_a
 
 function LiveGate() {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
+  const [email, setEmail] = useState('');
   const [rider, setRider] = useState<RiderRec | null>(null);
   const [checked, setChecked] = useState(false);
-  const [screen, setScreen] = useState<'landing' | 'signin'>('landing');
+  const [screen, setScreen] = useState<'landing' | 'auth'>('landing');
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  // Which button they pressed. 'join' means "I want to apply as a rider";
+  // 'login' means "sign in to an existing account". Persists across the auth
+  // event so signing up (Join) leads to the application, while signing in
+  // (Login) to an account with no rider does NOT dump them into the form.
+  const [intent, setIntent] = useState<'login' | 'join' | null>(null);
 
-  useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
+  useEffect(() => onAuthChange(supabase!, (u) => {
+    setUserId(u?.id ?? null);
+    setEmail(u?.email ?? '');
+    if (u) setScreen('landing'); // clear any stale auth form once signed in
+  }), []);
 
   async function loadRider(uid: string) {
     const { data } = await supabase!.from('riders').select(RIDER_COLS).eq('profile_id', uid).maybeSingle();
@@ -59,21 +69,42 @@ function LiveGate() {
   if (userId === undefined) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
+
+  // Signed out: landing → login/create-account form.
   if (!userId) {
-    return screen === 'signin'
-      ? <EmailSignIn initialMode={authMode} onBack={() => setScreen('landing')} />
-      : <Landing onStart={(mode) => { setAuthMode(mode); setScreen('signin'); }} />;
+    if (screen === 'auth') return <EmailSignIn initialMode={authMode} onBack={() => setScreen('landing')} />;
+    return <Landing onStart={(mode) => {
+      setIntent(mode === 'signup' ? 'join' : 'login');
+      setAuthMode(mode);
+      setScreen('auth');
+    }} />;
   }
+
   if (!checked) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
-  if (!rider) return <Onboard onDone={reload} />;
-  if (rider.application_status === 'rejected') return <StatusScreen status="rejected" />;
-  // Documents are required before a rider can accept bookings — collect them
-  // while the application is reviewed, and block entry if still missing.
-  if (REQUIRE_DOCUMENTS && !riderDocumentsComplete(rider)) return <DocumentsGate rider={rider} onChange={reload} />;
-  if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
-  return <StatusScreen status={rider.application_status} />;
+
+  // Signed in with an existing rider record → route by status.
+  if (rider) {
+    if (rider.application_status === 'rejected') return <StatusScreen status="rejected" />;
+    // Documents are required before a rider can accept bookings — collect them
+    // while the application is reviewed, and block entry if still missing.
+    if (REQUIRE_DOCUMENTS && !riderDocumentsComplete(rider)) return <DocumentsGate rider={rider} onChange={reload} />;
+    if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
+    return <StatusScreen status={rider.application_status} />;
+  }
+
+  // Signed in but no rider record yet. Only show the application when they came
+  // in via "Join Us Now"; if they logged in, show the landing (with a signed-in
+  // banner) so "Login" never lands straight on the apply form.
+  if (intent === 'join') return <Onboard onDone={reload} />;
+  return <Landing signedInEmail={email} onStart={async (mode) => {
+    if (mode === 'signup') { setIntent('join'); }        // apply as a rider
+    else {                                                // log in as a different account
+      setIntent('login'); setAuthMode('signin'); setScreen('auth');
+      await signOut(supabase!);
+    }
+  }} />;
 }
 
 /**
@@ -130,11 +161,17 @@ function DocumentsGate({ rider, onChange }: { rider: RiderRec; onChange: () => P
 }
 
 /** First-run welcome screen. */
-function Landing({ onStart }: { onStart: (mode: 'signin' | 'signup') => void }) {
+function Landing({ onStart, signedInEmail }: { onStart: (mode: 'signin' | 'signup') => void; signedInEmail?: string }) {
   const [learn, setLearn] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f7f4]">
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col px-6 pt-10">
+        {signedInEmail && (
+          <div className="mb-4 rounded-xl bg-brand-yellow/20 px-3 py-2 text-xs text-yellow-900">
+            Signed in as <b>{signedInEmail}</b> — no rider account on this login yet.
+            Tap <b>Join Us Now</b> to apply, or <b>Login</b> to use a different account.
+          </div>
+        )}
         <h1 className="text-4xl font-black leading-tight tracking-tight">
           Deliver faster,<br /><span className="text-brand-green">earn smarter</span>
         </h1>
