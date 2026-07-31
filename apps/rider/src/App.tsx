@@ -417,6 +417,23 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           </div>
         )}
 
+        {/* Fee breakdown — so the delivery fee is always visible */}
+        <div className="mt-3 space-y-1 rounded-xl bg-black/[0.03] p-3 text-sm">
+          {order.goods_cost > 0 && (
+            <div className="flex justify-between text-black/60">
+              <span>{order.service_type === 'food' ? 'Food subtotal' : 'Goods'}</span><span>{peso(order.goods_cost)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-medium">
+            <span>Delivery fee</span><span className="text-green-700">{peso(order.delivery_fee)}</span>
+          </div>
+          {order.convenience_fee > 0 && (
+            <div className="flex justify-between text-black/60">
+              <span>Convenience fee</span><span>{peso(order.convenience_fee)}</span>
+            </div>
+          )}
+        </div>
+
         {/* Customer + store contacts */}
         <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
           <div className="min-w-0">
