@@ -195,6 +195,17 @@ function OrderDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
             <div className="rounded-lg bg-black/[0.02] p-3">
               <Line label="Goods" value={peso(detail.order.goods_cost ?? 0)} />
               <Line label="Delivery fee" value={peso(detail.order.delivery_fee ?? 0)} />
+              {Number(detail.order.store_fee_total ?? 0) > 0 &&
+                <Line label="Store fee" value={peso(detail.order.store_fee_total ?? 0)} />}
+              {Number(detail.order.convenience_fee ?? 0) > 0 &&
+                <Line label="Convenience fee" value={peso(detail.order.convenience_fee ?? 0)} />}
+              <div className="mt-1 flex justify-between border-t border-black/10 pt-1 font-bold">
+                <span>Total</span>
+                <span>{peso(
+                  Number(detail.order.goods_cost ?? 0) + Number(detail.order.delivery_fee ?? 0)
+                  + Number(detail.order.store_fee_total ?? 0) + Number(detail.order.convenience_fee ?? 0),
+                )}</span>
+              </div>
               <Line label="Commission" value={peso(detail.order.commission_amount ?? 0)} />
               <Line label="Payment" value={`${String(detail.order.payment_method ?? '').replaceAll('_', ' ')}${detail.order.payment_status === 'paid' ? ' ✓' : ''}`} />
             </div>
