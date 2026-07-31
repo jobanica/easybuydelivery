@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  onAuthChange, sendEmailOtp, ensureRider, signOut,
+  onAuthChange, signInWithPassword, signUpWithPassword, ensureRider, signOut,
   uploadRiderDocument, riderDocumentsComplete, RIDER_DOCUMENT_LABELS, type RiderDocumentKind,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
+import { REQUIRE_DOCUMENTS } from './config.ts';
 
 interface RiderRec {
   id: string;
@@ -69,7 +70,7 @@ function LiveGate() {
   if (rider.application_status === 'rejected') return <StatusScreen status="rejected" />;
   // Documents are required before a rider can accept bookings — collect them
   // while the application is reviewed, and block entry if still missing.
-  if (!riderDocumentsComplete(rider)) return <DocumentsGate rider={rider} onChange={reload} />;
+  if (REQUIRE_DOCUMENTS && !riderDocumentsComplete(rider)) return <DocumentsGate rider={rider} onChange={reload} />;
   if (rider.application_status === 'approved') return <App riderId={rider.id} riderName={rider.name} />;
   return <StatusScreen status={rider.application_status} />;
 }
@@ -197,44 +198,45 @@ function Shell({ title, sub, children }: { title: string; sub: string; children:
 }
 
 function EmailSignIn({ onBack }: { onBack: () => void }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = /\S+@\S+\.\S+/.test(email.trim());
+  const valid = /\S+@\S+\.\S+/.test(email.trim()) && password.length >= 6;
 
-  async function send() {
+  async function submit() {
     setError(null); setBusy(true);
-    try { await sendEmailOtp(supabase!, email.trim(), window.location.origin); setSent(true); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    try {
+      if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+      else await signInWithPassword(supabase!, email.trim(), password);
+      // onAuthChange in LiveGate takes over from here.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
   }
 
   return (
-    <Shell title={sent ? 'Check your email' : 'Sign in'} sub="Rider access">
-      {!sent ? (
-        <>
-          <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
-          <label className="mb-1 block text-sm font-medium text-black/70">Your email</label>
-          <input className={inp} value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com" inputMode="email" autoCapitalize="none" />
-          <button disabled={busy || !valid} onClick={send}
-            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
-            {busy ? 'Sending…' : 'Continue with email'}
-          </button>
-          <p className="mt-3 text-xs text-black/40">We'll email you a secure sign-in link. No password needed.</p>
-        </>
-      ) : (
-        <>
-          <p className="text-sm text-black/60">We sent a sign-in link to <b>{email.trim()}</b>. Open it on this device to continue.</p>
-          <button disabled={busy} onClick={send}
-            className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple disabled:opacity-60">
-            {busy ? 'Resending…' : 'Resend link'}
-          </button>
-          <button onClick={() => setSent(false)} className="mt-2 w-full text-sm text-black/50">Use a different email</button>
-        </>
-      )}
+    <Shell title={mode === 'signup' ? 'Create account' : 'Sign in'} sub="Rider access">
+      <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
+      <label className="mb-1 block text-sm font-medium text-black/70">Email</label>
+      <input className={inp} value={email} onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@email.com" inputMode="email" autoCapitalize="none" autoComplete="email" />
+      <label className="mb-1 mt-3 block text-sm font-medium text-black/70">Password</label>
+      <input className={inp} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        placeholder="At least 6 characters"
+        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+        onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+      <button disabled={busy || !valid} onClick={submit}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+      </button>
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <button onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}
+        className="mt-4 w-full text-sm text-black/55">
+        {mode === 'signup' ? 'Already have an account? Sign in' : "New here? Create an account"}
+      </button>
     </Shell>
   );
 }

@@ -53,6 +53,29 @@ export async function verifyOtp(db: SupabaseClient, contact: OtpContact, token: 
   return data.user;
 }
 
+/** Sign in with an email + password. */
+export async function signInWithPassword(db: SupabaseClient, email: string, password: string) {
+  const { data, error } = await db.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+  return data.user;
+}
+
+/**
+ * Create an account with an email + password. With email confirmation disabled
+ * on the project this returns an active session immediately (no email link).
+ */
+export async function signUpWithPassword(db: SupabaseClient, email: string, password: string) {
+  const { data, error } = await db.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+  return data.user;
+}
+
 export async function currentUser(db: SupabaseClient): Promise<User | null> {
   const { data } = await db.auth.getUser();
   return data.user;

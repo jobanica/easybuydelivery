@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { sendEmailOtp } from '@ebd/supabase';
+import { signInWithPassword, signUpWithPassword } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from './AuthContext.tsx';
 import { inputCls } from '../ui.tsx';
@@ -43,47 +43,44 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
 const Splash = ({ sub }: { sub: string }) => <Shell title={sub}><p className="text-sm text-black/50">Please wait…</p></Shell>;
 
 function EmailSignIn() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = /\S+@\S+\.\S+/.test(email.trim());
+  const valid = /\S+@\S+\.\S+/.test(email.trim()) && password.length >= 6;
 
-  async function send() {
+  async function submit() {
     setError(null); setBusy(true);
-    try { await sendEmailOtp(supabase!, email.trim(), window.location.origin); setSent(true); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    try {
+      if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+      else await signInWithPassword(supabase!, email.trim(), password);
+      // The auth listener in AuthContext takes over from here.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
   }
 
   return (
-    <Shell title="Sign in to order">
-      {!sent ? (
-        <>
-          <label className="mb-1 block text-sm font-medium text-black/70">Your email</label>
-          <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com" inputMode="email" autoCapitalize="none" />
-          <button onClick={send} disabled={busy || !valid}
-            className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
-            {busy ? 'Sending…' : 'Continue with email'}
-          </button>
-          <p className="mt-3 text-xs text-black/40">We'll email you a secure sign-in link. No password needed.</p>
-        </>
-      ) : (
-        <>
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-green/15 text-2xl">✉️</div>
-          <h2 className="text-lg font-bold">Check your email</h2>
-          <p className="mt-1 text-sm text-black/60">
-            We sent a sign-in link to <b>{email.trim()}</b>. Open it on this device to continue.
-          </p>
-          <button onClick={send} disabled={busy}
-            className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple disabled:opacity-60">
-            {busy ? 'Resending…' : 'Resend link'}
-          </button>
-          <button onClick={() => { setSent(false); }} className="mt-2 w-full text-sm text-black/50">Use a different email</button>
-        </>
-      )}
+    <Shell title={mode === 'signup' ? 'Create your account' : 'Sign in to order'}>
+      <label className="mb-1 block text-sm font-medium text-black/70">Email</label>
+      <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@email.com" inputMode="email" autoCapitalize="none" autoComplete="email" />
+      <label className="mb-1 mt-3 block text-sm font-medium text-black/70">Password</label>
+      <input className={inputCls} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        placeholder="At least 6 characters"
+        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+        onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+      <button onClick={submit} disabled={busy || !valid}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+      </button>
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <button onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}
+        className="mt-4 w-full text-sm text-black/55">
+        {mode === 'signup' ? 'Already have an account? Sign in' : "New here? Create an account"}
+      </button>
     </Shell>
   );
 }

@@ -8,6 +8,14 @@
  */
 export const REQUIRE_ACCOUNT = false;
 
+/**
+ * REQUIRE_DOCUMENTS — when true, riders must upload their OR/CR, driver's
+ * license, and proof of address before entering the app. Hidden for now; the
+ * upload UI and storage/columns stay in place. Flip to true to re-enable
+ * (also re-apply the document gate in set_rider_online / orders_rider_claim).
+ */
+export const REQUIRE_DOCUMENTS = false;
+
 /** Operator hotline shown in rider Settings → Help (tap to call/message). */
 export const SUPPORT_CONTACT = '0917 123 4567';
 
