@@ -269,13 +269,13 @@ export function FoodFlow() {
           notes: fullNote,
           deliveryLat: dropoff?.lat,
           deliveryLng: dropoff?.lng,
-          paymentMethod: (pay === 'online' ? 'online' : 'cod') as 'online' | 'cod',
+          paymentMethod: pay,
           paid: pay === 'online',
         }, fees.config));
       } else {
         buildFoodOrder({
           customerId: 'preview-customer', customerContact: contact.trim() || '09171234567',
-          deliveryFee, lines: cart, paymentMethod: pay === 'online' ? 'online' : 'cod', paid: pay === 'online',
+          deliveryFee, lines: cart, paymentMethod: pay, paid: pay === 'online',
         }, fees.config);
         setCreatedId('preview-only');
       }
@@ -522,6 +522,11 @@ export function FoodFlow() {
                   <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
                 </div>
               )}
+              {pay === 'rider_qr' && !needsDropoff && (
+                <div className="mt-1 flex justify-between text-xs text-black/50">
+                  <span>Scan rider's GCash QR on delivery</span><span>{peso(summary.customerTotal)}</span>
+                </div>
+              )}
               <div className="mt-3"><PaymentChoice value={pay} onChange={setPay} /></div>
             </div>
           </div>
@@ -532,7 +537,9 @@ export function FoodFlow() {
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {needsDropoff ? 'Set delivery location to continue'
                 : !contact.trim() ? 'Enter your mobile number'
-                : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}` : `Place order (COD) · ${peso(summary.customerTotal)}`}
+                : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}`
+                : pay === 'rider_qr' ? `Place order (GCash to rider) · ${peso(summary.customerTotal)}`
+                : `Place order (COD) · ${peso(summary.customerTotal)}`}
             </button>
           </div>
           </div>

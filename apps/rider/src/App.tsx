@@ -371,19 +371,25 @@ const STATUS_ACTION: Record<OrderStatus, string> = {
   delivered: 'Mark as completed', cancelled: 'Cancelled',
 };
 
-function amountToCollect(o: RiderOrder): number | null {
-  if (o.payment_method === 'online') {
-    if (o.service_type === 'pabili') return o.actual_amount;
-    return o.goods_cost;
-  }
-  if (o.payment_method === 'rider_qr') return 0;
+/** The full customer total (what COD collects / what a GCash-to-rider QR charges). */
+function fullCollectible(o: RiderOrder): number | null {
   if (o.service_type === 'padala') return o.delivery_fee;
   if (o.service_type === 'pabili') {
     if (o.actual_amount == null) return null;
     return pabiliCollectible(o.actual_amount, o.delivery_fee, o.convenience_fee);
   }
-  // Food COD: collect the full customer total (goods + delivery + store + convenience).
+  // Food: goods + delivery + store + convenience.
   return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
+}
+
+function amountToCollect(o: RiderOrder): number | null {
+  if (o.payment_method === 'online') {
+    if (o.service_type === 'pabili') return o.actual_amount;
+    return o.goods_cost;
+  }
+  // Paid to the rider via GCash QR — no cash to collect at the door.
+  if (o.payment_method === 'rider_qr') return 0;
+  return fullCollectible(o);
 }
 
 function DeliveryCard({ order, data, onChange, payoutNumber }:
@@ -394,6 +400,9 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
   const [releaseErr, setReleaseErr] = useState<string | null>(null);
   const next = nextStatus(order);
   const collect = amountToCollect(order);
+  const isRiderQr = order.payment_method === 'rider_qr';
+  // Amount encoded in the scan-to-pay QR: for GCash-to-rider, the full total.
+  const qrAmount = isRiderQr ? fullCollectible(order) : collect;
   const needsActual = order.service_type === 'pabili' && order.actual_amount == null;
 
   useLocationPublisher(order.id, order.status);
@@ -508,9 +517,13 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         {note && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>}
 
         {order.payment_status !== 'paid' && order.status === 'on_the_way' && (
-          <div className="mt-3 flex flex-col items-center rounded-xl bg-black/[0.02] p-3">
-            <p className="mb-2 text-xs font-medium text-black/60">Let the customer scan to pay</p>
-            <Qr payload={payoutNumber ? `ebd://pay?to=${encodeURIComponent(payoutNumber)}&amount=${collect ?? 0}` : `ebd://pay?order=${order.id}&amount=${collect ?? 0}`} />
+          <div className={`mt-3 flex flex-col items-center rounded-xl p-3 ${isRiderQr ? 'bg-brand-purple/[0.06] ring-1 ring-brand-purple/20' : 'bg-black/[0.02]'}`}>
+            <p className="mb-2 text-xs font-medium text-black/60">
+              {isRiderQr
+                ? <>Customer pays by GCash — let them scan to send <span className="font-bold text-brand-ink">{qrAmount != null ? peso(qrAmount) : ''}</span></>
+                : 'Let the customer scan to pay'}
+            </p>
+            <Qr payload={payoutNumber ? `ebd://pay?to=${encodeURIComponent(payoutNumber)}&amount=${qrAmount ?? 0}` : `ebd://pay?order=${order.id}&amount=${qrAmount ?? 0}`} />
             {payoutNumber
               ? <p className="mt-2 text-xs text-black/60">GCash/Maya: <span className="font-semibold text-brand-ink">{payoutNumber}</span></p>
               : <p className="mt-2 text-[11px] text-black/35">Set your GCash/Maya number in Settings</p>}
@@ -522,9 +535,11 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           <span className="text-sm">
             {order.payment_status === 'paid'
               ? <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
-              : collect == null
-                ? <span className="text-black/50">Collect: enter actual first</span>
-                : <>Collect <span className="font-bold">{peso(collect)}</span></>}
+              : isRiderQr
+                ? <span className="text-brand-purple">GCash to rider{qrAmount != null ? ` · ${peso(qrAmount)}` : ''} — no cash to collect</span>
+                : collect == null
+                  ? <span className="text-black/50">Collect: enter actual first</span>
+                  : <>Collect <span className="font-bold">{peso(collect)}</span></>}
           </span>
           {next && (
             <button disabled={next === 'delivered' && needsActual}

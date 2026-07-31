@@ -53,7 +53,7 @@ export function PabiliForm() {
       cap: form.cap,
       where: form.where,
       notes: form.notes,
-      paymentMethod: form.pay === 'online' ? 'online' : 'cod',
+      paymentMethod: form.pay,
       paid: form.pay === 'online',
     };
   }
