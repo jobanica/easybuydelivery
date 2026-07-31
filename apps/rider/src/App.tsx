@@ -330,7 +330,8 @@ function amountToCollect(o: RiderOrder): number | null {
     if (o.actual_amount == null) return null;
     return pabiliCollectible(o.actual_amount, o.delivery_fee, o.convenience_fee);
   }
-  return o.goods_cost + o.delivery_fee;
+  // Food COD: collect the full customer total (goods + delivery + store + convenience).
+  return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
 }
 
 function DeliveryCard({ order, data, onChange, payoutNumber }:
@@ -427,6 +428,11 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           <div className="flex justify-between font-medium">
             <span>Delivery fee</span><span className="text-green-700">{peso(order.delivery_fee)}</span>
           </div>
+          {order.store_fee_total > 0 && (
+            <div className="flex justify-between text-black/60">
+              <span>Store fee</span><span>{peso(order.store_fee_total)}</span>
+            </div>
+          )}
           {order.convenience_fee > 0 && (
             <div className="flex justify-between text-black/60">
               <span>Convenience fee</span><span>{peso(order.convenience_fee)}</span>
