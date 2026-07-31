@@ -328,7 +328,7 @@ function amountToCollect(o: RiderOrder): number | null {
   if (o.service_type === 'padala') return o.delivery_fee;
   if (o.service_type === 'pabili') {
     if (o.actual_amount == null) return null;
-    return pabiliCollectible(o.actual_amount, o.delivery_fee);
+    return pabiliCollectible(o.actual_amount, o.delivery_fee, o.convenience_fee);
   }
   return o.goods_cost + o.delivery_fee;
 }

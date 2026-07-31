@@ -19,6 +19,8 @@ export interface PabiliRequestInput {
   customerId: string;
   customerContact: string;
   deliveryFee: number;
+  /** Operator-set convenience fee (from app settings; not customer-editable). */
+  convenienceFee?: number;
   /** Free-text list of what to buy. */
   itemsDescription: string;
   estimate: number;
@@ -39,6 +41,7 @@ export interface PabiliOrderRow {
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
+  convenience_fee: number;
   store_fee_total: 0;
   goods_cost: 0;
   commission_amount: number;
@@ -69,6 +72,7 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     payment_method: input.paymentMethod ?? 'cod',
     payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
+    convenience_fee: input.convenienceFee ?? 0,
     store_fee_total: 0,
     goods_cost: 0, // unknown until the rider buys
     commission_amount: pabiliCommission(input.deliveryFee),

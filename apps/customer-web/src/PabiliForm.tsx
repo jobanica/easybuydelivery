@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { pabiliCommission, validateBudget } from '@ebd/shared';
-import { buildPabiliOrderRow, createPabiliOrder, type PabiliRequestInput } from '@ebd/supabase';
+import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -27,6 +27,13 @@ export function PabiliForm() {
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Convenience fee is operator-set (from app settings); the customer can't edit it.
+  const [convenienceFee, setConvenienceFee] = useState(0);
+
+  useEffect(() => {
+    if (!supabase || !isSupabaseConfigured) return;
+    getAppSettings(supabase).then((s) => setConvenienceFee(s.convenience_fee)).catch(() => {});
+  }, []);
 
   const operatorCut = useMemo(() => pabiliCommission(form.deliveryFee), [form.deliveryFee]);
   const capValid = form.cap >= form.estimate;
@@ -40,6 +47,7 @@ export function PabiliForm() {
       customerId,
       customerContact: form.customerContact,
       deliveryFee: form.deliveryFee,
+      convenienceFee,
       itemsDescription: form.itemsDescription,
       estimate: form.estimate,
       cap: form.cap,
@@ -137,10 +145,11 @@ export function PabiliForm() {
         <Row label="Estimated goods" value={peso(form.estimate)} />
         <Row label="Spending cap" value={peso(form.cap)} muted />
         <Row label="Delivery fee" value={peso(form.deliveryFee)} />
+        {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <Row label="Operator commission (15% of DF)" value={peso(operatorCut)} muted />
         <p className="mt-2 text-xs text-black/50">
-          You pay the actual receipt total + delivery fee. The rider won't exceed
-          your cap without checking with you.
+          You pay the actual receipt total + delivery fee{convenienceFee > 0 ? ' + convenience fee' : ''}.
+          The rider won't exceed your cap without checking with you.
         </p>
       </div>
 

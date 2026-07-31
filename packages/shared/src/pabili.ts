@@ -51,10 +51,10 @@ export function overCapAmount(actual: number, budget: PabiliBudget): number {
 
 /**
  * Final amount to collect from the customer for a Pabili order:
- * actual goods cost + delivery fee.
+ * actual goods cost + delivery fee + convenience fee (operator-set).
  */
-export function pabiliCollectible(actualGoods: number, deliveryFee: number): number {
-  return roundPeso(actualGoods + deliveryFee);
+export function pabiliCollectible(actualGoods: number, deliveryFee: number, convenienceFee = 0): number {
+  return roundPeso(actualGoods + deliveryFee + convenienceFee);
 }
 
 /** Operator commission for a Pabili order — 15% of the delivery fee. */
