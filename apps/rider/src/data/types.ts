@@ -20,9 +20,9 @@ export interface RiderOrder {
   actual_amount: number | null;
   store_contact: string | null;
   /** Linked store(s) for the order, so the rider can call the restaurant. */
-  stores: { name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
-  /** What the customer ordered. */
-  items: { name: string; qty: number; unitPrice: number; notes: string | null }[];
+  stores: { id: string | null; name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
+  /** What the customer ordered (store_id links each item to its store). */
+  items: { store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null }[];
   /** Customer drop-off coordinates (for the tracking map / navigation). */
   deliveryLat: number | null;
   deliveryLng: number | null;

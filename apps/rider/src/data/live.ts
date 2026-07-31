@@ -34,12 +34,12 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
     store_contact: (row.store_contact as string) ?? null,
     stores: Array.isArray(row.order_stores)
-      ? (row.order_stores as { store: { name: string | null; contact_number: string | null; lat: number | null; lng: number | null } | null }[])
-          .map((os) => ({ name: os.store?.name ?? null, contact: os.store?.contact_number ?? null, lat: os.store?.lat ?? null, lng: os.store?.lng ?? null }))
+      ? (row.order_stores as { store: { id: string | null; name: string | null; contact_number: string | null; lat: number | null; lng: number | null } | null }[])
+          .map((os) => ({ id: os.store?.id ?? null, name: os.store?.name ?? null, contact: os.store?.contact_number ?? null, lat: os.store?.lat ?? null, lng: os.store?.lng ?? null }))
       : [],
     items: Array.isArray(row.order_items)
-      ? (row.order_items as { name: string; qty: number; unit_price: number; notes: string | null }[])
-          .map((it) => ({ name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null }))
+      ? (row.order_items as { store_id: string | null; name: string; qty: number; unit_price: number; notes: string | null }[])
+          .map((it) => ({ store_id: it.store_id ?? null, name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null }))
       : [],
     deliveryLat: row.delivery_lat == null ? null : Number(row.delivery_lat),
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),

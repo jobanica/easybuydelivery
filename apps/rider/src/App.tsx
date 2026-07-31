@@ -263,6 +263,57 @@ const serviceTint: Record<string, string> = {
   padala: 'bg-brand-yellow/30 text-yellow-800',
 };
 
+/**
+ * Order items grouped by store: each restaurant shows its name + phone, with its
+ * items listed underneath — so a multi-store order is clear at a glance.
+ */
+function StoreGroups({ order }: { order: RiderOrder }) {
+  const byStore = new Map<string, RiderOrder['items']>();
+  const noStore: RiderOrder['items'] = [];
+  for (const it of order.items) {
+    if (it.store_id) byStore.set(it.store_id, [...(byStore.get(it.store_id) ?? []), it]);
+    else noStore.push(it);
+  }
+
+  const ItemRow = (it: RiderOrder['items'][number], j: number) => (
+    <li key={j} className="flex justify-between gap-2">
+      <span className="min-w-0">
+        <span className="font-medium">{it.qty}×</span> {it.name}
+        {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
+      </span>
+      {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
+    </li>
+  );
+
+  if (order.stores.length === 0 && noStore.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {order.stores.map((s, i) => {
+        const items = (s.id && byStore.get(s.id)) || [];
+        return (
+          <div key={s.id ?? i} className="rounded-xl bg-brand-purple/[0.06] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-sm font-bold">{s.name ?? 'Store'}</p>
+              {s.contact
+                ? <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
+                    className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-purple"><PhoneIcon /> {s.contact}</a>
+                : <span className="shrink-0 text-[11px] text-black/40">No number</span>}
+            </div>
+            {items.length > 0 && <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>}
+          </div>
+        );
+      })}
+      {noStore.length > 0 && (
+        <div className="rounded-xl bg-black/[0.03] p-3">
+          <p className="mb-1.5 text-xs font-semibold text-black/60">Order</p>
+          <ul className="space-y-1 text-sm">{noStore.map(ItemRow)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
   order: RiderOrder; onAccept: () => void; onDecline: () => void; declineLabel?: string;
 }) {
@@ -281,6 +332,7 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
         <a href={`tel:${order.customer_contact}`} className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-purple">
           <PhoneIcon /> {order.customer_contact}
         </a>
+        <StoreGroups order={order} />
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}
@@ -401,23 +453,6 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         )}
 
         {/* What the customer ordered */}
-        {order.items.length > 0 && (
-          <div className="mt-3 rounded-xl bg-black/[0.03] p-3">
-            <p className="mb-1.5 text-xs font-semibold text-black/60">Order</p>
-            <ul className="space-y-1 text-sm">
-              {order.items.map((it, i) => (
-                <li key={i} className="flex justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="font-medium">{it.qty}×</span> {it.name}
-                    {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
-                  </span>
-                  {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {/* Fee breakdown — so the delivery fee is always visible */}
         <div className="mt-3 space-y-1 rounded-xl bg-black/[0.03] p-3 text-sm">
           {order.goods_cost > 0 && (
@@ -454,19 +489,8 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
               className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
           </div>
         </div>
-        {/* Restaurant / store — always show the name; call button when a number exists. */}
-        {order.stores.map((s, i) => (
-          <div key={i} className="mt-2 flex items-center justify-between rounded-xl bg-brand-purple/[0.06] px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-xs text-black/45">Restaurant / store</p>
-              <p className="truncate text-sm font-medium">{s.name ?? 'Store'}{s.contact ? ` · ${s.contact}` : ''}</p>
-            </div>
-            {s.contact
-              ? <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white"><PhoneIcon /></a>
-              : <span className="shrink-0 text-[11px] text-black/40">No number</span>}
-          </div>
-        ))}
+        {/* Restaurant / store with its items grouped underneath. */}
+        <StoreGroups order={order} />
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}
