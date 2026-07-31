@@ -94,11 +94,17 @@ export async function uploadSettlementQr(db: SupabaseClient, file: File): Promis
  * (mark-as-paid) flips it to `confirmed` and reactivates the account.
  */
 export async function createSettlement(db: SupabaseClient, input: SettlementRowInput) {
-  const { data, error } = await db
-    .from('settlements')
-    .insert(buildSettlementRow(input))
-    .select('id')
-    .single();
-  if (error) throw error;
-  return (data as { id: string }).id;
+  if (input.amountDue < 0) throw new Error('amountDue must be non-negative');
+  // Upsert via RPC so re-settling a day that already has a settlement row
+  // (e.g. confirmed earlier, then more commission accrued) reopens it as pending
+  // instead of failing the unique(rider_id, business_day) constraint.
+  const { data, error } = await db.rpc('rider_submit_settlement', {
+    p_business_day: input.businessDay,
+    p_amount: input.amountDue,
+    p_method: input.method ?? null,
+    p_reference: input.reference ?? null,
+    p_receipt_url: input.receiptUrl ?? null,
+  });
+  if (error) throw new Error(error.message ?? 'Could not submit settlement');
+  return data as string;
 }
