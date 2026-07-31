@@ -642,7 +642,7 @@ function SettleModal({ amount, settings, live, onClose, onSubmit }: {
               className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand-green" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Receipt / screenshot</label>
+            <label className="mb-1 block text-sm font-medium">Receipt / screenshot <span className="font-normal text-red-500">*required</span></label>
             {receiptUrl ? (
               <div className="flex items-center gap-3">
                 <img src={receiptUrl} alt="Receipt" className="h-20 w-20 rounded-lg object-cover ring-1 ring-black/10" />
@@ -658,11 +658,15 @@ function SettleModal({ amount, settings, live, onClose, onSubmit }: {
 
           {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
-          <button onClick={submit} disabled={submitting || uploading}
+          <button onClick={submit} disabled={submitting || uploading || (live && !receiptUrl)}
             className="w-full rounded-xl bg-brand-green py-3 font-bold text-white disabled:opacity-50">
             {submitting ? 'Submitting…' : `I’ve paid ${peso(amount)} — submit`}
           </button>
-          <p className="text-center text-xs text-black/40">The operator confirms your payment; your balance clears once confirmed.</p>
+          <p className="text-center text-xs text-black/40">
+            {live && !receiptUrl
+              ? 'Upload your payment receipt to submit.'
+              : 'The operator confirms your payment; your balance clears once confirmed.'}
+          </p>
         </div>
       </div>
     </div>
