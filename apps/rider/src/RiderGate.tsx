@@ -37,6 +37,7 @@ function LiveGate() {
   const [rider, setRider] = useState<RiderRec | null>(null);
   const [checked, setChecked] = useState(false);
   const [screen, setScreen] = useState<'landing' | 'signin'>('landing');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
 
@@ -60,8 +61,8 @@ function LiveGate() {
   }
   if (!userId) {
     return screen === 'signin'
-      ? <EmailSignIn onBack={() => setScreen('landing')} />
-      : <Landing onStart={() => setScreen('signin')} />;
+      ? <EmailSignIn initialMode={authMode} onBack={() => setScreen('landing')} />
+      : <Landing onStart={(mode) => { setAuthMode(mode); setScreen('signin'); }} />;
   }
   if (!checked) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
@@ -129,7 +130,7 @@ function DocumentsGate({ rider, onChange }: { rider: RiderRec; onChange: () => P
 }
 
 /** First-run welcome screen. */
-function Landing({ onStart }: { onStart: () => void }) {
+function Landing({ onStart }: { onStart: (mode: 'signin' | 'signup') => void }) {
   const [learn, setLearn] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f7f4]">
@@ -160,11 +161,11 @@ function Landing({ onStart }: { onStart: () => void }) {
         )}
 
         <div className="space-y-3 pb-8">
-          <button onClick={onStart}
+          <button onClick={() => onStart('signin')}
             className="w-full rounded-2xl bg-brand-green py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Login &amp; Start Riding
           </button>
-          <button onClick={onStart}
+          <button onClick={() => onStart('signup')}
             className="w-full rounded-2xl bg-brand-purple py-3.5 font-bold text-white shadow-sm transition hover:brightness-95">
             Join Us Now
           </button>
@@ -197,8 +198,8 @@ function Shell({ title, sub, children }: { title: string; sub: string; children:
   );
 }
 
-function EmailSignIn({ onBack }: { onBack: () => void }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; initialMode?: 'signin' | 'signup' }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
