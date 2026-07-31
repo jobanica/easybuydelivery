@@ -568,7 +568,6 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
   onAdd: (it: MenuItem) => void;
   onCustomize: (id: string) => void;
 }) {
-  const feeLabel = fees.model === 'per_km' ? 'By distance' : peso(fees.flatFee);
   return (
     <section className="space-y-4">
       {/* Hero */}
@@ -599,14 +598,6 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
                 <p className="text-xs text-black/40">🕒 {scheduleLabel(store.opens_at, store.closes_at, store.open_days)}</p>
               )}
             </div>
-          </div>
-          {/* Info strip */}
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/[0.03] px-3 py-2.5 text-xs">
-            <BikeIcon />
-            <span className="font-semibold text-brand-ink">Delivery fee</span>
-            <span className="text-black/60">{feeLabel}</span>
-            <span className="mx-1 text-black/20">•</span>
-            <span className="text-black/60">Pay COD or online</span>
           </div>
         </div>
       </div>
