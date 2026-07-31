@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { onAuthChange, signOut } from '@ebd/supabase';
+import { onAuthChange, onPasswordRecovery, sendPasswordReset, updatePassword, signOut } from '@ebd/supabase';
 import { isStaffRole, type StaffRole } from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { IconScooter } from './icons.tsx';
@@ -27,14 +27,17 @@ export function AdminGate({ children }: { children: ReactNode }) {
 function Gate({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [role, setRole] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
+  useEffect(() => onPasswordRecovery(supabase!, () => setRecovery(true)), []);
   useEffect(() => {
     if (!userId) { setRole(null); return; }
     supabase!.from('profiles').select('role').eq('id', userId).maybeSingle()
       .then(({ data }) => setRole(data?.role ?? 'customer'));
   }, [userId]);
 
+  if (recovery) return <SetNewPassword onDone={() => setRecovery(false)} />;
   if (userId === undefined) return <Center>Loading…</Center>;
   if (!userId) return <SignIn />;
   if (role === null) return <Center>Checking access…</Center>;
@@ -43,17 +46,53 @@ function Gate({ children }: { children: ReactNode }) {
 }
 
 function SignIn() {
+  const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null);
-    const { error } = await supabase!.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
-    setBusy(false);
+    try {
+      if (mode === 'forgot') {
+        await sendPasswordReset(supabase!, email, window.location.origin);
+        setSent(true);
+      } else {
+        const { error } = await supabase!.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <Shell>
+        {sent ? (
+          <>
+            <p className="text-sm text-black/70">If an account exists for <b>{email}</b>, a password-reset link is on its way. Open it on this device to set a new password.</p>
+            <button onClick={() => { setMode('signin'); setSent(false); }}
+              className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple">Back to sign in</button>
+          </>
+        ) : (
+          <form onSubmit={submit} className="space-y-3">
+            <p className="text-sm text-black/60">Enter your email and we'll send a reset link.</p>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={inp} />
+            <button disabled={busy} className="w-full rounded-lg bg-brand-green py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+              {busy ? 'Sending…' : 'Send reset link'}
+            </button>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button type="button" onClick={() => { setMode('signin'); setError(null); }} className="w-full text-sm text-black/55">Back to sign in</button>
+          </form>
+        )}
+      </Shell>
+    );
   }
 
   return (
@@ -65,6 +104,36 @@ function SignIn() {
           placeholder="Password" className={inp} />
         <button disabled={busy} className="w-full rounded-lg bg-brand-green py-2.5 text-sm font-semibold text-white disabled:opacity-60">
           {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button type="button" onClick={() => { setMode('forgot'); setError(null); }} className="w-full text-sm text-brand-purple">Forgot password?</button>
+      </form>
+    </Shell>
+  );
+}
+
+/** Shown after the user opens a password-reset link. */
+function SetNewPassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (password.length < 6) { setError('Use at least 6 characters.'); return; }
+    setBusy(true); setError(null);
+    try { await updatePassword(supabase!, password); onDone(); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); setBusy(false); }
+  }
+
+  return (
+    <Shell>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-black/70">Set a new password for your account.</p>
+        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+          placeholder="New password (min 6 chars)" className={inp} autoComplete="new-password" />
+        <button disabled={busy} className="w-full rounded-lg bg-brand-green py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+          {busy ? 'Saving…' : 'Save new password'}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </form>

@@ -76,6 +76,29 @@ export async function signUpWithPassword(db: SupabaseClient, email: string, pass
   return data.user;
 }
 
+/** Send a password-reset email. The link returns to `redirectTo` (or the app). */
+export async function sendPasswordReset(db: SupabaseClient, email: string, redirectTo?: string) {
+  const { error } = await db.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
+  if (error) throw error;
+}
+
+/** Set a new password for the currently-authenticated (or recovery) session. */
+export async function updatePassword(db: SupabaseClient, password: string) {
+  const { error } = await db.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+/**
+ * Subscribe to the PASSWORD_RECOVERY auth event (fired when a user opens a
+ * reset link). Returns an unsubscribe function.
+ */
+export function onPasswordRecovery(db: SupabaseClient, cb: () => void): () => void {
+  const { data } = db.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') cb();
+  });
+  return () => data.subscription.unsubscribe();
+}
+
 export async function currentUser(db: SupabaseClient): Promise<User | null> {
   const { data } = await db.auth.getUser();
   return data.user;

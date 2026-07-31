@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  onAuthChange, signInWithPassword, signUpWithPassword, ensureRider, signOut,
+  onAuthChange, onPasswordRecovery, sendPasswordReset, updatePassword,
+  signInWithPassword, signUpWithPassword, ensureRider, signOut,
   uploadRiderDocument, riderDocumentsComplete, RIDER_DOCUMENT_LABELS, type RiderDocumentKind,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -44,12 +45,14 @@ function LiveGate() {
   // event so signing up (Join) leads to the application, while signing in
   // (Login) to an account with no rider does NOT dump them into the form.
   const [intent, setIntent] = useState<'login' | 'join' | null>(null);
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => onAuthChange(supabase!, (u) => {
     setUserId(u?.id ?? null);
     setEmail(u?.email ?? '');
     if (u) setScreen('landing'); // clear any stale auth form once signed in
   }), []);
+  useEffect(() => onPasswordRecovery(supabase!, () => setRecovery(true)), []);
 
   async function loadRider(uid: string) {
     const { data } = await supabase!.from('riders').select(RIDER_COLS).eq('profile_id', uid).maybeSingle();
@@ -66,6 +69,7 @@ function LiveGate() {
 
   const reload = () => userId ? loadRider(userId) : Promise.resolve();
 
+  if (recovery) return <SetNewPassword onDone={() => setRecovery(false)} />;
   if (userId === undefined) {
     return <Shell title="Loading…" sub="Rider access"><p className="text-sm text-black/50">Please wait…</p></Shell>;
   }
@@ -236,23 +240,55 @@ function Shell({ title, sub, children }: { title: string; sub: string; children:
 }
 
 function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; initialMode?: 'signin' | 'signup' }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = /\S+@\S+\.\S+/.test(email.trim()) && password.length >= 6;
+  const [sent, setSent] = useState(false);
+  const emailOk = /\S+@\S+\.\S+/.test(email.trim());
+  const valid = mode === 'forgot' ? emailOk : emailOk && password.length >= 6;
 
   async function submit() {
     setError(null); setBusy(true);
     try {
-      if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+      if (mode === 'forgot') { await sendPasswordReset(supabase!, email.trim(), window.location.origin); setSent(true); }
+      else if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
       else await signInWithPassword(supabase!, email.trim(), password);
-      // onAuthChange in LiveGate takes over from here.
+      // onAuthChange in LiveGate takes over on success.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
       setBusy(false);
     }
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <Shell title="Reset password" sub="Rider access">
+        {sent ? (
+          <>
+            <p className="text-sm text-black/60">If an account exists for <b>{email.trim()}</b>, we've sent a reset link. Open it on this device to set a new password.</p>
+            <button onClick={() => { setMode('signin'); setSent(false); }}
+              className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple">Back to sign in</button>
+          </>
+        ) : (
+          <>
+            <button onClick={onBack} className="mb-3 text-sm font-medium text-brand-purple">← Back</button>
+            <label className="mb-1 block text-sm font-medium text-black/70">Email</label>
+            <input className={inp} value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@email.com" inputMode="email" autoCapitalize="none" autoComplete="email"
+              onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+            <button disabled={busy || !valid} onClick={submit}
+              className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+              {busy ? 'Sending…' : 'Send reset link'}
+            </button>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            <button onClick={() => { setMode('signin'); setError(null); }} className="mt-4 w-full text-sm text-black/55">Back to sign in</button>
+          </>
+        )}
+      </Shell>
+    );
   }
 
   return (
@@ -270,11 +306,42 @@ function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; i
         className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
       </button>
+      {mode === 'signin' && (
+        <button onClick={() => { setMode('forgot'); setError(null); }} className="mt-3 w-full text-sm text-brand-purple">Forgot password?</button>
+      )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       <button onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}
         className="mt-4 w-full text-sm text-black/55">
         {mode === 'signup' ? 'Already have an account? Sign in' : "New here? Create an account"}
       </button>
+    </Shell>
+  );
+}
+
+/** Shown after the user opens a password-reset link. */
+function SetNewPassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (password.length < 6) { setError('Use at least 6 characters.'); return; }
+    setBusy(true); setError(null);
+    try { await updatePassword(supabase!, password); onDone(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  }
+
+  return (
+    <Shell title="Set a new password" sub="Rider access">
+      <label className="mb-1 block text-sm font-medium text-black/70">New password</label>
+      <input className={inp} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        placeholder="At least 6 characters" autoComplete="new-password"
+        onKeyDown={(e) => { if (e.key === 'Enter' && !busy) void save(); }} />
+      <button disabled={busy} onClick={save}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Saving…' : 'Save new password'}
+      </button>
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </Shell>
   );
 }

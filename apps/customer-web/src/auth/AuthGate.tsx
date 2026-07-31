@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { signInWithPassword, signUpWithPassword } from '@ebd/supabase';
+import { useEffect, useState, type ReactNode } from 'react';
+import { signInWithPassword, signUpWithPassword, sendPasswordReset, updatePassword, onPasswordRecovery } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from './AuthContext.tsx';
 import { inputCls } from '../ui.tsx';
@@ -12,11 +12,42 @@ import { REQUIRE_ACCOUNT } from '../config.ts';
  */
 export function AuthGate({ children }: { children: ReactNode }) {
   const { live, loading, authed, needsPhone } = useAuth();
+  const [recovery, setRecovery] = useState(false);
+  useEffect(() => { if (!supabase) return; return onPasswordRecovery(supabase, () => setRecovery(true)); }, []);
   if (!REQUIRE_ACCOUNT || !live) return <>{children}</>;
+  if (recovery) return <SetNewPassword onDone={() => setRecovery(false)} />;
   if (loading) return <Splash sub="Loading…" />;
   if (!authed) return <EmailSignIn />;
   if (needsPhone) return <PhoneSetup />;
   return <>{children}</>;
+}
+
+/** Shown after the user opens a password-reset link. */
+function SetNewPassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (password.length < 6) { setError('Use at least 6 characters.'); return; }
+    setBusy(true); setError(null);
+    try { await updatePassword(supabase!, password); onDone(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  }
+
+  return (
+    <Shell title="Set a new password">
+      <label className="mb-1 block text-sm font-medium text-black/70">New password</label>
+      <input className={inputCls} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        placeholder="At least 6 characters" autoComplete="new-password"
+        onKeyDown={(e) => { if (e.key === 'Enter' && !busy) void save(); }} />
+      <button onClick={save} disabled={busy}
+        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        {busy ? 'Saving…' : 'Save new password'}
+      </button>
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </Shell>
+  );
 }
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {
@@ -43,23 +74,54 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
 const Splash = ({ sub }: { sub: string }) => <Shell title={sub}><p className="text-sm text-black/50">Please wait…</p></Shell>;
 
 function EmailSignIn() {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = /\S+@\S+\.\S+/.test(email.trim()) && password.length >= 6;
+  const [sent, setSent] = useState(false);
+  const emailOk = /\S+@\S+\.\S+/.test(email.trim());
+  const valid = mode === 'forgot' ? emailOk : emailOk && password.length >= 6;
 
   async function submit() {
     setError(null); setBusy(true);
     try {
-      if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+      if (mode === 'forgot') { await sendPasswordReset(supabase!, email.trim(), window.location.origin); setSent(true); }
+      else if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
       else await signInWithPassword(supabase!, email.trim(), password);
-      // The auth listener in AuthContext takes over from here.
+      // The auth listener in AuthContext takes over on success.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
       setBusy(false);
     }
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <Shell title="Reset your password">
+        {sent ? (
+          <>
+            <p className="text-sm text-black/60">If an account exists for <b>{email.trim()}</b>, we've sent a reset link. Open it on this device to set a new password.</p>
+            <button onClick={() => { setMode('signin'); setSent(false); }}
+              className="mt-4 w-full rounded-lg border border-brand-purple py-2.5 text-sm font-medium text-brand-purple">Back to sign in</button>
+          </>
+        ) : (
+          <>
+            <label className="mb-1 block text-sm font-medium text-black/70">Email</label>
+            <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@email.com" inputMode="email" autoCapitalize="none" autoComplete="email"
+              onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+            <button onClick={submit} disabled={busy || !valid}
+              className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+              {busy ? 'Sending…' : 'Send reset link'}
+            </button>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            <button onClick={() => { setMode('signin'); setError(null); }} className="mt-4 w-full text-sm text-black/55">Back to sign in</button>
+          </>
+        )}
+      </Shell>
+    );
   }
 
   return (
@@ -76,6 +138,9 @@ function EmailSignIn() {
         className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
       </button>
+      {mode === 'signin' && (
+        <button onClick={() => { setMode('forgot'); setError(null); }} className="mt-3 w-full text-sm text-brand-purple">Forgot password?</button>
+      )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       <button onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}
         className="mt-4 w-full text-sm text-black/55">
