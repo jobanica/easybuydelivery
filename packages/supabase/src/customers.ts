@@ -59,7 +59,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, payment_method, item_description, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
+    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -68,6 +68,7 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
   if (error) throw error;
   const row = (data ?? [])[0] as {
     id: string; status: string; service_type: string; payment_method: string | null; item_description: string | null;
+    pickup_lat: number | null; pickup_lng: number | null;
     delivery_lat: number | null; delivery_lng: number | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
     order_items?: { name: string; qty: number; unit_price: number }[];
@@ -81,9 +82,15 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     status: row.status,
     service_type: row.service_type,
     payment_method: row.payment_method ?? null,
-    pickup: store && store.lat != null && store.lng != null ? { lat: store.lat, lng: store.lng } : null,
+    // Food orders pick up at a store; pabili/padala have no store row, so fall
+    // back to the pickup pin the customer set on the order.
+    pickup: store && store.lat != null && store.lng != null
+      ? { lat: store.lat, lng: store.lng }
+      : row.pickup_lat != null && row.pickup_lng != null
+        ? { lat: row.pickup_lat, lng: row.pickup_lng }
+        : null,
     dropoff: row.delivery_lat != null && row.delivery_lng != null ? { lat: row.delivery_lat, lng: row.delivery_lng } : null,
-    storeName: store?.name ?? null,
+    storeName: store?.name ?? (row.service_type === 'padala' ? 'Pickup point' : row.service_type === 'pabili' ? 'Buy here' : null),
     items: items.length ? items : (row.item_description ? [{ name: row.item_description, qty: 1, unitPrice: 0 }] : []),
   };
 }
