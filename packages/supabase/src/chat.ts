@@ -44,14 +44,19 @@ export async function sendOrderMessage(
   if (error) throw error;
 }
 
-/** Subscribe to new messages on an order thread. Returns an unsubscribe fn. */
+/**
+ * Subscribe to new messages on an order thread. Returns an unsubscribe fn.
+ * `channelKey` lets separate subscribers (e.g. an open thread vs an unread
+ * badge) use distinct channel names on the same client.
+ */
 export function subscribeOrderMessages(
   db: SupabaseClient,
   orderId: string,
   onMessage: (m: OrderMessage) => void,
+  channelKey = 'chat',
 ): () => void {
   const channel = db
-    .channel(`chat:order:${orderId}`)
+    .channel(`${channelKey}:order:${orderId}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` },

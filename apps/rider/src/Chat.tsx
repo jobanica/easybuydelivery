@@ -2,6 +2,41 @@ import { useEffect, useRef, useState } from 'react';
 import { listOrderMessages, sendOrderMessage, subscribeOrderMessages, type OrderMessage } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 
+/** A button that opens the order chat and shows an unread-message badge. */
+export function ChatButton({ orderId, role, title, className }: {
+  orderId: string; role: 'customer' | 'rider'; title: string; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let alive = true;
+    listOrderMessages(supabase, orderId)
+      .then((ms) => { if (alive) setUnread(ms.filter((m) => m.sender_role !== role).length); })
+      .catch(() => {});
+    const unsub = subscribeOrderMessages(supabase, orderId, (m) => {
+      if (m.sender_role !== role) setUnread((n) => n + 1);
+    }, 'chat-badge');
+    return () => { alive = false; unsub(); };
+  }, [orderId, role]);
+
+  return (
+    <>
+      <button onClick={() => { setOpen(true); setUnread(0); }}
+        className={className ?? 'relative w-full rounded-xl bg-brand-purple py-3 text-sm font-bold text-white shadow-sm'}>
+        💬 {title}
+        {unread > 0 && (
+          <span className="ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-brand-purple">
+            {unread}
+          </span>
+        )}
+      </button>
+      {open && <Chat orderId={orderId} role={role} title={title} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 /** Order chat overlay. `role` is who the current user is on this order. */
 export function Chat({ orderId, role, title, onClose }: {
   orderId: string; role: 'customer' | 'rider'; title: string; onClose: () => void;
@@ -32,7 +67,7 @@ export function Chat({ orderId, role, title, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[10000] flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
       <div className="flex h-[75vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
           <h3 className="font-bold">{title}</h3>
