@@ -4,7 +4,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { PadalaForm } from './PadalaForm.tsx';
 import { PabiliForm } from './PabiliForm.tsx';
 import { FoodFlow } from './FoodFlow.tsx';
-import { TrackingMap } from './tracking/TrackingMap.tsx';
+import { Track } from './tracking/Track.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 import { REQUIRE_ACCOUNT } from './config.ts';
 import { Welcome } from './Welcome.tsx';
@@ -14,10 +14,6 @@ type Service = 'food' | 'pabili' | 'padala';
 type Tab = Service | 'track' | 'account';
 type ServiceAvailability = Record<Service, boolean>;
 const ALL_ON: ServiceAvailability = { food: true, pabili: true, padala: true };
-
-// Demo route for the tracking preview (a municipality-scale hop).
-const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
-const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
 
 export function App() {
   const { live, mobile, signOut } = useAuth();
@@ -80,7 +76,7 @@ export function App() {
         {account ? (
           <Account />
         ) : tracking ? (
-          <TrackingMap pickup={DEMO_PICKUP} dropoff={DEMO_DROPOFF} onClose={() => setTab('food')} />
+          <Track onClose={() => setTab('food')} />
         ) : noneEnabled ? (
           <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/60 shadow-sm ring-1 ring-black/5">
             All services are temporarily unavailable. Please check back soon.

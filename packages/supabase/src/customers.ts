@@ -40,6 +40,42 @@ export interface CustomerOrder {
   order_stores: { store: { name: string | null } | null }[];
 }
 
+export interface ActiveDelivery {
+  id: string;
+  status: string;
+  pickup: { lat: number; lng: number } | null;
+  dropoff: { lat: number; lng: number } | null;
+}
+
+/**
+ * The customer's current in-progress delivery (a rider is assigned and it isn't
+ * delivered/cancelled), with pickup (store) and drop-off coordinates for the
+ * live tracking map. Null when there's nothing to track.
+ */
+export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
+  const { data, error } = await db
+    .from('orders')
+    .select('id, status, delivery_lat, delivery_lng, order_stores(store:stores(lat, lng))')
+    .eq('customer_id', customerId)
+    .not('rider_id', 'is', null)
+    .not('status', 'in', '(delivered,cancelled)')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0] as {
+    id: string; status: string; delivery_lat: number | null; delivery_lng: number | null;
+    order_stores?: { store: { lat: number | null; lng: number | null } | null }[];
+  } | undefined;
+  if (!row) return null;
+  const store = row.order_stores?.find((os) => os.store?.lat != null && os.store?.lng != null)?.store ?? null;
+  return {
+    id: row.id,
+    status: row.status,
+    pickup: store && store.lat != null && store.lng != null ? { lat: store.lat, lng: store.lng } : null,
+    dropoff: row.delivery_lat != null && row.delivery_lng != null ? { lat: row.delivery_lat, lng: row.delivery_lng } : null,
+  };
+}
+
 export interface OrderPayToRider {
   rider_name: string | null;
   payout_number: string | null;
