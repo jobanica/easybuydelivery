@@ -73,7 +73,13 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const overdue = overdueBalance(ledger, today);
   const owed = owedBalance(ledger);
   const accepts = (t: string) => !profile?.services_accepted || profile.services_accepted.includes(t);
-  const pool = open.filter((o) => !declined.has(o.id) && accepts(o.service_type));
+  // Transfers first — a released delivery may already have paid-for goods
+  // waiting, so it should be taken before brand-new orders.
+  const pool = open
+    .filter((o) => !declined.has(o.id) && accepts(o.service_type))
+    .sort((a, b) => Number(b.isTransfer) - Number(a.isTransfer));
+  const transfers = pool.filter((o) => o.isTransfer);
+  const newRequests = pool.filter((o) => !o.isTransfer);
 
   async function toggleOnline() {
     setOnlineBusy(true);
@@ -140,13 +146,32 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
           locked ? <LockCard overdue={overdue} onSettle={() => setTab('earnings')} />
             : !online ? <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} />
             : pool.length === 0 ? <Empty icon="📭">No requests in the pool right now.</Empty>
-            : <div className="space-y-3">
-                <SectionTitle>Available requests</SectionTitle>
-                {pool.map((o) => (
-                  <RequestCard key={o.id} order={o}
-                    onAccept={() => accept(o.id)}
-                    onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
-                ))}
+            : <div className="space-y-5">
+                {transfers.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="rounded-2xl bg-brand-yellow/20 px-4 py-3 ring-1 ring-brand-yellow">
+                      <h2 className="text-lg font-extrabold text-yellow-900">🔄 Transfer deliveries</h2>
+                      <p className="text-xs text-yellow-900/80">
+                        Released by another rider — please take these first.
+                      </p>
+                    </div>
+                    {transfers.map((o) => (
+                      <RequestCard key={o.id} order={o}
+                        onAccept={() => accept(o.id)}
+                        onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
+                    ))}
+                  </div>
+                )}
+                {newRequests.length > 0 && (
+                  <div className="space-y-3">
+                    <SectionTitle>Available requests</SectionTitle>
+                    {newRequests.map((o) => (
+                      <RequestCard key={o.id} order={o}
+                        onAccept={() => accept(o.id)}
+                        onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
+                    ))}
+                  </div>
+                )}
               </div>
         )}
 
@@ -182,9 +207,24 @@ function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, loc
   onGo: (t: Tab) => void; onAccept: (id: string) => void; data: RiderData; onChange: () => Promise<void>;
 }) {
   const todaysPotential = active.reduce((s, o) => s + riderEarn(o), 0);
+  const transferCount = pool.filter((o) => o.isTransfer).length;
   return (
     <div className="space-y-4">
       <OnlineToggle online={online} busy={onlineBusy} onToggle={onToggleOnline} />
+
+      {/* Transfers need a taker first — surface them above everything else. */}
+      {online && !locked && transferCount > 0 && (
+        <button onClick={() => onGo('requests')}
+          className="flex w-full items-center justify-between rounded-2xl bg-brand-yellow/25 px-4 py-3 text-left ring-1 ring-brand-yellow">
+          <span>
+            <span className="block text-sm font-extrabold text-yellow-900">
+              🔄 {transferCount} transfer {transferCount === 1 ? 'delivery' : 'deliveries'} waiting
+            </span>
+            <span className="text-xs text-yellow-900/80">Released by another rider — take these first</span>
+          </span>
+          <span className="shrink-0 rounded-lg bg-yellow-900 px-3 py-1.5 text-xs font-bold text-white">View</span>
+        </button>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3">
@@ -219,7 +259,7 @@ function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, loc
         </div>
       ) : online && !locked && pool.length > 0 ? (
         <div>
-          <SectionTitle>New request</SectionTitle>
+          <SectionTitle>{pool[0]!.isTransfer ? 'Transfer delivery' : 'New request'}</SectionTitle>
           <RequestCard order={pool[0]!} onAccept={() => onAccept(pool[0]!.id)} onDecline={() => onGo('requests')} declineLabel="See all" />
         </div>
       ) : (
@@ -319,7 +359,21 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
   order: RiderOrder; onAccept: () => void; onDecline: () => void; declineLabel?: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+    <div className={`overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ${order.isTransfer ? 'ring-2 ring-brand-yellow' : 'ring-black/5'}`}>
+      {order.isTransfer && (
+        <div className="bg-brand-yellow/30 px-4 py-2">
+          <p className="text-xs font-bold text-yellow-900">
+            🔄 Transfer — released by {order.transferredFromName ?? 'another rider'}
+            {order.transferReason ? ` · ${order.transferReason}` : ''}
+          </p>
+          {order.transferHadGoods && (
+            <p className="mt-0.5 text-[11px] text-yellow-900/80">
+              ⚠️ Items already picked up — coordinate the hand-over
+              {order.transferredFromContact ? ` (${order.transferredFromContact})` : ''}.
+            </p>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-between px-4 pt-4">
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${serviceTint[order.service_type] ?? 'bg-black/5'}`}>
           {order.service_type}
@@ -327,6 +381,12 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
         <span className="rounded-full bg-brand-ink px-2.5 py-1 text-xs font-bold text-white">{peso(riderEarn(order))}</span>
       </div>
       <div className="px-4 py-3">
+        {order.isTransfer && order.transferHadGoods && order.transferredFromContact && (
+          <a href={`tel:${order.transferredFromContact}`}
+            className="mb-2 inline-flex items-center gap-1 rounded-lg bg-brand-purple/10 px-2.5 py-1 text-xs font-semibold text-brand-purple">
+            <PhoneIcon /> Call {order.transferredFromName ?? 'previous rider'}
+          </a>
+        )}
         <p className="text-sm font-semibold">
           {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
         </p>
@@ -420,11 +480,12 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
 
   async function release() {
     const msg = hasGoods
-      ? "You've already picked up the items for this order. Release it back to the pool? You'll need to coordinate handing the items over to the rider who takes it."
-      : "Release this delivery back to the pool? Another rider can then accept it. Use this if you can't continue (e.g. a breakdown).";
-    if (!window.confirm(msg)) return;
+      ? "You've already picked up the items for this order. Transfer it? It goes to the top of the pool as a transfer delivery, and you'll coordinate handing the items over to the rider who takes it.\n\nWhy can't you continue? (shown to the next rider)"
+      : "Transfer this delivery back to the pool? It's prioritised so another rider takes it first.\n\nWhy can't you continue? (shown to the next rider)";
+    const reason = window.prompt(msg, 'Breakdown');
+    if (reason === null) return; // cancelled
     setReleasing(true); setReleaseErr(null);
-    try { await data.releaseOrder(order.id); await onChange(); }
+    try { await data.releaseOrder(order.id, reason.trim() || undefined); await onChange(); }
     catch (e) { setReleaseErr(e instanceof Error ? e.message : String(e)); setReleasing(false); }
   }
 
@@ -585,7 +646,7 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         {/* Breakdown / can't-continue handoff: return to the pool. */}
         <button onClick={release} disabled={releasing}
           className="mt-3 w-full rounded-xl border border-red-300 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
-          {releasing ? 'Releasing…' : '⚠️ Can’t continue — release delivery'}
+          {releasing ? 'Transferring…' : '⚠️ Can’t continue — transfer delivery'}
         </button>
         {hasGoods && (
           <p className="mt-1.5 text-center text-[11px] text-black/45">

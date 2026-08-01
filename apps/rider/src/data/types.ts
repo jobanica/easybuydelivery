@@ -29,6 +29,13 @@ export interface RiderOrder {
   deliveryLat: number | null;
   deliveryLng: number | null;
   notes: string | null;
+  /** Released by another rider — prioritised in the pool. */
+  isTransfer: boolean;
+  transferReason: string | null;
+  /** The previous rider already has the goods; coordinate a hand-over. */
+  transferHadGoods: boolean;
+  transferredFromName: string | null;
+  transferredFromContact: string | null;
 }
 
 /** Abstraction the UI depends on — implemented for live Supabase and preview. */
@@ -40,7 +47,7 @@ export interface RiderData {
   getActiveOrders(): Promise<RiderOrder[]>;
   getLedger(): Promise<LedgerEntry[]>;
   accept(orderId: string): Promise<void>;
-  releaseOrder(orderId: string): Promise<void>;
+  releaseOrder(orderId: string, reason?: string): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
   settle(businessDay: string, amount: number, extra?: { reference?: string; receiptUrl?: string }): Promise<void>;

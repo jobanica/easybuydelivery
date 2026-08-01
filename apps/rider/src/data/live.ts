@@ -46,6 +46,11 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     deliveryLat: row.delivery_lat == null ? null : Number(row.delivery_lat),
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),
     notes: (row.notes as string) ?? null,
+    isTransfer: Boolean(row.is_transfer),
+    transferReason: (row.transfer_reason as string) ?? null,
+    transferHadGoods: Boolean(row.transfer_had_goods),
+    transferredFromName: (row.transferred_from_name as string) ?? null,
+    transferredFromContact: (row.transferred_from_contact as string) ?? null,
   };
 }
 
@@ -78,8 +83,8 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     async accept(orderId) {
       await acceptOrder(db, orderId, riderId);
     },
-    async releaseOrder(orderId) {
-      await releaseOrder(db, orderId);
+    async releaseOrder(orderId, reason) {
+      await releaseOrder(db, orderId, reason);
     },
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);

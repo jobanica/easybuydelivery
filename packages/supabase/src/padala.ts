@@ -154,8 +154,8 @@ export async function acceptOrder(db: SupabaseClient, orderId: string, riderId: 
  * another rider can accept it. Goes through the release_order RPC so only the
  * handling rider can release their own order.
  */
-export async function releaseOrder(db: SupabaseClient, orderId: string) {
-  const { error } = await db.rpc('release_order', { p_order_id: orderId });
+export async function releaseOrder(db: SupabaseClient, orderId: string, reason?: string) {
+  const { error } = await db.rpc('release_order', { p_order_id: orderId, p_reason: reason ?? null });
   if (error) throw error;
 }
 
