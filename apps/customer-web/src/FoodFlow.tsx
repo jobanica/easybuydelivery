@@ -170,7 +170,9 @@ export function FoodFlow() {
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
-  const needsDropoff = fees.model === 'per_km' && !dropoff;
+  // A drop-off pin is required for distance pricing, and for gift orders so the
+  // rider knows where to deliver to the recipient.
+  const needsDropoff = (fees.model === 'per_km' || gift) && !dropoff;
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
@@ -491,7 +493,12 @@ export function FoodFlow() {
             </div>
 
             <div className="mb-3 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-              {fees.model === 'per_km' && <LocationPicker value={dropoff} onChange={setDropoff} />}
+              {fees.model === 'per_km' && (
+                <div>
+                  {gift && <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>}
+                  <LocationPicker value={dropoff} onChange={setDropoff} />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium">Your name</label>
                 <input value={custName} onChange={(e) => setCustName(e.target.value)}
@@ -524,6 +531,15 @@ export function FoodFlow() {
                       inputMode="tel" placeholder="0917 123 4567"
                       className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
                   </div>
+                  {/* Pin the recipient's location. Under distance pricing the top map
+                      already captures this drop-off, so only add one here otherwise. */}
+                  {fees.model !== 'per_km' && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>
+                      <LocationPicker value={dropoff} onChange={setDropoff} />
+                      <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the order should be delivered.</p>
+                    </div>
+                  )}
                   <p className="text-xs text-black/50">The rider delivers to the recipient. You (the sender) still pay — use <b>GCash to rider</b> below and pay from your Orders once a rider accepts.</p>
                 </div>
               )}
