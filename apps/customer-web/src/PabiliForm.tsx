@@ -13,12 +13,12 @@ interface FormState {
   deliveryFee: number;
   customerContact: string;
   notes: string;
-  pay: PayChoice;
+  pay: PayChoice | null;
 }
 
 const initial: FormState = {
   itemsDescription: '', where: '', estimate: 300, cap: 400,
-  deliveryFee: 50, customerContact: '', notes: '', pay: 'cod',
+  deliveryFee: 50, customerContact: '', notes: '', pay: null,
 };
 
 export function PabiliForm() {
@@ -53,7 +53,7 @@ export function PabiliForm() {
       cap: form.cap,
       where: form.where,
       notes: form.notes,
-      paymentMethod: form.pay,
+      paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
     };
   }
@@ -62,6 +62,7 @@ export function PabiliForm() {
     e.preventDefault();
     if (submitting) return; // guard against double taps
     setError(null);
+    if (!form.pay) { setError('Please choose a payment method.'); return; }
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
     } catch (err) {
@@ -155,9 +156,9 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !capValid}
+      <button type="submit" disabled={submitting || !capValid || !form.pay}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : 'Request Pabili'}
+        {submitting ? 'Sending…' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
       </button>
     </form>
   );

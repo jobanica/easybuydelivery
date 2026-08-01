@@ -90,7 +90,7 @@ export function FoodFlow() {
   const [storeSearch, setStoreSearch] = useState(''); // filter the restaurant list
   const [cuisine, setCuisine] = useState<string>(''); // '' = all cuisines
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [pay, setPay] = useState<PayChoice>('cod');
+  const [pay, setPay] = useState<PayChoice | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +263,7 @@ export function FoodFlow() {
     setError(null);
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
+    if (!pay) { setError('Please choose a payment method.'); return; }
     const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
     setPlacing(true);
     try {
@@ -307,7 +308,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setGift(false); setRecipientName(''); setRecipientContact(''); setCartOpen(false); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setGift(false); setRecipientName(''); setRecipientContact(''); setPay(null); setCartOpen(false); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -580,11 +581,12 @@ export function FoodFlow() {
 
           <div className="border-t border-black/10 bg-white p-4">
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim()}
+            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim() || !pay}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {placing ? 'Placing your order…'
                 : needsDropoff ? 'Set delivery location to continue'
                 : !contact.trim() ? 'Enter your mobile number'
+                : !pay ? 'Choose a payment method'
                 : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}`
                 : pay === 'rider_qr' ? `Place order (GCash to rider) · ${peso(summary.customerTotal)}`
                 : `Place order (COD) · ${peso(summary.customerTotal)}`}

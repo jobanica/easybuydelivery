@@ -32,7 +32,7 @@ const PAY_LABELS: Record<PayChoice, string> = {
 
 /** Payment method selector shared across the ordering flows. */
 export function PaymentChoice({ value, onChange }:
-  { value: PayChoice; onChange: (v: PayChoice) => void }) {
+  { value: PayChoice | null; onChange: (v: PayChoice) => void }) {
   return (
     <div>
       <span className="mb-1 block text-sm font-medium text-black/70">Payment</span>

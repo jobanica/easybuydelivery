@@ -15,12 +15,12 @@ interface FormState {
   dropoffContact: string;
   customerContact: string;
   notes: string;
-  pay: PayChoice;
+  pay: PayChoice | null;
 }
 
 const initial: FormState = {
   itemDescription: '', deliveryFee: DEFAULT_DELIVERY_FEE, feePayer: 'sender',
-  pickupContact: '', dropoffContact: '', customerContact: '', notes: '', pay: 'cod',
+  pickupContact: '', dropoffContact: '', customerContact: '', notes: '', pay: null,
 };
 
 export function PadalaForm() {
@@ -49,7 +49,7 @@ export function PadalaForm() {
       pickup: { contact: form.pickupContact },
       dropoff: { contact: form.dropoffContact },
       notes: form.notes,
-      paymentMethod: form.pay === 'online' ? 'online' : 'cod',
+      paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
     };
   }
@@ -58,6 +58,7 @@ export function PadalaForm() {
     e.preventDefault();
     if (submitting) return; // guard against double taps
     setError(null);
+    if (!form.pay) { setError('Please choose a payment method.'); return; }
     setSubmitting(true);
     try {
       if (supabase && isSupabaseConfigured) {
@@ -139,9 +140,9 @@ export function PadalaForm() {
         <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting}
+      <button type="submit" disabled={submitting || !form.pay}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : 'Request a rider'}
+        {submitting ? 'Sending…' : !form.pay ? 'Choose a payment method' : 'Request a rider'}
       </button>
     </form>
   );
