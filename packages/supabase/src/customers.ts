@@ -44,6 +44,7 @@ export interface ActiveDelivery {
   id: string;
   status: string;
   service_type: string;
+  payment_method: string | null;
   pickup: { lat: number; lng: number } | null;
   dropoff: { lat: number; lng: number } | null;
   storeName: string | null;
@@ -58,7 +59,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, item_description, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
+    .select('id, status, service_type, payment_method, item_description, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -66,7 +67,7 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     .limit(1);
   if (error) throw error;
   const row = (data ?? [])[0] as {
-    id: string; status: string; service_type: string; item_description: string | null;
+    id: string; status: string; service_type: string; payment_method: string | null; item_description: string | null;
     delivery_lat: number | null; delivery_lng: number | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
     order_items?: { name: string; qty: number; unit_price: number }[];
@@ -79,6 +80,7 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     id: row.id,
     status: row.status,
     service_type: row.service_type,
+    payment_method: row.payment_method ?? null,
     pickup: store && store.lat != null && store.lng != null ? { lat: store.lat, lng: store.lng } : null,
     dropoff: row.delivery_lat != null && row.delivery_lng != null ? { lat: row.delivery_lat, lng: row.delivery_lng } : null,
     storeName: store?.name ?? null,
@@ -108,13 +110,33 @@ export interface OrderPayToRider {
 
 /**
  * The assigned rider's GCash/Maya details + amount for one of the caller's own
- * orders, so the sender can pay the rider directly. Null until a rider accepts.
+ * orders, so the sender can pay. Null until a rider accepts. If the rider has no
+ * payout number, the caller falls back to the operator's settlement number.
  */
 export async function getOrderPayToRider(db: SupabaseClient, orderId: string): Promise<OrderPayToRider | null> {
   const { data, error } = await db.rpc('order_pay_to_rider', { p_order_id: orderId });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
   return row ? { rider_name: row.rider_name ?? null, payout_number: row.payout_number ?? null, amount: Number(row.amount ?? 0) } : null;
+}
+
+/** Upload the sender's proof of payment for an order and record it on the order. */
+export async function uploadPaymentReceipt(db: SupabaseClient, orderId: string, file: File, reference?: string): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `payment-receipts/${orderId}/${Date.now()}.${ext}`;
+  const { error: upErr } = await db.storage.from('store-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const url = db.storage.from('store-assets').getPublicUrl(path).data.publicUrl;
+  const { error } = await db.rpc('set_order_payment_proof', { p_order_id: orderId, p_receipt_url: url, p_reference: reference ?? null });
+  if (error) throw error;
+  return url;
+}
+
+/** Record just a payment reference (no receipt image) on the caller's order. */
+export async function setOrderPaymentReference(db: SupabaseClient, orderId: string, reference: string): Promise<void> {
+  const { error } = await db.rpc('set_order_payment_proof', { p_order_id: orderId, p_receipt_url: null, p_reference: reference });
+  if (error) throw error;
 }
 
 /** The customer's recent orders (newest first). */

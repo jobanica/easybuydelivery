@@ -3,6 +3,7 @@ import { getActiveDelivery, getOrderRiderInfo, type ActiveDelivery, type OrderRi
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
+import { PayRider } from '../PayRider.tsx';
 import { peso } from '../ui.tsx';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
@@ -69,6 +70,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
           deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
         <OrderItemsCard delivery={delivery} />
+        {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
       </div>
     );
   }
@@ -94,6 +96,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         )}
       </div>
       {delivery && <OrderItemsCard delivery={delivery} />}
+      {delivery?.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
     </div>
   );
 }

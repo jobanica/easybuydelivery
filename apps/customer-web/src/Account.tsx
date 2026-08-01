@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress,
-  getOrderPayToRider,
-  type MyCustomer, type CustomerOrder, type CustomerAddress, type OrderPayToRider,
+  type MyCustomer, type CustomerOrder, type CustomerAddress,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { useAuth } from './auth/AuthContext.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
-import { Qr } from './Qr.tsx';
+import { PayRider } from './PayRider.tsx';
 import { peso } from './ui.tsx';
 import { REQUIRE_ACCOUNT, SUPPORT_CONTACT, APP_VERSION } from './config.ts';
 
@@ -24,55 +23,6 @@ function orderTotal(o: CustomerOrder): number {
 }
 function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
-}
-
-/** Shows the assigned rider's GCash number so the sender can pay them. */
-function PayRider({ orderId }: { orderId: string }) {
-  const [info, setInfo] = useState<OrderPayToRider | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-
-  async function load() {
-    if (!supabase) return;
-    setBusy(true);
-    try { setInfo(await getOrderPayToRider(supabase, orderId)); setLoaded(true); }
-    catch { /* ignore */ }
-    finally { setBusy(false); }
-  }
-
-  if (!loaded) {
-    return (
-      <button onClick={load} disabled={busy}
-        className="mt-2 rounded-lg bg-brand-purple/10 px-3 py-1.5 text-xs font-semibold text-brand-purple disabled:opacity-60">
-        {busy ? 'Checking…' : '💸 Pay your rider via GCash'}
-      </button>
-    );
-  }
-  if (!info || !info.rider_name) {
-    return <p className="mt-2 text-xs text-black/45">Waiting for a rider to accept — check back to pay.</p>;
-  }
-  return (
-    <div className="mt-2 rounded-lg bg-brand-purple/[0.06] px-3 py-2 text-xs">
-      <p className="font-semibold text-brand-ink">Send {peso(info.amount)} to your rider</p>
-      <p className="text-black/60">{info.rider_name}{info.payout_number ? ` · GCash/Maya: ${info.payout_number}` : ' · no GCash number on file yet'}</p>
-      {info.payout_number && (
-        <>
-          <button onClick={() => setShowQr((v) => !v)}
-            className="mt-2 rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white">
-            {showQr ? 'Hide QR' : '📱 Show payment QR'}
-          </button>
-          {showQr && (
-            <div className="mt-2 flex flex-col items-center rounded-lg bg-white p-3 ring-1 ring-black/5">
-              <Qr payload={`ebd://pay?to=${encodeURIComponent(info.payout_number)}&amount=${info.amount}`} />
-              <p className="mt-2 text-center text-[11px] text-black/50">Scan with your GCash/Maya app, or send {peso(info.amount)} to <b>{info.payout_number}</b>.</p>
-            </div>
-          )}
-        </>
-      )}
-      <p className="mt-1 text-black/45">The recipient pays nothing on delivery.</p>
-    </div>
-  );
 }
 
 export function Account() {
