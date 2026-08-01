@@ -20,6 +20,7 @@ import {
   copyItemCustomizations,
   deleteStore,
   deleteMenuItem,
+  copyStoreMenu,
 } from '@ebd/supabase';
 import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
@@ -229,6 +230,7 @@ export function Stores() {
                 </div>
                 <LocationEditor store={s} onSaved={load} />
                 <MenuEditor storeId={s.id} />
+                <CopyMenuPanel store={s} stores={rows} />
                 <div className="border-t border-black/5 p-4">
                   <button onClick={() => removeStore(s)}
                     className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
@@ -754,3 +756,63 @@ const Muted = ({ children }: { children: React.ReactNode }) =>
   <p className="rounded-xl bg-white p-6 text-sm text-black/50 shadow-sm ring-1 ring-black/5">{children}</p>;
 const ErrorNote = ({ msg }: { msg: string }) =>
   <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-200">{msg}</p>;
+
+/**
+ * Copy this store's whole menu to another branch — categories, items, and
+ * option groups. Useful when a chain opens a new branch with the same menu.
+ */
+function CopyMenuPanel({ store, stores }: { store: StoreRow; stores: StoreRow[] }) {
+  const [target, setTarget] = useState('');
+  const [replace, setReplace] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const others = stores.filter((x) => x.id !== store.id);
+
+  async function copy() {
+    if (!supabase || !target) return;
+    const to = others.find((x) => x.id === target);
+    const warn = replace
+      ? `Replace ${to?.name}'s entire menu with ${store.name}'s? Existing items there will be deleted.`
+      : `Copy ${store.name}'s menu into ${to?.name}?`;
+    if (!window.confirm(warn)) return;
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      const res = await copyStoreMenu(supabase, store.id, target, replace);
+      setMsg(`Copied ${res.items} item(s) and ${res.categories} new category(ies) to ${to?.name}.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="border-t border-black/5 p-4">
+      <h4 className="mb-2 text-sm font-semibold">Copy menu to another branch</h4>
+      {others.length === 0 ? (
+        <p className="text-xs text-black/40">Add another store first.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={target} onChange={(e) => { setTarget(e.target.value); setMsg(null); }}
+              className="rounded-lg border border-black/10 px-3 py-1.5 text-sm">
+              <option value="">Choose target branch…</option>
+              {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-black/60">
+              <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="h-4 w-4" />
+              Replace the target's existing menu
+            </label>
+            <button onClick={copy} disabled={busy || !target}
+              className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {busy ? 'Copying…' : 'Copy menu'}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-black/40">
+            Copies categories, items, and their option groups. Without “replace”, items are added alongside what's already there.
+          </p>
+          {msg && <p className="mt-2 text-xs font-medium text-green-700">{msg}</p>}
+          {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+        </>
+      )}
+    </div>
+  );
+}

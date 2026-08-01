@@ -10,7 +10,12 @@ export interface AppSettings {
   schedule: unknown;
   default_delivery_fee: number;
   per_store_fee: number;
+  /** Legacy single convenience fee — kept as the fallback for the per-service ones. */
   convenience_fee: number;
+  /** Per-service convenience fees (charged to the customer, earned by the rider). */
+  convenience_fee_food: number;
+  convenience_fee_pabili: number;
+  convenience_fee_padala: number;
   commission_rate: number;
   delivery_fee_model: 'flat' | 'per_km' | 'per_zone';
   settlement_cutoff: string;

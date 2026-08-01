@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react';
-import { listActiveRiders, setRiderLocked, type ActiveRider } from '@ebd/supabase';
+import { listActiveRiders, setRiderLocked, setRiderSuspended, deleteRider, type ActiveRider } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
 
 const SAMPLE: ActiveRider[] = [
-  { id: 'a', name: 'Ben Cruz', mobile_number: '0918 555 2000', vehicle: 'Motorcycle', is_locked: false, owed: 9, overdue: 0, activity: 'on_delivery', activeOrder: { id: 'o1', service_type: 'food', status: 'on_the_way' } },
-  { id: 'b', name: 'Cy Ramos', mobile_number: '0917 555 1000', vehicle: 'Motorcycle', is_locked: false, owed: 19.5, overdue: 13.5, activity: 'locked', activeOrder: null },
-  { id: 'c', name: 'Dina Lim', mobile_number: '0919 555 3000', vehicle: 'Bicycle', is_locked: false, owed: 0, overdue: 0, activity: 'available', activeOrder: null },
+  { id: 'a', name: 'Ben Cruz', mobile_number: '0918 555 2000', vehicle: 'Motorcycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 9, overdue: 0, activity: 'on_delivery', activeOrder: { id: 'o1', service_type: 'food', status: 'on_the_way' } },
+  { id: 'b', name: 'Cy Ramos', mobile_number: '0917 555 1000', vehicle: 'Motorcycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 19.5, overdue: 13.5, activity: 'locked', activeOrder: null },
+  { id: 'c', name: 'Dina Lim', mobile_number: '0919 555 3000', vehicle: 'Bicycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 0, overdue: 0, activity: 'available', activeOrder: null },
 ];
 
 const activityChip: Record<string, string> = {
   on_delivery: 'bg-brand-purple/15 text-brand-purple',
   available: 'bg-brand-green/15 text-green-800',
   locked: 'bg-red-100 text-red-700',
+  suspended: 'bg-black/70 text-white',
 };
-const activityLabel: Record<string, string> = { on_delivery: 'On delivery', available: 'Available', locked: 'Locked' };
+const activityLabel: Record<string, string> = { on_delivery: 'On delivery', available: 'Available', locked: 'Locked', suspended: 'Suspended' };
 
 export function Riders() {
   const [rows, setRows] = useState<ActiveRider[]>([]);
@@ -39,6 +40,29 @@ export function Riders() {
     }
     await setRiderLocked(supabase, r.id, !r.is_locked);
     await load();
+  }
+
+  async function toggleSuspend(r: ActiveRider) {
+    if (!supabase) return;
+    if (r.is_suspended) {
+      if (!window.confirm(`Reinstate ${r.name}?`)) return;
+      await setRiderSuspended(supabase, r.id, false);
+    } else {
+      const reason = window.prompt(`Suspend ${r.name}? They won't be able to go online or accept orders.\n\nReason (optional):`, '');
+      if (reason === null) return;
+      await setRiderSuspended(supabase, r.id, true, reason.trim() || undefined);
+    }
+    await load();
+  }
+
+  async function removeRider(r: ActiveRider) {
+    if (!supabase) return;
+    if (!window.confirm(`Delete ${r.name}? This permanently removes the rider account.`)) return;
+    try {
+      const res = await deleteRider(supabase, r.id);
+      if (!res.deleted) { window.alert(res.message ?? 'This rider could not be deleted.'); return; }
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
 
   if (loading) return <Muted>Loading…</Muted>;
@@ -83,12 +107,28 @@ export function Riders() {
                     {r.overdue > 0 && <span className="block text-xs text-red-500">{peso(r.overdue)} overdue</span>}
                   </Td>
                   <Td>
-                    <button onClick={() => toggleLock(r)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                        r.is_locked ? 'bg-brand-green text-white' : 'border border-red-300 text-red-600'
-                      }`}>
-                      {r.is_locked ? 'Unlock' : 'Lock'}
-                    </button>
+                    <span className="flex flex-wrap gap-1.5">
+                      <button onClick={() => toggleLock(r)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                          r.is_locked ? 'bg-brand-green text-white' : 'border border-red-300 text-red-600'
+                        }`}>
+                        {r.is_locked ? 'Unlock' : 'Lock'}
+                      </button>
+                      <button onClick={() => toggleSuspend(r)}
+                        title={r.suspend_reason ?? undefined}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                          r.is_suspended ? 'bg-brand-green text-white' : 'border border-black/20 text-black/70'
+                        }`}>
+                        {r.is_suspended ? 'Reinstate' : 'Suspend'}
+                      </button>
+                      <button onClick={() => removeRider(r)}
+                        className="rounded-lg border border-red-400 px-3 py-1.5 text-xs font-semibold text-red-700">
+                        Delete
+                      </button>
+                    </span>
+                    {r.is_suspended && r.suspend_reason && (
+                      <span className="mt-1 block text-xs text-black/40">Reason: {r.suspend_reason}</span>
+                    )}
                   </Td>
                 </tr>
               ))}

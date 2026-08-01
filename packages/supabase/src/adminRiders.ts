@@ -6,7 +6,7 @@
 import { owedBalance, overdueBalance, isLockedOut, type LedgerEntry } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type RiderActivity = 'locked' | 'on_delivery' | 'available';
+export type RiderActivity = 'suspended' | 'locked' | 'on_delivery' | 'available';
 
 export interface ActiveRider {
   id: string;
@@ -14,6 +14,8 @@ export interface ActiveRider {
   mobile_number: string;
   vehicle: string | null;
   is_locked: boolean;
+  is_suspended: boolean;
+  suspend_reason: string | null;
   owed: number;
   overdue: number;
   activity: RiderActivity;
@@ -26,7 +28,7 @@ const IN_PROGRESS = ['accepted', 'preparing', 'picked_up', 'on_the_way'];
 export async function listActiveRiders(db: SupabaseClient, today: string): Promise<ActiveRider[]> {
   const riders = await db
     .from('riders')
-    .select('id, name, mobile_number, vehicle, is_locked')
+    .select('id, name, mobile_number, vehicle, is_locked, is_suspended, suspend_reason')
     .eq('application_status', 'approved')
     .order('name');
   if (riders.error) throw riders.error;
@@ -62,14 +64,18 @@ export async function listActiveRiders(db: SupabaseClient, today: string): Promi
     const id = r.id as string;
     const entries = entriesByRider.get(id) ?? [];
     const locked = (r.is_locked as boolean) || isLockedOut(entries, today);
+    const suspended = Boolean(r.is_suspended);
     const activeOrder = orderByRider.get(id) ?? null;
-    const activity: RiderActivity = locked ? 'locked' : activeOrder ? 'on_delivery' : 'available';
+    const activity: RiderActivity =
+      suspended ? 'suspended' : locked ? 'locked' : activeOrder ? 'on_delivery' : 'available';
     return {
       id,
       name: r.name as string,
       mobile_number: r.mobile_number as string,
       vehicle: (r.vehicle as string) ?? null,
       is_locked: r.is_locked as boolean,
+      is_suspended: suspended,
+      suspend_reason: (r.suspend_reason as string) ?? null,
       owed: owedBalance(entries),
       overdue: overdueBalance(entries, today),
       activity,
@@ -82,4 +88,33 @@ export async function listActiveRiders(db: SupabaseClient, today: string): Promi
 export async function setRiderLocked(db: SupabaseClient, riderId: string, locked: boolean) {
   const { error } = await db.from('riders').update({ is_locked: locked }).eq('id', riderId);
   if (error) throw error;
+}
+
+/**
+ * Suspend (or reinstate) a rider account. A suspended rider can't go online or
+ * claim orders, and is forced offline immediately.
+ */
+export async function setRiderSuspended(
+  db: SupabaseClient, riderId: string, suspended: boolean, reason?: string,
+) {
+  const { error } = await db.rpc('admin_set_rider_suspended', {
+    p_rider_id: riderId, p_suspended: suspended, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+}
+
+export interface DeleteRiderResult {
+  deleted: boolean;
+  reason?: 'active_orders' | 'has_history';
+  message?: string;
+}
+
+/**
+ * Delete a rider who is no longer connected. Riders with delivery or commission
+ * history can't be deleted (that history must be kept) — suspend them instead.
+ */
+export async function deleteRider(db: SupabaseClient, riderId: string): Promise<DeleteRiderResult> {
+  const { data, error } = await db.rpc('admin_delete_rider', { p_rider_id: riderId });
+  if (error) throw error;
+  return (data ?? { deleted: false }) as DeleteRiderResult;
 }

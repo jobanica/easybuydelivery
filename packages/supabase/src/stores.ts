@@ -405,3 +405,19 @@ export async function deleteMenuCategory(db: SupabaseClient, categoryId: string)
   const { error } = await db.from('menu_categories').delete().eq('id', categoryId);
   if (error) throw error;
 }
+
+export interface CopyMenuResult { categories: number; items: number }
+
+/**
+ * Copy a store's whole menu (categories, items, option groups) to another
+ * branch. Categories are matched by title; `replace` wipes the target first.
+ */
+export async function copyStoreMenu(
+  db: SupabaseClient, fromStoreId: string, toStoreId: string, replace = false,
+): Promise<CopyMenuResult> {
+  const { data, error } = await db.rpc('copy_store_menu', {
+    p_from_store: fromStoreId, p_to_store: toStoreId, p_replace: replace,
+  });
+  if (error) throw error;
+  return (data ?? { categories: 0, items: 0 }) as CopyMenuResult;
+}

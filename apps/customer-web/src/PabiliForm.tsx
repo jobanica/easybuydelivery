@@ -32,7 +32,7 @@ export function PabiliForm() {
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
-    getAppSettings(supabase).then((s) => setConvenienceFee(s.convenience_fee)).catch(() => {});
+    getAppSettings(supabase).then((s) => setConvenienceFee(s.convenience_fee_pabili ?? s.convenience_fee)).catch(() => {});
   }, []);
 
   const operatorCut = useMemo(() => pabiliCommission(form.deliveryFee), [form.deliveryFee]);

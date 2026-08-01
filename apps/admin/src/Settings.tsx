@@ -6,7 +6,8 @@ import { Card, Muted, peso } from './ui.tsx';
 
 const SAMPLE: AppSettings = {
   is_open: true, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
-  convenience_fee: 0, commission_rate: 0.15, delivery_fee_model: 'flat',
+  convenience_fee: 0, convenience_fee_food: 0, convenience_fee_pabili: 0, convenience_fee_padala: 0,
+  commission_rate: 0.15, delivery_fee_model: 'flat',
   settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
   service_food: true, service_pabili: true, service_padala: true,
@@ -167,12 +168,22 @@ export function Settings() {
               value={Math.round(s.commission_rate * 1000) / 10}
               onChange={(e) => set('commission_rate', Number(e.target.value) / 100)} />
           </Field>
-          <Field label="Convenience fee (₱) — goes to rider">
-            <input type="number" min={0} className={inp} value={s.convenience_fee}
-              onChange={(e) => set('convenience_fee', Number(e.target.value))} />
-            <span className="mt-1 block text-xs text-black/40">Paid to the rider in full. No commission is taken on it.</span>
+          <Field label="Convenience fee — Food (₱)">
+            <input type="number" min={0} className={inp} value={s.convenience_fee_food}
+              onChange={(e) => set('convenience_fee_food', Number(e.target.value))} />
+          </Field>
+          <Field label="Convenience fee — Pabili (₱)">
+            <input type="number" min={0} className={inp} value={s.convenience_fee_pabili}
+              onChange={(e) => set('convenience_fee_pabili', Number(e.target.value))} />
+          </Field>
+          <Field label="Convenience fee — Padala (₱)">
+            <input type="number" min={0} className={inp} value={s.convenience_fee_padala}
+              onChange={(e) => set('convenience_fee_padala', Number(e.target.value))} />
           </Field>
         </div>
+        <p className="mt-2 text-xs text-black/40">
+          Convenience fees are set per service and paid to the rider in full — no commission is taken on them.
+        </p>
         <p className="mt-4 rounded-lg bg-brand-green/10 px-3 py-2 text-sm text-green-800">
           Example: ₱{s.default_delivery_fee} delivery + {peso(s.per_store_fee)}×2 added stores →
           commission <span className="font-bold">{peso(example)}</span>

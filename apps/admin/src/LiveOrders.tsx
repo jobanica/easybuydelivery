@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listActiveOrdersAdmin } from '@ebd/supabase';
+import { listActiveOrdersAdmin, adminCancelOrder } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Th, Td, Muted, ErrorNote, Card, peso } from './ui.tsx';
 
@@ -46,6 +46,28 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function reload() {
+    if (!supabase) return;
+    try { setRows((await listActiveOrdersAdmin(supabase)) as OrderRow[]); setError(null); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
+
+  async function cancel(o: OrderRow) {
+    if (!supabase) return;
+    const reason = window.prompt(
+      `Cancel this ${o.service_type} order?\n\nReason (added to the order notes):`, '');
+    if (reason === null) return;
+    setBusyId(o.id);
+    try {
+      const ok = await adminCancelOrder(supabase, o.id, reason.trim() || undefined);
+      if (!ok) window.alert('This order could not be cancelled (already delivered?).');
+      await reload();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusyId(null); }
+  }
+
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -73,7 +95,7 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
       <table className="w-full text-sm">
         <thead className="text-left text-black/50">
           <tr className="border-b border-black/5">
-            <Th>Time</Th><Th>Service</Th><Th>Status</Th><Th>Rider</Th><Th>Contact</Th><Th>Fee</Th><Th>Commission</Th>
+            <Th>Time</Th><Th>Service</Th><Th>Status</Th><Th>Rider</Th><Th>Contact</Th><Th>Fee</Th><Th>Commission</Th><Th> </Th>
           </tr>
         </thead>
         <tbody>
@@ -104,6 +126,12 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
                 </Td>
                 <Td>{peso(o.delivery_fee)}</Td>
                 <Td className="font-medium">{peso(o.commission_amount)}</Td>
+                <Td>
+                  <button onClick={() => cancel(o)} disabled={busyId === o.id}
+                    className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">
+                    {busyId === o.id ? 'Cancelling…' : 'Cancel'}
+                  </button>
+                </Td>
               </tr>
             );
           })}

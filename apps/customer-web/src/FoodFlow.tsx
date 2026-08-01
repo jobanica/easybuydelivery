@@ -127,7 +127,7 @@ export function FoodFlow() {
               config: {
                 perStoreFee: settings.per_store_fee,
                 commissionRate: settings.commission_rate,
-                convenienceFee: settings.convenience_fee,
+                convenienceFee: settings.convenience_fee_food ?? settings.convenience_fee,
               },
             });
           }

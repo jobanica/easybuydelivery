@@ -62,3 +62,17 @@ export async function getOrderDetail(db: SupabaseClient, orderId: string): Promi
     events: (events.data ?? []) as Record<string, unknown>[],
   };
 }
+
+/**
+ * Admin/staff manual cancellation of an order at any stage except delivered.
+ * The reason is appended to the order notes. Returns true if it was cancelled.
+ */
+export async function adminCancelOrder(
+  db: SupabaseClient, orderId: string, reason?: string,
+): Promise<boolean> {
+  const { data, error } = await db.rpc('admin_cancel_order', {
+    p_order_id: orderId, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
