@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getActiveDelivery, type ActiveDelivery } from '@ebd/supabase';
+import { getActiveDelivery, getOrderRiderInfo, type ActiveDelivery, type OrderRiderInfo } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
@@ -17,6 +17,7 @@ export function Track({ onClose }: { onClose: () => void }) {
   const { live, customerId } = useAuth();
   const [status, setStatus] = useState<'loading' | 'none' | 'ok' | 'nocoords'>('loading');
   const [delivery, setDelivery] = useState<ActiveDelivery | null>(null);
+  const [riderInfo, setRiderInfo] = useState<OrderRiderInfo | null>(null);
 
   useEffect(() => {
     if (!live || !supabase || !customerId) return;
@@ -27,6 +28,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         if (cancelled) return;
         setDelivery(d);
         setStatus(!d ? 'none' : d.pickup && d.dropoff ? 'ok' : 'nocoords');
+        setRiderInfo(d ? await getOrderRiderInfo(supabase!, d.id).catch(() => null) : null);
       } catch {
         if (!cancelled) setStatus('none');
       }
@@ -40,7 +42,10 @@ export function Track({ onClose }: { onClose: () => void }) {
   if (!live) return <TrackingMap pickup={DEMO_PICKUP} dropoff={DEMO_DROPOFF} onClose={onClose} />;
 
   if (status === 'ok' && delivery?.pickup && delivery.dropoff) {
-    return <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id} onClose={onClose} />;
+    return (
+      <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
+        deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
+    );
   }
 
   return (

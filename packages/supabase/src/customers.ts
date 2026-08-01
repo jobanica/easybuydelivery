@@ -76,6 +76,20 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
   };
 }
 
+export interface OrderRiderInfo {
+  name: string | null;
+  mobile_number: string | null;
+  photo_url: string | null;
+}
+
+/** The assigned rider's name/contact/photo for the caller's own order (tracking card). */
+export async function getOrderRiderInfo(db: SupabaseClient, orderId: string): Promise<OrderRiderInfo | null> {
+  const { data, error } = await db.rpc('order_rider_info', { p_order_id: orderId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? { name: row.name ?? null, mobile_number: row.mobile_number ?? null, photo_url: row.photo_url ?? null } : null;
+}
+
 export interface OrderPayToRider {
   rider_name: string | null;
   payout_number: string | null;
