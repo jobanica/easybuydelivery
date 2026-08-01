@@ -32,7 +32,7 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 interface Category { id: string; title: string }
-interface Store { id: string; name: string; category: string; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
+interface Store { id: string; name: string; category: string; address?: string | null; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
 function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categories: Category[]; items: MenuItem[] } {
@@ -136,9 +136,9 @@ export function FoodFlow() {
             });
           }
           // Only the store list up front — each menu loads lazily when opened.
-          setStores((rows as { id: string; name: string; category: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null }[])
+          setStores((rows as { id: string; name: string; category: string | null; address: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null }[])
             .map((s) => ({
-              id: s.id, name: s.name, category: s.category ?? '',
+              id: s.id, name: s.name, category: s.category ?? '', address: s.address,
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
               opens_at: s.opens_at, closes_at: s.closes_at, open_days: s.open_days,
               categories: [], items: [], loaded: false,
@@ -418,6 +418,7 @@ export function FoodFlow() {
                       {(s.opens_at || s.closes_at || (s.open_days && s.open_days.length < 7)) &&
                         <span className="text-black/35"> · {scheduleLabel(s.opens_at, s.closes_at, s.open_days)}</span>}
                     </span>
+                    {s.address && <span className="block truncate text-xs text-black/40">📍 {s.address}</span>}
                   </span>
                   <span className={open ? 'text-brand-purple' : 'text-black/25'}>→</span>
                 </div>
@@ -663,6 +664,13 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
               </p>
               {(store.opens_at || store.closes_at || (store.open_days && store.open_days.length < 7)) && (
                 <p className="text-xs text-black/40">🕒 {scheduleLabel(store.opens_at, store.closes_at, store.open_days)}</p>
+              )}
+              {store.address && (
+                store.lat != null && store.lng != null ? (
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${store.lat},${store.lng}`}
+                    target="_blank" rel="noreferrer"
+                    className="mt-0.5 block text-xs text-brand-purple underline">📍 {store.address}</a>
+                ) : <p className="mt-0.5 text-xs text-black/40">📍 {store.address}</p>
               )}
             </div>
           </div>
