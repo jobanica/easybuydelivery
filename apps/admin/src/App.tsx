@@ -6,6 +6,7 @@ import { Stores } from './Stores.tsx';
 import { RiderApplications } from './RiderApplications.tsx';
 import { LiveOrders } from './LiveOrders.tsx';
 import { Settlements } from './Settlements.tsx';
+import { ServiceAreas } from './ServiceAreas.tsx';
 import { Settings } from './Settings.tsx';
 import { Broadcast } from './Broadcast.tsx';
 import { OrderHistory } from './OrderHistory.tsx';
@@ -31,6 +32,7 @@ const NAV: { key: Tab; label: string; icon: () => React.ReactNode }[] = [
   { key: 'history', label: 'Order history', icon: IconHistory },
   { key: 'settlements', label: 'Settlements', icon: IconWallet },
   { key: 'broadcast', label: 'Broadcast SMS', icon: IconMegaphone },
+  { key: 'areas', label: 'Service areas', icon: IconStore },
   { key: 'staff', label: 'Staff', icon: IconUsers },
   { key: 'settings', label: 'Settings', icon: IconSettings },
 ];
@@ -39,7 +41,7 @@ const TITLES: Record<Tab, string> = {
   dashboard: 'Dashboard', analytics: 'Analytics', stores: 'Stores & menus',
   ridersActive: 'Riders', riders: 'Rider applications',
   orders: 'Live orders', history: 'Order history', settlements: 'Settlements',
-  broadcast: 'Broadcast SMS', staff: 'Staff', settings: 'Settings',
+  broadcast: 'Broadcast SMS', areas: 'Service areas', staff: 'Staff', settings: 'Settings',
 };
 
 export function App() {
@@ -132,6 +134,7 @@ export function App() {
               {tab === 'orders' && <LiveOrders />}
               {tab === 'history' && <OrderHistory />}
               {tab === 'settlements' && <Settlements />}
+              {tab === 'areas' && <ServiceAreas />}
               {tab === 'broadcast' && <Broadcast />}
               {tab === 'staff' && <Staff />}
               {tab === 'settings' && <Settings />}

@@ -10,7 +10,7 @@ export type StaffRole = 'admin' | 'manager' | 'dispatcher' | 'support';
 
 export type AdminSection =
   | 'dashboard' | 'analytics' | 'stores' | 'ridersActive' | 'riders'
-  | 'orders' | 'history' | 'settlements' | 'broadcast' | 'settings' | 'staff';
+  | 'orders' | 'history' | 'settlements' | 'broadcast' | 'areas' | 'settings' | 'staff';
 
 export const STAFF_ROLES: StaffRole[] = ['admin', 'manager', 'dispatcher', 'support'];
 
@@ -20,13 +20,13 @@ export const ROLE_LABEL: Record<StaffRole, string> = {
 
 const ALL: AdminSection[] = [
   'dashboard', 'analytics', 'stores', 'ridersActive', 'riders',
-  'orders', 'history', 'settlements', 'broadcast', 'settings', 'staff',
+  'orders', 'history', 'settlements', 'broadcast', 'areas', 'settings', 'staff',
 ];
 
 /** Sections each role may open. Settings + staff are admin-only. */
 const ACCESS: Record<StaffRole, AdminSection[]> = {
   admin: ALL,
-  manager: ['dashboard', 'analytics', 'stores', 'ridersActive', 'riders', 'orders', 'history', 'settlements', 'broadcast'],
+  manager: ['dashboard', 'analytics', 'stores', 'ridersActive', 'riders', 'orders', 'history', 'settlements', 'broadcast', 'areas'],
   dispatcher: ['dashboard', 'ridersActive', 'riders', 'orders', 'history'],
   support: ['dashboard', 'orders', 'history', 'broadcast'],
 };

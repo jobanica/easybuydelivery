@@ -22,6 +22,8 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
+import { AreaPicker } from './AreaPicker.tsx';
+import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
@@ -103,6 +105,8 @@ export function FoodFlow() {
   const [recipientName, setRecipientName] = useState('');
   const [recipientContact, setRecipientContact] = useState('');
   const [cutlery, setCutlery] = useState(false);
+  const [area, setArea] = useState<AreaSelection | null>(null);
+  const [areaRequired, setAreaRequired] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // full-screen cart popup
   // Prefill the delivery contact with the account's verified phone.
   useEffect(() => { if (mobile && !contact) setContact(mobile); }, [mobile]);
@@ -264,6 +268,7 @@ export function FoodFlow() {
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     if (!pay) { setError('Please choose a payment method.'); return; }
+    if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
     const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
     setPlacing(true);
     try {
@@ -273,6 +278,9 @@ export function FoodFlow() {
           customerId,
           customerContact: contact.trim(),
           customerName: custName.trim() || undefined,
+          areaProvince: area?.province,
+          areaCity: area?.city,
+          areaBarangay: area?.barangay,
           recipientName: gift ? recipientName.trim() || undefined : undefined,
           recipientContact: gift ? recipientContact.trim() || undefined : undefined,
           deliveryFee,
@@ -500,6 +508,7 @@ export function FoodFlow() {
                   <LocationPicker value={dropoff} onChange={setDropoff} />
                 </div>
               )}
+              <AreaPicker value={area} onChange={(v) => { setArea(v); setAreaRequired(true); }} />
               <div>
                 <label className="mb-1 block text-sm font-medium">Your name</label>
                 <input value={custName} onChange={(e) => setCustName(e.target.value)}
@@ -581,9 +590,10 @@ export function FoodFlow() {
 
           <div className="border-t border-black/10 bg-white p-4">
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim() || !pay}
+            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim() || !pay || (areaRequired && !area)}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {placing ? 'Placing your order…'
+                : areaRequired && !area ? 'Choose your delivery area'
                 : needsDropoff ? 'Set delivery location to continue'
                 : !contact.trim() ? 'Enter your mobile number'
                 : !pay ? 'Choose a payment method'

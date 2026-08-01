@@ -24,6 +24,10 @@ export interface PadalaRequestInput {
   itemDescription: string;
   pickup: { lat?: number; lng?: number; contact: string };
   dropoff: { lat?: number; lng?: number; contact: string };
+  /** Serviceable area chosen by the customer (province / city / barangay). */
+  areaProvince?: string;
+  areaCity?: string;
+  areaBarangay?: string;
   notes?: string;
   paymentMethod?: PaymentMethod;
   /** Set when an online payment has already completed at checkout. */
@@ -52,6 +56,9 @@ export interface PadalaOrderRow {
   /** Mirrors the drop-off so live tracking (which reads delivery_*) works. */
   delivery_lat: number | null;
   delivery_lng: number | null;
+  area_province: string | null;
+  area_city: string | null;
+  area_barangay: string | null;
   customer_contact: string;
   notes: string | null;
 }
@@ -90,6 +97,9 @@ export function buildPadalaOrderRow(
     dropoff_contact: input.dropoff.contact,
     delivery_lat: input.dropoff.lat ?? null,
     delivery_lng: input.dropoff.lng ?? null,
+    area_province: input.areaProvince?.trim() || null,
+    area_city: input.areaCity?.trim() || null,
+    area_barangay: input.areaBarangay?.trim() || null,
     customer_contact: input.customerContact,
     notes: input.notes?.trim() || null,
   };

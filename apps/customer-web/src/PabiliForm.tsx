@@ -4,6 +4,8 @@ import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequ
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
+import { AreaPicker } from './AreaPicker.tsx';
+import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 interface FormState {
@@ -32,6 +34,8 @@ export function PabiliForm() {
   const [convenienceFee, setConvenienceFee] = useState(0);
   const [buyAt, setBuyAt] = useState<LatLngValue | null>(null);   // where to buy
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
+  const [area, setArea] = useState<AreaSelection | null>(null);
+  const [areaRequired, setAreaRequired] = useState(false);
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
@@ -55,6 +59,9 @@ export function PabiliForm() {
       estimate: form.estimate,
       cap: form.cap,
       where: form.where,
+      areaProvince: area?.province,
+      areaCity: area?.city,
+      areaBarangay: area?.barangay,
       pickupLat: buyAt?.lat,
       pickupLng: buyAt?.lng,
       deliveryLat: dropoff?.lat,
@@ -71,6 +78,7 @@ export function PabiliForm() {
     setError(null);
     if (!form.pay) { setError('Please choose a payment method.'); return; }
     if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
+    if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
     } catch (err) {
@@ -104,7 +112,7 @@ export function PabiliForm() {
             : 'A rider will buy your items and deliver them.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setForm(initial); setBuyAt(null); setDropoff(null); setCreatedId(null); }}
+        <button onClick={() => { setForm(initial); setBuyAt(null); setDropoff(null); setArea(null); setCreatedId(null); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Send another
         </button>
@@ -123,6 +131,7 @@ export function PabiliForm() {
         <input className={inputCls} value={form.where}
           onChange={(e) => set('where', e.target.value)} placeholder="e.g. Botica Central" />
       </Field>
+      <AreaPicker value={area} onChange={(v) => { setArea(v); setAreaRequired(true); }} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy <span className="font-normal text-black/40">(optional)</span></span>
         <LocationPicker value={buyAt} onChange={setBuyAt} />
@@ -174,9 +183,9 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff}
+      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : !dropoff ? 'Pin the delivery location' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
+        {submitting ? 'Sending…' : areaRequired && !area ? 'Choose your delivery area' : !dropoff ? 'Pin the delivery location' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
       </button>
     </form>
   );

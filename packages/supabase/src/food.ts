@@ -19,6 +19,10 @@ export interface FoodCheckoutInput {
   customerId: string;
   customerContact: string;
   customerName?: string;
+  /** Serviceable area chosen by the customer (province / city / barangay). */
+  areaProvince?: string;
+  areaCity?: string;
+  areaBarangay?: string;
   /** Recipient when delivering to someone else (sender still pays). */
   recipientName?: string;
   recipientContact?: string;
@@ -46,6 +50,9 @@ export interface FoodOrderRow {
   delivery_lng: number | null;
   customer_contact: string;
   customer_name: string | null;
+  area_province: string | null;
+  area_city: string | null;
+  area_barangay: string | null;
   recipient_name: string | null;
   recipient_contact: string | null;
   notes: string | null;
@@ -94,6 +101,9 @@ export function buildFoodOrder(
       delivery_lng: input.deliveryLng ?? null,
       customer_contact: input.customerContact,
       customer_name: input.customerName?.trim() || null,
+    area_province: input.areaProvince?.trim() || null,
+    area_city: input.areaCity?.trim() || null,
+    area_barangay: input.areaBarangay?.trim() || null,
       recipient_name: input.recipientName?.trim() || null,
       recipient_contact: input.recipientContact?.trim() || null,
       notes: input.notes?.trim() || null,

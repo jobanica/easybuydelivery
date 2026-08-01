@@ -32,6 +32,10 @@ export interface PabiliRequestInput {
   pickupLng?: number;
   deliveryLat?: number;
   deliveryLng?: number;
+  /** Serviceable area chosen by the customer (province / city / barangay). */
+  areaProvince?: string;
+  areaCity?: string;
+  areaBarangay?: string;
   notes?: string;
   paymentMethod?: PaymentMethod;
   paid?: boolean;
@@ -55,6 +59,9 @@ export interface PabiliOrderRow {
   pickup_lng: number | null;
   delivery_lat: number | null;
   delivery_lng: number | null;
+  area_province: string | null;
+  area_city: string | null;
+  area_barangay: string | null;
   customer_contact: string;
   notes: string | null;
 }
@@ -88,6 +95,9 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     pickup_lng: input.pickupLng ?? null,
     delivery_lat: input.deliveryLat ?? null,
     delivery_lng: input.deliveryLng ?? null,
+    area_province: input.areaProvince?.trim() || null,
+    area_city: input.areaCity?.trim() || null,
+    area_barangay: input.areaBarangay?.trim() || null,
     customer_contact: input.customerContact,
     notes: (whereLine + noteLine).trim() || null,
   };
