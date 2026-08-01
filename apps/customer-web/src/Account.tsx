@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress,
+  getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress, cancelOrder,
   type MyCustomer, type CustomerOrder, type CustomerAddress,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -21,6 +21,32 @@ const serviceTint: Record<string, string> = {
 function orderTotal(o: CustomerOrder): number {
   return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
 }
+/** Cancel a still-pending order (before any rider accepts). */
+function CancelOrderButton({ orderId, onCancelled }: { orderId: string; onCancelled: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function cancel() {
+    if (!supabase) return;
+    if (!window.confirm('Cancel this order?')) return;
+    setBusy(true); setErr(null);
+    try {
+      const ok = await cancelOrder(supabase, orderId);
+      if (ok) onCancelled();
+      else setErr('This order can no longer be cancelled — a rider has accepted it.');
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="mt-2">
+      <button onClick={cancel} disabled={busy}
+        className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">
+        {busy ? 'Cancelling…' : 'Cancel order'}
+      </button>
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
 }
@@ -83,6 +109,7 @@ export function Account() {
                   {o.payment_method === 'rider_qr' && !['delivered', 'cancelled'].includes(o.status) && (
                     <PayRider orderId={o.id} />
                   )}
+                  {o.status === 'pending' && <CancelOrderButton orderId={o.id} onCancelled={load} />}
                 </li>
               ))}
             </ul>

@@ -139,6 +139,13 @@ export async function setOrderPaymentReference(db: SupabaseClient, orderId: stri
   if (error) throw error;
 }
 
+/** Cancel a still-pending, unassigned order. Returns true if it was cancelled. */
+export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<boolean> {
+  const { data, error } = await db.rpc('cancel_order', { p_order_id: orderId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
 /** The customer's recent orders (newest first). */
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
