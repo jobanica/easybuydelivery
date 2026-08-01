@@ -56,6 +56,7 @@ export function PadalaForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // guard against double taps
     setError(null);
     setSubmitting(true);
     try {

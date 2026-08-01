@@ -92,6 +92,7 @@ export function FoodFlow() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pay, setPay] = useState<PayChoice>('cod');
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fees, setFees] = useState<FeeSettings>(DEFAULT_FEE_SETTINGS);
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
@@ -256,10 +257,12 @@ export function FoodFlow() {
   }
 
   async function checkout() {
+    if (placing) return; // guard against double/triple taps creating duplicate orders
     setError(null);
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
+    setPlacing(true);
     try {
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(contact.trim(), custName.trim() || undefined);
@@ -286,6 +289,8 @@ export function FoodFlow() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPlacing(false);
     }
   }
 
@@ -559,9 +564,10 @@ export function FoodFlow() {
 
           <div className="border-t border-black/10 bg-white p-4">
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <button onClick={checkout} disabled={needsDropoff || !contact.trim()}
+            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim()}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
-              {needsDropoff ? 'Set delivery location to continue'
+              {placing ? 'Placing your order…'
+                : needsDropoff ? 'Set delivery location to continue'
                 : !contact.trim() ? 'Enter your mobile number'
                 : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}`
                 : pay === 'rider_qr' ? `Place order (GCash to rider) · ${peso(summary.customerTotal)}`

@@ -60,6 +60,7 @@ export function PabiliForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // guard against double taps
     setError(null);
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
