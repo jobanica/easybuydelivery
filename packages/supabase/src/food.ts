@@ -19,6 +19,9 @@ export interface FoodCheckoutInput {
   customerId: string;
   customerContact: string;
   customerName?: string;
+  /** Recipient when delivering to someone else (sender still pays). */
+  recipientName?: string;
+  recipientContact?: string;
   deliveryFee: number;
   lines: CartLine[];
   deliveryLat?: number;
@@ -43,6 +46,8 @@ export interface FoodOrderRow {
   delivery_lng: number | null;
   customer_contact: string;
   customer_name: string | null;
+  recipient_name: string | null;
+  recipient_contact: string | null;
   notes: string | null;
 }
 
@@ -89,6 +94,8 @@ export function buildFoodOrder(
       delivery_lng: input.deliveryLng ?? null,
       customer_contact: input.customerContact,
       customer_name: input.customerName?.trim() || null,
+      recipient_name: input.recipientName?.trim() || null,
+      recipient_contact: input.recipientContact?.trim() || null,
       notes: input.notes?.trim() || null,
     },
     storeIds: [...new Set(input.lines.map((l) => l.storeId))],

@@ -35,14 +35,33 @@ export interface CustomerOrder {
   store_fee_total: number;
   convenience_fee: number;
   payment_method: string | null;
+  recipient_name: string | null;
+  recipient_contact: string | null;
   order_stores: { store: { name: string | null } | null }[];
+}
+
+export interface OrderPayToRider {
+  rider_name: string | null;
+  payout_number: string | null;
+  amount: number;
+}
+
+/**
+ * The assigned rider's GCash/Maya details + amount for one of the caller's own
+ * orders, so the sender can pay the rider directly. Null until a rider accepts.
+ */
+export async function getOrderPayToRider(db: SupabaseClient, orderId: string): Promise<OrderPayToRider | null> {
+  const { data, error } = await db.rpc('order_pay_to_rider', { p_order_id: orderId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? { rider_name: row.rider_name ?? null, payout_number: row.payout_number ?? null, amount: Number(row.amount ?? 0) } : null;
 }
 
 /** The customer's recent orders (newest first). */
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
     .from('orders')
-    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, order_stores(store:stores(name))')
+    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, order_stores(store:stores(name))')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(30);

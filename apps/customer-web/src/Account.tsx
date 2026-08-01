@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress,
-  type MyCustomer, type CustomerOrder, type CustomerAddress,
+  getOrderPayToRider,
+  type MyCustomer, type CustomerOrder, type CustomerAddress, type OrderPayToRider,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -22,6 +23,40 @@ function orderTotal(o: CustomerOrder): number {
 }
 function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
+}
+
+/** Shows the assigned rider's GCash number so the sender can pay them. */
+function PayRider({ orderId }: { orderId: string }) {
+  const [info, setInfo] = useState<OrderPayToRider | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    if (!supabase) return;
+    setBusy(true);
+    try { setInfo(await getOrderPayToRider(supabase, orderId)); setLoaded(true); }
+    catch { /* ignore */ }
+    finally { setBusy(false); }
+  }
+
+  if (!loaded) {
+    return (
+      <button onClick={load} disabled={busy}
+        className="mt-2 rounded-lg bg-brand-purple/10 px-3 py-1.5 text-xs font-semibold text-brand-purple disabled:opacity-60">
+        {busy ? 'Checking…' : '💸 Pay your rider via GCash'}
+      </button>
+    );
+  }
+  if (!info || !info.rider_name) {
+    return <p className="mt-2 text-xs text-black/45">Waiting for a rider to accept — check back to pay.</p>;
+  }
+  return (
+    <div className="mt-2 rounded-lg bg-brand-purple/[0.06] px-3 py-2 text-xs">
+      <p className="font-semibold text-brand-ink">Send {peso(info.amount)} to your rider</p>
+      <p className="text-black/60">{info.rider_name}{info.payout_number ? ` · GCash/Maya: ${info.payout_number}` : ' · no GCash number on file yet'}</p>
+      <p className="mt-1 text-black/45">The recipient pays nothing on delivery.</p>
+    </div>
+  );
 }
 
 export function Account() {
@@ -64,18 +99,24 @@ export function Account() {
           ) : (
             <ul className="divide-y divide-black/5">
               {orders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-2 py-2.5">
-                  <div className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${serviceTint[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span>
-                      <span className="text-xs capitalize text-black/50">{o.status.replaceAll('_', ' ')}</span>
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-black/45">
-                      {fmtDate(o.created_at)}
-                      {o.order_stores?.[0]?.store?.name ? ` · ${o.order_stores[0].store!.name}` : ''}
-                    </span>
+                <li key={o.id} className="py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${serviceTint[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span>
+                        <span className="text-xs capitalize text-black/50">{o.status.replaceAll('_', ' ')}</span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-black/45">
+                        {fmtDate(o.created_at)}
+                        {o.order_stores?.[0]?.store?.name ? ` · ${o.order_stores[0].store!.name}` : ''}
+                        {o.recipient_name ? ` · 🎁 to ${o.recipient_name}` : ''}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-sm font-bold">{peso(orderTotal(o))}</span>
                   </div>
-                  <span className="shrink-0 text-sm font-bold">{peso(orderTotal(o))}</span>
+                  {o.payment_method === 'rider_qr' && !['delivered', 'cancelled'].includes(o.status) && (
+                    <PayRider orderId={o.id} />
+                  )}
                 </li>
               ))}
             </ul>

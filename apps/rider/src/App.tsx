@@ -484,20 +484,46 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           )}
         </div>
 
-        {/* Customer + store contacts */}
-        <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-xs text-black/45">Customer</p>
-            <p className="truncate text-sm font-medium">{order.customerName || order.customer_contact}</p>
-            {order.customerName && <p className="truncate text-xs text-black/45">{order.customer_contact}</p>}
+        {/* Deliver-to (recipient if a gift order) + contact. */}
+        {order.recipientContact ? (
+          <>
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-xs text-black/45">🎁 Deliver to</p>
+                <p className="truncate text-sm font-medium">{order.recipientName || order.recipientContact}</p>
+                {order.recipientName && <p className="truncate text-xs text-black/45">{order.recipientContact}</p>}
+              </div>
+              <div className="flex gap-2">
+                <a href={`tel:${order.recipientContact}`} aria-label="Call recipient"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-white"><PhoneIcon /></a>
+                <a href={`sms:${order.recipientContact}`} aria-label="Message recipient"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-xs text-black/45">Sender (pays)</p>
+                <p className="truncate text-sm font-medium">{order.customerName || order.customer_contact}</p>
+              </div>
+              <a href={`tel:${order.customer_contact}`} aria-label="Call sender"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><PhoneIcon /></a>
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 flex items-center justify-between rounded-xl bg-black/[0.03] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-xs text-black/45">Customer</p>
+              <p className="truncate text-sm font-medium">{order.customerName || order.customer_contact}</p>
+              {order.customerName && <p className="truncate text-xs text-black/45">{order.customer_contact}</p>}
+            </div>
+            <div className="flex gap-2">
+              <a href={`tel:${order.customer_contact}`} aria-label="Call customer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-white"><PhoneIcon /></a>
+              <a href={`sms:${order.customer_contact}`} aria-label="Message customer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <a href={`tel:${order.customer_contact}`} aria-label="Call customer"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-white"><PhoneIcon /></a>
-            <a href={`sms:${order.customer_contact}`} aria-label="Message customer"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
-          </div>
-        </div>
+        )}
         {/* Restaurant / store with its items grouped underneath. */}
         <StoreGroups order={order} />
         {order.notes && (

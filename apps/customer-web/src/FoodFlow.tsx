@@ -98,6 +98,9 @@ export function FoodFlow() {
   const [contact, setContact] = useState('');
   const [custName, setCustName] = useState('');
   const [note, setNote] = useState('');
+  const [gift, setGift] = useState(false);
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientContact, setRecipientContact] = useState('');
   const [cutlery, setCutlery] = useState(false);
   const [cartOpen, setCartOpen] = useState(false); // full-screen cart popup
   // Prefill the delivery contact with the account's verified phone.
@@ -264,6 +267,8 @@ export function FoodFlow() {
           customerId,
           customerContact: contact.trim(),
           customerName: custName.trim() || undefined,
+          recipientName: gift ? recipientName.trim() || undefined : undefined,
+          recipientContact: gift ? recipientContact.trim() || undefined : undefined,
           deliveryFee,
           lines: cart,
           notes: fullNote,
@@ -295,7 +300,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setCartOpen(false); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setGift(false); setRecipientName(''); setRecipientContact(''); setCartOpen(false); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -496,6 +501,27 @@ export function FoodFlow() {
                   className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
                 <p className="mt-1 text-xs text-black/40">So the rider can reach you.</p>
               </div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} className="h-4 w-4 accent-[#6DBE22]" />
+                🎁 Deliver to someone else
+              </label>
+              {gift && (
+                <div className="space-y-3 rounded-xl bg-black/[0.03] p-3">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Recipient name</label>
+                    <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)}
+                      placeholder="Who receives the order"
+                      className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Recipient mobile number</label>
+                    <input value={recipientContact} onChange={(e) => setRecipientContact(e.target.value)}
+                      inputMode="tel" placeholder="0917 123 4567"
+                      className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+                  </div>
+                  <p className="text-xs text-black/50">The rider delivers to the recipient. You (the sender) still pay — use <b>GCash to rider</b> below and pay from your Orders once a rider accepts.</p>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input type="checkbox" checked={cutlery} onChange={(e) => setCutlery(e.target.checked)} className="h-4 w-4 accent-[#6DBE22]" />
                 🍴 Include cutlery
