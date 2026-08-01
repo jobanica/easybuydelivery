@@ -19,6 +19,7 @@ import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
+import { Chat } from './Chat.tsx';
 import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
 import { SUPPORT_CONTACT, APP_VERSION, TERMS_URL } from './config.ts';
@@ -398,6 +399,7 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
   const [note, setNote] = useState<string | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [releaseErr, setReleaseErr] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const next = nextStatus(order);
   const collect = amountToCollect(order);
   const isRiderQr = order.payment_method === 'rider_qr';
@@ -526,6 +528,11 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         )}
         {/* Restaurant / store with its items grouped underneath. */}
         <StoreGroups order={order} />
+        <button onClick={() => setChatOpen(true)}
+          className="mt-2 w-full rounded-xl bg-brand-purple py-2.5 text-sm font-bold text-white">
+          💬 Chat with {order.recipientContact ? 'sender' : 'customer'}
+        </button>
+        {chatOpen && <Chat orderId={order.id} role="rider" title="Chat with customer" onClose={() => setChatOpen(false)} />}
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}

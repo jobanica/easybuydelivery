@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
 import { PayRider } from '../PayRider.tsx';
+import { Chat } from '../Chat.tsx';
 import { peso } from '../ui.tsx';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
@@ -41,6 +42,7 @@ export function Track({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<'loading' | 'none' | 'ok' | 'nocoords'>('loading');
   const [delivery, setDelivery] = useState<ActiveDelivery | null>(null);
   const [riderInfo, setRiderInfo] = useState<OrderRiderInfo | null>(null);
+  const [chatFor, setChatFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!live || !supabase || !customerId) return;
@@ -69,8 +71,13 @@ export function Track({ onClose }: { onClose: () => void }) {
       <div className="space-y-3">
         <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
           deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
+        <button onClick={() => setChatFor(delivery.id)}
+          className="w-full rounded-xl bg-brand-purple py-3 text-sm font-bold text-white shadow-sm">
+          💬 Chat with your rider
+        </button>
         <OrderItemsCard delivery={delivery} />
         {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
+        {chatFor && <Chat orderId={chatFor} role="customer" title="Chat with your rider" onClose={() => setChatFor(null)} />}
       </div>
     );
   }

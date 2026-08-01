@@ -13,6 +13,7 @@ export * from './settlement.ts';
 export * from './adminSettlement.ts';
 export * from './staff.ts';
 export * from './tracking.ts';
+export * from './chat.ts';
 export * from './notifications.ts';
 export * from './settings.ts';
 export * from './analytics.ts';
