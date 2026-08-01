@@ -3,6 +3,7 @@ import { pabiliCommission, validateBudget } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 
 interface FormState {
@@ -29,6 +30,8 @@ export function PabiliForm() {
   const [error, setError] = useState<string | null>(null);
   // Convenience fee is operator-set (from app settings); the customer can't edit it.
   const [convenienceFee, setConvenienceFee] = useState(0);
+  const [buyAt, setBuyAt] = useState<LatLngValue | null>(null);   // where to buy
+  const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
@@ -52,6 +55,10 @@ export function PabiliForm() {
       estimate: form.estimate,
       cap: form.cap,
       where: form.where,
+      pickupLat: buyAt?.lat,
+      pickupLng: buyAt?.lng,
+      deliveryLat: dropoff?.lat,
+      deliveryLng: dropoff?.lng,
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
@@ -63,6 +70,7 @@ export function PabiliForm() {
     if (submitting) return; // guard against double taps
     setError(null);
     if (!form.pay) { setError('Please choose a payment method.'); return; }
+    if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
     } catch (err) {
@@ -96,7 +104,7 @@ export function PabiliForm() {
             : 'A rider will buy your items and deliver them.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setForm(initial); setCreatedId(null); }}
+        <button onClick={() => { setForm(initial); setBuyAt(null); setDropoff(null); setCreatedId(null); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Send another
         </button>
@@ -115,6 +123,16 @@ export function PabiliForm() {
         <input className={inputCls} value={form.where}
           onChange={(e) => set('where', e.target.value)} placeholder="e.g. Botica Central" />
       </Field>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy <span className="font-normal text-black/40">(optional)</span></span>
+        <LocationPicker value={buyAt} onChange={setBuyAt} />
+        <p className="mt-1 text-xs text-black/40">Pin the store if you have one in mind — otherwise the rider picks the nearest.</p>
+      </div>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
+        <LocationPicker value={dropoff} onChange={setDropoff} />
+        <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the rider should deliver.</p>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Estimated cost (₱)">
           <input type="number" min={0} className={inputCls} value={form.estimate}
@@ -156,9 +174,9 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !capValid || !form.pay}
+      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
+        {submitting ? 'Sending…' : !dropoff ? 'Pin the delivery location' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
       </button>
     </form>
   );

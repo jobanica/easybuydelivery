@@ -49,6 +49,9 @@ export interface PadalaOrderRow {
   dropoff_lat: number | null;
   dropoff_lng: number | null;
   dropoff_contact: string;
+  /** Mirrors the drop-off so live tracking (which reads delivery_*) works. */
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   customer_contact: string;
   notes: string | null;
 }
@@ -85,6 +88,8 @@ export function buildPadalaOrderRow(
     dropoff_lat: input.dropoff.lat ?? null,
     dropoff_lng: input.dropoff.lng ?? null,
     dropoff_contact: input.dropoff.contact,
+    delivery_lat: input.dropoff.lat ?? null,
+    delivery_lng: input.dropoff.lng ?? null,
     customer_contact: input.customerContact,
     notes: input.notes?.trim() || null,
   };

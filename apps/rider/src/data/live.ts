@@ -43,6 +43,8 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
       ? (row.order_items as { store_id: string | null; name: string; qty: number; unit_price: number; notes: string | null }[])
           .map((it) => ({ store_id: it.store_id ?? null, name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null }))
       : [],
+    pickupLat: row.pickup_lat == null ? null : Number(row.pickup_lat),
+    pickupLng: row.pickup_lng == null ? null : Number(row.pickup_lng),
     deliveryLat: row.delivery_lat == null ? null : Number(row.delivery_lat),
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),
     notes: (row.notes as string) ?? null,

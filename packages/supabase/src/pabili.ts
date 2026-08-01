@@ -27,6 +27,9 @@ export interface PabiliRequestInput {
   cap: number;
   /** Where to buy (specific store or "any nearest"). */
   where?: string;
+  /** Where the rider should buy (pickup pin). */
+  pickupLat?: number;
+  pickupLng?: number;
   deliveryLat?: number;
   deliveryLng?: number;
   notes?: string;
@@ -48,6 +51,8 @@ export interface PabiliOrderRow {
   estimated_amount: number;
   budget_cap: number;
   item_description: string;
+  pickup_lat: number | null;
+  pickup_lng: number | null;
   delivery_lat: number | null;
   delivery_lng: number | null;
   customer_contact: string;
@@ -79,6 +84,8 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     estimated_amount: input.estimate,
     budget_cap: input.cap,
     item_description: input.itemsDescription.trim(),
+    pickup_lat: input.pickupLat ?? null,
+    pickup_lng: input.pickupLng ?? null,
     delivery_lat: input.deliveryLat ?? null,
     delivery_lng: input.deliveryLng ?? null,
     customer_contact: input.customerContact,

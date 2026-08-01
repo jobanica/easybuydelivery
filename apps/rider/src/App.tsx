@@ -508,18 +508,33 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         </p>
 
         {/* Live tracking map + navigation */}
-        {(order.deliveryLat != null || order.stores.some((s) => s.lat != null)) && (
+        {(order.deliveryLat != null || order.pickupLat != null || order.stores.some((s) => s.lat != null)) && (
           <div className="mt-3">
             <DeliveryMap
               dropoff={order.deliveryLat != null && order.deliveryLng != null ? { lat: order.deliveryLat, lng: order.deliveryLng } : null}
-              stores={order.stores} />
-            {order.deliveryLat != null && order.deliveryLng != null && (
-              <a href={`https://www.google.com/maps/dir/?api=1&destination=${order.deliveryLat},${order.deliveryLng}`}
-                target="_blank" rel="noreferrer"
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand-purple py-2.5 text-sm font-bold text-white">
-                🧭 Navigate to drop-off
-              </a>
-            )}
+              stores={
+                order.stores.some((s) => s.lat != null) || order.pickupLat == null || order.pickupLng == null
+                  ? order.stores
+                  // Pabili/Padala have no store row — show the customer's pickup pin instead.
+                  : [{ id: null, name: order.service_type === 'padala' ? 'Pickup' : 'Buy here',
+                       contact: null, lat: order.pickupLat, lng: order.pickupLng }]
+              } />
+            <div className="mt-2 flex gap-2">
+              {order.pickupLat != null && order.pickupLng != null && (
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${order.pickupLat},${order.pickupLng}`}
+                  target="_blank" rel="noreferrer"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white">
+                  🧭 {order.service_type === 'padala' ? 'To pickup' : 'To store'}
+                </a>
+              )}
+              {order.deliveryLat != null && order.deliveryLng != null && (
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${order.deliveryLat},${order.deliveryLng}`}
+                  target="_blank" rel="noreferrer"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-purple py-2.5 text-sm font-bold text-white">
+                  🧭 To drop-off
+                </a>
+              )}
+            </div>
           </div>
         )}
 

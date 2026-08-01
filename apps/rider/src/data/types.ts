@@ -25,6 +25,9 @@ export interface RiderOrder {
   stores: { id: string | null; name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
   /** What the customer ordered (store_id links each item to its store). */
   items: { store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null }[];
+  /** Where the rider buys/collects (pabili & padala pin the source). */
+  pickupLat: number | null;
+  pickupLng: number | null;
   /** Customer drop-off coordinates (for the tracking map / navigation). */
   deliveryLat: number | null;
   deliveryLng: number | null;

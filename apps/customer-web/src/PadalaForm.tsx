@@ -3,6 +3,7 @@ import { commission, type FeePayer } from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
+import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { useAuth } from './auth/AuthContext.tsx';
 
 const DEFAULT_DELIVERY_FEE = 50;
@@ -27,6 +28,8 @@ export function PadalaForm() {
   const { ensureContact } = useAuth();
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
+  const [pickup, setPickup] = useState<LatLngValue | null>(null);   // where to get it
+  const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +49,8 @@ export function PadalaForm() {
       deliveryFee: form.deliveryFee,
       feePayer: form.feePayer,
       itemDescription: form.itemDescription,
-      pickup: { contact: form.pickupContact },
-      dropoff: { contact: form.dropoffContact },
+      pickup: { contact: form.pickupContact, lat: pickup?.lat, lng: pickup?.lng },
+      dropoff: { contact: form.dropoffContact, lat: dropoff?.lat, lng: dropoff?.lng },
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
@@ -59,6 +62,8 @@ export function PadalaForm() {
     if (submitting) return; // guard against double taps
     setError(null);
     if (!form.pay) { setError('Please choose a payment method.'); return; }
+    if (!pickup) { setError('Please pin the pickup location.'); return; }
+    if (!dropoff) { setError('Please pin the drop-off location.'); return; }
     setSubmitting(true);
     try {
       if (supabase && isSupabaseConfigured) {
@@ -86,7 +91,7 @@ export function PadalaForm() {
             : 'Available riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setForm(initial); setCreatedId(null); }}
+        <button onClick={() => { setForm(initial); setPickup(null); setDropoff(null); setCreatedId(null); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Send another
         </button>
@@ -101,6 +106,16 @@ export function PadalaForm() {
           onChange={(e) => set('itemDescription', e.target.value)}
           placeholder="e.g. Documents, small parcel" required />
       </Field>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">📦 Pick up from</span>
+        <LocationPicker value={pickup} onChange={setPickup} />
+        <p className="mt-1 text-xs text-black/40">Where the rider collects the item (e.g. your place).</p>
+      </div>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
+        <LocationPicker value={dropoff} onChange={setDropoff} />
+        <p className="mt-1 text-xs text-black/40">Where the item should be dropped off.</p>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Pickup contact #">
           <input className={inputCls} value={form.pickupContact}
@@ -140,9 +155,9 @@ export function PadalaForm() {
         <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !form.pay}
+      <button type="submit" disabled={submitting || !form.pay || !pickup || !dropoff}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : !form.pay ? 'Choose a payment method' : 'Request a rider'}
+        {submitting ? 'Sending…' : !pickup || !dropoff ? 'Pin pickup and drop-off' : !form.pay ? 'Choose a payment method' : 'Request a rider'}
       </button>
     </form>
   );
