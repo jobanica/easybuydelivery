@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { pabiliCommission, validateBudget } from '@ebd/shared';
+import { pabiliCommission, validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
+  type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -13,7 +14,6 @@ interface FormState {
   where: string;
   estimate: number;
   cap: number;
-  deliveryFee: number;
   customerContact: string;
   notes: string;
   pay: PayChoice | null;
@@ -21,7 +21,7 @@ interface FormState {
 
 const initial: FormState = {
   itemsDescription: '', where: '', estimate: 300, cap: 400,
-  deliveryFee: 50, customerContact: '', notes: '', pay: null,
+  customerContact: '', notes: '', pay: null,
 };
 
 export function PabiliForm() {
@@ -36,13 +36,30 @@ export function PabiliForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [areaRequired, setAreaRequired] = useState(false);
+  // Delivery pricing comes from the operator's settings — recalculated from the
+  // pinned distance under per-km pricing, never typed by the customer.
+  const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
+    { model: 'flat', flatFee: 50, distance: DEFAULT_DISTANCE_FEE_CONFIG });
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
-    getAppSettings(supabase).then((s) => setConvenienceFee(s.convenience_fee_pabili ?? s.convenience_fee)).catch(() => {});
+    getAppSettings(supabase).then((s) => {
+      setConvenienceFee(s.convenience_fee_pabili ?? s.convenience_fee);
+      setFeeCfg({
+        model: s.delivery_fee_model,
+        flatFee: s.default_delivery_fee,
+        distance: { baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km },
+      });
+    }).catch(() => {});
   }, []);
 
-  const operatorCut = useMemo(() => pabiliCommission(form.deliveryFee), [form.deliveryFee]);
+  const deliveryFee = useMemo(() => resolveDeliveryFee({
+    model: feeCfg.model, flatFee: feeCfg.flatFee, distanceConfig: feeCfg.distance,
+    storeLocations: [buyAt], dropoff,
+  }), [feeCfg, buyAt, dropoff]);
+  // Per-km pricing needs both pins to measure the leg.
+  const needsPinsForFee = feeCfg.model === 'per_km' && (!buyAt || !dropoff);
+  const operatorCut = useMemo(() => pabiliCommission(deliveryFee), [deliveryFee]);
   const capValid = form.cap >= form.estimate;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -53,7 +70,7 @@ export function PabiliForm() {
     return {
       customerId,
       customerContact: form.customerContact,
-      deliveryFee: form.deliveryFee,
+      deliveryFee,
       convenienceFee,
       itemsDescription: form.itemsDescription,
       estimate: form.estimate,
@@ -78,6 +95,7 @@ export function PabiliForm() {
     setError(null);
     if (!form.pay) { setError('Please choose a payment method.'); return; }
     if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
+    if (needsPinsForFee) { setError('Please pin where to buy so we can compute the delivery fee.'); return; }
     if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
@@ -133,9 +151,9 @@ export function PabiliForm() {
       </Field>
       <AreaPicker value={area} onChange={(v) => { setArea(v); setAreaRequired(true); }} />
       <div>
-        <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy <span className="font-normal text-black/40">(optional)</span></span>
+        <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-black/40"> (optional)</span>}</span>
         <LocationPicker value={buyAt} onChange={setBuyAt} />
-        <p className="mt-1 text-xs text-black/40">Pin the store if you have one in mind — otherwise the rider picks the nearest.</p>
+        <p className="mt-1 text-xs text-black/40">{feeCfg.model === 'per_km' ? 'Needed to compute the delivery fee by distance.' : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
       </div>
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
@@ -155,8 +173,10 @@ export function PabiliForm() {
       {!capValid && <p className="text-xs text-red-600">Cap must be at least the estimate.</p>}
       <div className="grid grid-cols-2 gap-4">
         <Field label="Delivery fee (₱)">
-          <input type="number" min={0} className={inputCls} value={form.deliveryFee}
-            onChange={(e) => set('deliveryFee', Number(e.target.value))} required />
+          <div className={`${inputCls} flex items-center justify-between bg-black/[0.03]`}>
+            <span className="font-semibold">{needsPinsForFee ? '—' : peso(deliveryFee)}</span>
+            <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
+          </div>
         </Field>
         <Field label="Your mobile number">
           <input className={inputCls} value={form.customerContact}
@@ -173,7 +193,7 @@ export function PabiliForm() {
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label="Estimated goods" value={peso(form.estimate)} />
         <Row label="Spending cap" value={peso(form.cap)} muted />
-        <Row label="Delivery fee" value={peso(form.deliveryFee)} />
+        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <Row label="Operator commission (15% of DF)" value={peso(operatorCut)} muted />
         <p className="mt-2 text-xs text-black/50">
@@ -183,9 +203,9 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff || (areaRequired && !area)}
+      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : areaRequired && !area ? 'Choose your delivery area' : !dropoff ? 'Pin the delivery location' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
+        {submitting ? 'Sending…' : areaRequired && !area ? 'Choose your delivery area' : needsPinsForFee || !dropoff ? 'Pin both locations' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
       </button>
     </form>
   );

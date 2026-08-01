@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { commission, type FeePayer } from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
+import { resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG, type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
+import { getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
@@ -12,7 +14,6 @@ const DEFAULT_DELIVERY_FEE = 50;
 
 interface FormState {
   itemDescription: string;
-  deliveryFee: number;
   feePayer: FeePayer;
   pickupContact: string;
   dropoffContact: string;
@@ -22,7 +23,7 @@ interface FormState {
 }
 
 const initial: FormState = {
-  itemDescription: '', deliveryFee: DEFAULT_DELIVERY_FEE, feePayer: 'sender',
+  itemDescription: '', feePayer: 'sender',
   pickupContact: '', dropoffContact: '', customerContact: '', notes: '', pay: null,
 };
 
@@ -34,12 +35,31 @@ export function PadalaForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [areaRequired, setAreaRequired] = useState(false);
+  // Delivery pricing is operator-controlled: recalculated from the pinned
+  // pickup -> drop-off distance under per-km pricing.
+  const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
+    { model: 'flat', flatFee: DEFAULT_DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG });
+
+  useEffect(() => {
+    if (!supabase || !isSupabaseConfigured) return;
+    getAppSettings(supabase).then((s) => setFeeCfg({
+      model: s.delivery_fee_model,
+      flatFee: s.default_delivery_fee,
+      distance: { baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km },
+    })).catch(() => {});
+  }, []);
+
+  const deliveryFee = useMemo(() => resolveDeliveryFee({
+    model: feeCfg.model, flatFee: feeCfg.flatFee, distanceConfig: feeCfg.distance,
+    storeLocations: [pickup], dropoff,
+  }), [feeCfg, pickup, dropoff]);
+  const needsPinsForFee = feeCfg.model === 'per_km' && (!pickup || !dropoff);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const operatorCut = useMemo(
-    () => commission({ deliveryFee: form.deliveryFee, storeCount: 0 }),
-    [form.deliveryFee],
+    () => commission({ deliveryFee, storeCount: 0 }),
+    [deliveryFee],
   );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -50,7 +70,7 @@ export function PadalaForm() {
     return {
       customerId,
       customerContact: form.customerContact,
-      deliveryFee: form.deliveryFee,
+      deliveryFee,
       feePayer: form.feePayer,
       itemDescription: form.itemDescription,
       areaProvince: area?.province,
@@ -142,8 +162,10 @@ export function PadalaForm() {
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Delivery fee (₱)">
-          <input type="number" min={0} className={inputCls} value={form.deliveryFee}
-            onChange={(e) => set('deliveryFee', Number(e.target.value))} required />
+          <div className={`${inputCls} flex items-center justify-between bg-black/[0.03]`}>
+            <span className="font-semibold">{needsPinsForFee ? '—' : peso(deliveryFee)}</span>
+            <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
+          </div>
         </Field>
         <Field label="Who pays the fee?">
           <select className={inputCls} value={form.feePayer}
@@ -159,7 +181,7 @@ export function PadalaForm() {
       </Field>
       <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <Row label="Delivery fee" value={peso(form.deliveryFee)} />
+        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
         <Row label="Operator commission (15%)" value={peso(operatorCut)} muted />
         <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
       </div>
