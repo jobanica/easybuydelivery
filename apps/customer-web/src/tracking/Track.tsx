@@ -3,6 +3,28 @@ import { getActiveDelivery, getOrderRiderInfo, type ActiveDelivery, type OrderRi
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
+import { peso } from '../ui.tsx';
+
+/** "My order" — what the customer ordered, shown alongside the live map. */
+function OrderItemsCard({ delivery }: { delivery: ActiveDelivery }) {
+  if (delivery.items.length === 0) return null;
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="font-bold">My order</h3>
+        {delivery.storeName && <span className="truncate text-xs text-black/45">{delivery.storeName}</span>}
+      </div>
+      <ul className="space-y-1 text-sm">
+        {delivery.items.map((it, i) => (
+          <li key={i} className="flex justify-between gap-2">
+            <span className="min-w-0"><span className="font-medium">{it.qty}×</span> {it.name}</span>
+            {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // Demo route for preview mode (no backend).
 const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
@@ -43,29 +65,35 @@ export function Track({ onClose }: { onClose: () => void }) {
 
   if (status === 'ok' && delivery?.pickup && delivery.dropoff) {
     return (
-      <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
-        deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
+      <div className="space-y-3">
+        <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
+          deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
+        <OrderItemsCard delivery={delivery} />
+      </div>
     );
   }
 
   return (
-    <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="font-bold">Track your delivery</h2>
-        <button onClick={onClose} className="text-sm text-brand-purple">Close</button>
+    <div className="space-y-3">
+      <div className="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-bold">Track your delivery</h2>
+          <button onClick={onClose} className="text-sm text-brand-purple">Close</button>
+        </div>
+        {status === 'loading' ? (
+          <p className="py-6 text-sm text-black/50">Checking for an active delivery…</p>
+        ) : status === 'nocoords' ? (
+          <p className="py-6 text-sm text-black/60">
+            Your rider is on the way ({delivery?.status.replaceAll('_', ' ')}). A live map isn't available for this order because no map location was set.
+          </p>
+        ) : (
+          <>
+            <div className="mx-auto mb-3 mt-2 flex h-12 w-12 items-center justify-center rounded-full bg-brand-green/15 text-2xl">🛵</div>
+            <p className="text-sm text-black/60">No delivery in progress. Live tracking appears here once a rider is on the way with your order.</p>
+          </>
+        )}
       </div>
-      {status === 'loading' ? (
-        <p className="py-6 text-sm text-black/50">Checking for an active delivery…</p>
-      ) : status === 'nocoords' ? (
-        <p className="py-6 text-sm text-black/60">
-          Your rider is on the way ({delivery?.status.replaceAll('_', ' ')}). A live map isn't available for this order because no map location was set.
-        </p>
-      ) : (
-        <>
-          <div className="mx-auto mb-3 mt-2 flex h-12 w-12 items-center justify-center rounded-full bg-brand-green/15 text-2xl">🛵</div>
-          <p className="text-sm text-black/60">No delivery in progress. Live tracking appears here once a rider is on the way with your order.</p>
-        </>
-      )}
+      {delivery && <OrderItemsCard delivery={delivery} />}
     </div>
   );
 }

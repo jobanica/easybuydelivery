@@ -43,8 +43,11 @@ export interface CustomerOrder {
 export interface ActiveDelivery {
   id: string;
   status: string;
+  service_type: string;
   pickup: { lat: number; lng: number } | null;
   dropoff: { lat: number; lng: number } | null;
+  storeName: string | null;
+  items: { name: string; qty: number; unitPrice: number }[];
 }
 
 /**
@@ -55,7 +58,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, delivery_lat, delivery_lng, order_stores(store:stores(lat, lng))')
+    .select('id, status, service_type, item_description, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -63,16 +66,23 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     .limit(1);
   if (error) throw error;
   const row = (data ?? [])[0] as {
-    id: string; status: string; delivery_lat: number | null; delivery_lng: number | null;
-    order_stores?: { store: { lat: number | null; lng: number | null } | null }[];
+    id: string; status: string; service_type: string; item_description: string | null;
+    delivery_lat: number | null; delivery_lng: number | null;
+    order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
+    order_items?: { name: string; qty: number; unit_price: number }[];
   } | undefined;
   if (!row) return null;
-  const store = row.order_stores?.find((os) => os.store?.lat != null && os.store?.lng != null)?.store ?? null;
+  const store = row.order_stores?.find((os) => os.store?.lat != null && os.store?.lng != null)?.store
+    ?? row.order_stores?.[0]?.store ?? null;
+  const items = (row.order_items ?? []).map((it) => ({ name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0) }));
   return {
     id: row.id,
     status: row.status,
+    service_type: row.service_type,
     pickup: store && store.lat != null && store.lng != null ? { lat: store.lat, lng: store.lng } : null,
     dropoff: row.delivery_lat != null && row.delivery_lng != null ? { lat: row.delivery_lat, lng: row.delivery_lng } : null,
+    storeName: store?.name ?? null,
+    items: items.length ? items : (row.item_description ? [{ name: row.item_description, qty: 1, unitPrice: 0 }] : []),
   };
 }
 
