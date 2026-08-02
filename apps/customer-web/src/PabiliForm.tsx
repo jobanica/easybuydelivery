@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { pabiliCommission, validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
+import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
   type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -59,7 +59,10 @@ export function PabiliForm() {
   }), [feeCfg, buyAt, dropoff]);
   // Per-km pricing needs both pins to measure the leg.
   const needsPinsForFee = feeCfg.model === 'per_km' && (!buyAt || !dropoff);
-  const operatorCut = useMemo(() => pabiliCommission(deliveryFee), [deliveryFee]);
+  // What the customer actually pays: goods (estimate for now) + fees. The final
+  // amount follows the rider's real receipt, capped by their spending cap.
+  const estimatedTotal = form.estimate + deliveryFee + convenienceFee;
+  const maxTotal = form.cap + deliveryFee + convenienceFee;
   const capValid = form.cap >= form.estimate;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -192,20 +195,28 @@ export function PabiliForm() {
 
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label="Estimated goods" value={peso(form.estimate)} />
-        <Row label="Spending cap" value={peso(form.cap)} muted />
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
-        <Row label="Operator commission (15% of DF)" value={peso(operatorCut)} muted />
+        <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
+          <span>Estimated total to pay</span>
+          <span>{needsPinsForFee ? '—' : peso(estimatedTotal)}</span>
+        </div>
+        <Row label={`Most you'd pay (at your ${peso(form.cap)} cap)`} value={needsPinsForFee ? '—' : peso(maxTotal)} muted />
         <p className="mt-2 text-xs text-black/50">
-          You pay the actual receipt total + delivery fee{convenienceFee > 0 ? ' + convenience fee' : ''}.
-          The rider won't exceed your cap without checking with you.
+          The goods amount is an estimate — you pay the <b>actual receipt total</b> plus the
+          delivery fee{convenienceFee > 0 ? ' and convenience fee' : ''}. The rider won't go over
+          your cap without checking with you first.
         </p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
-        {submitting ? 'Sending…' : areaRequired && !area ? 'Choose your delivery area' : needsPinsForFee || !dropoff ? 'Pin both locations' : !form.pay ? 'Choose a payment method' : 'Request Pabili'}
+        {submitting ? 'Sending…'
+          : areaRequired && !area ? 'Choose your delivery area'
+          : needsPinsForFee || !dropoff ? 'Pin both locations'
+          : !form.pay ? 'Choose a payment method'
+          : `Request Pabili · about ${peso(estimatedTotal)}`}
       </button>
     </form>
   );
