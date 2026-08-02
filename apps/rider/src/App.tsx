@@ -368,13 +368,11 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
       {order.isTransfer && (
         <div className="bg-brand-yellow/30 px-4 py-2">
           <p className="text-xs font-bold text-yellow-900">
-            🔄 Transfer — released by {order.transferredFromName ?? 'another rider'}
-            {order.transferReason ? ` · ${order.transferReason}` : ''}
+            🔄 Transfer{order.transferReason ? ` · ${order.transferReason}` : ''}
           </p>
           {order.transferHadGoods && (
             <p className="mt-0.5 text-[11px] text-yellow-900/80">
-              ⚠️ Items already picked up — coordinate the hand-over
-              {order.transferredFromContact ? ` (${order.transferredFromContact})` : ''}.
+              ⚠️ Items already bought — you'll take them over from the previous rider.
             </p>
           )}
         </div>
@@ -386,11 +384,8 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
         <span className="rounded-full bg-brand-ink px-2.5 py-1 text-xs font-bold text-white">{peso(riderEarn(order))}</span>
       </div>
       <div className="px-4 py-3">
-        {order.isTransfer && order.transferHadGoods && order.transferredFromContact && (
-          <a href={`tel:${order.transferredFromContact}`}
-            className="mb-2 inline-flex items-center gap-1 rounded-lg bg-brand-purple/10 px-2.5 py-1 text-xs font-semibold text-brand-purple">
-            <PhoneIcon /> Call {order.transferredFromName ?? 'previous rider'}
-          </a>
+        {order.isTransfer && (order.transferredFromName || order.transferredFromContact) && (
+          <PreviousRider name={order.transferredFromName} contact={order.transferredFromContact} />
         )}
         <p className="text-sm font-semibold">
           {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
@@ -597,6 +592,15 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
             </div>
           </div>
         )}
+        {/* Who handed this delivery over — kept after accepting so the new rider
+            can still reach them to coordinate the hand-over. */}
+        {(order.transferredFromName || order.transferredFromContact) && (
+          <div className="mt-3">
+            <PreviousRider name={order.transferredFromName} contact={order.transferredFromContact}
+              reason={order.transferReason} hadGoods={order.transferHadGoods} />
+          </div>
+        )}
+
         {/* Restaurant / store with its items grouped underneath. */}
         <StoreGroups order={order} />
         <div className="mt-2">
@@ -1290,6 +1294,36 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
             className="rounded-lg border border-black/15 px-3 text-sm font-medium text-black/60">Cancel</button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The rider who handed this delivery over, with a tap-to-call number so the new
+ * rider can coordinate — especially when the goods were already bought.
+ */
+function PreviousRider({ name, contact, reason, hadGoods }: {
+  name: string | null; contact: string | null; reason?: string | null; hadGoods?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl bg-brand-yellow/20 px-3 py-2.5 ring-1 ring-brand-yellow/50">
+      <div className="min-w-0">
+        <p className="text-xs text-yellow-900/70">🔄 Transferred from</p>
+        <p className="truncate text-sm font-bold text-brand-ink">{name ?? 'Previous rider'}</p>
+        {contact
+          ? <p className="truncate text-xs text-black/50">{contact}</p>
+          : <p className="text-xs text-black/40">No number on file</p>}
+        {reason && <p className="mt-0.5 truncate text-[11px] text-yellow-900/70">Reason: {reason}</p>}
+        {hadGoods && <p className="mt-0.5 text-[11px] font-medium text-yellow-900">⚠️ They already have the items</p>}
+      </div>
+      {contact && (
+        <span className="flex shrink-0 gap-2">
+          <a href={`tel:${contact}`} aria-label="Call previous rider"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-white"><PhoneIcon /></a>
+          <a href={`sms:${contact}`} aria-label="Message previous rider"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-purple text-white"><ChatIcon /></a>
+        </span>
+      )}
     </div>
   );
 }
