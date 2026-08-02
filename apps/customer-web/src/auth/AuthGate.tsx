@@ -27,6 +27,12 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Show whose password is about to change, so a leftover session can't cause
+  // the wrong account to be updated without the user noticing.
+  const [target, setTarget] = useState<string>('');
+  useEffect(() => {
+    supabase?.auth.getUser().then(({ data }) => setTarget(data.user?.email ?? ''));
+  }, []);
 
   async function save() {
     if (password.length < 6) { setError('Use at least 6 characters.'); return; }
@@ -37,6 +43,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
 
   return (
     <Shell title="Set a new password">
+      {target && <p className="mb-2 rounded-lg bg-brand-green/10 px-3 py-2 text-sm">for <b>{target}</b></p>}
       <label className="mb-1 block text-sm font-medium text-black/70">New password</label>
       <input className={inputCls} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
         placeholder="At least 6 characters" autoComplete="new-password"
@@ -86,7 +93,12 @@ function EmailSignIn() {
   async function submit() {
     setError(null); setBusy(true);
     try {
-      if (mode === 'forgot') { await sendPasswordReset(supabase!, email.trim(), window.location.origin); setSent(true); }
+      if (mode === 'forgot') {
+        // Drop any leftover session first so the reset link applies to this email.
+        await supabase!.auth.signOut().catch(() => {});
+        await sendPasswordReset(supabase!, email.trim(), window.location.origin);
+        setSent(true);
+      }
       else if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
       else await signInWithPassword(supabase!, email.trim(), password);
       // The auth listener in AuthContext takes over on success.

@@ -34,6 +34,10 @@ const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }
 type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
 
 export function App({ riderId, riderName }: { riderId?: string; riderName?: string } = {}) {
+  // Which account this session belongs to — shown in the header so a leftover
+  // login (e.g. a demo account) is obvious at a glance.
+  const [signedInEmail, setSignedInEmail] = useState('');
+  useEffect(() => { supabase?.auth.getUser().then(({ data }) => setSignedInEmail(data.user?.email ?? '')); }, []);
   const [data] = useState<RiderData>(() => makeRiderData(riderId));
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [open, setOpen] = useState<RiderOrder[]>([]);
@@ -118,6 +122,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
             <div className="leading-tight">
               <p className="text-xs text-black/45">Welcome back!</p>
               <h1 className="text-base font-extrabold">{firstName}</h1>
+              {signedInEmail && <p className="max-w-[11rem] truncate text-[10px] text-black/35">{signedInEmail}</p>}
             </div>
           </div>
           <button onClick={() => setTab('requests')}

@@ -16,7 +16,7 @@ type ServiceAvailability = Record<Service, boolean>;
 const ALL_ON: ServiceAvailability = { food: true, pabili: true, padala: true };
 
 export function App() {
-  const { live, mobile, signOut } = useAuth();
+  const { live, mobile, email, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('food');
   // When the account gate is on, AuthGate is the branded entry — skip the
   // in-app welcome so we don't show two landing screens.
@@ -59,10 +59,18 @@ export function App() {
             </div>
           </div>
           {live && REQUIRE_ACCOUNT && (
-            <button onClick={() => void signOut()} title={mobile ? `Signed in as ${mobile}` : 'Sign out'}
-              className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium hover:bg-white/25">
-              Sign out
-            </button>
+            <div className="flex min-w-0 items-center gap-2">
+              {email && (
+                <span className="hidden min-w-0 text-right text-[11px] leading-tight opacity-90 sm:block">
+                  <span className="block opacity-70">Signed in as</span>
+                  <span className="block truncate font-semibold">{email}</span>
+                </span>
+              )}
+              <button onClick={() => void signOut()} title={email ? `Signed in as ${email}` : 'Sign out'}
+                className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium hover:bg-white/25">
+                Sign out
+              </button>
+            </div>
           )}
         </div>
       </header>
