@@ -37,7 +37,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   // Which account this session belongs to — shown in the header so a leftover
   // login (e.g. a demo account) is obvious at a glance.
   const [signedInEmail, setSignedInEmail] = useState('');
-  useEffect(() => { supabase?.auth.getUser().then(({ data }) => setSignedInEmail(data.user?.email ?? '')); }, []);
+  useEffect(() => { supabase?.auth.getSession().then(({ data }) => setSignedInEmail(data.session?.user.email ?? '')); }, []);
   const [data] = useState<RiderData>(() => makeRiderData(riderId));
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [open, setOpen] = useState<RiderOrder[]>([]);

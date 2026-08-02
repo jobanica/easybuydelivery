@@ -331,7 +331,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
   // Show whose password is about to change (guards against a leftover session).
   const [target, setTarget] = useState('');
   useEffect(() => {
-    supabase?.auth.getUser().then(({ data }) => setTarget(data.user?.email ?? ''));
+    supabase?.auth.getSession().then(({ data }) => setTarget(data.session?.user.email ?? ''));
   }, []);
 
   async function save() {

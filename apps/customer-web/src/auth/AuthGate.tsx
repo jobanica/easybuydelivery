@@ -31,7 +31,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
   // the wrong account to be updated without the user noticing.
   const [target, setTarget] = useState<string>('');
   useEffect(() => {
-    supabase?.auth.getUser().then(({ data }) => setTarget(data.user?.email ?? ''));
+    supabase?.auth.getSession().then(({ data }) => setTarget(data.session?.user.email ?? ''));
   }, []);
 
   async function save() {

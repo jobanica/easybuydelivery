@@ -10,10 +10,14 @@ export function createEbdClient(url: string, anonKey: string): SupabaseClient {
   }
   return createClient(url, anonKey, {
     auth: {
+      // Keep the session in storage and renew the access token in the
+      // background, so riders/customers stay signed in across app restarts.
       persistSession: true,
       autoRefreshToken: true,
-      // Detect the token in a magic-link URL and use implicit flow so the link
-      // signs the user in even when opened from their email app.
+      // Password-reset links carry their token in the URL and must still sign
+      // the user in when opened from their email app — including in a different
+      // browser, which is why this stays on the implicit flow rather than PKCE
+      // (PKCE needs the verifier from the browser that started the request).
       detectSessionInUrl: true,
       flowType: 'implicit',
     },
