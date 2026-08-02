@@ -455,7 +455,6 @@ function amountToCollect(o: RiderOrder): number | null {
 
 function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
-  const [amount, setAmount] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [releaseErr, setReleaseErr] = useState<string | null>(null);
@@ -467,14 +466,6 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
   const needsActual = order.service_type === 'pabili' && order.actual_amount == null;
 
   useLocationPublisher(order.id, order.status);
-
-  async function saveActual() {
-    const val = Number(amount);
-    if (!Number.isFinite(val) || val < 0) return;
-    const res = await data.setActual(order, val);
-    setNote(res.overCap ? 'Over the cap — confirm with the customer before collecting.' : null);
-    await onChange();
-  }
 
   const hasGoods = order.status === 'picked_up' || order.status === 'on_the_way';
 
@@ -612,15 +603,8 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}
 
-        {needsActual && (
-          <div className="mt-3 rounded-xl bg-brand-yellow/15 p-3">
-            <p className="mb-1 text-xs font-medium">Enter the receipt total (cap {peso(order.budget_cap ?? 0)})</p>
-            <div className="flex gap-2">
-              <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm" placeholder="Actual ₱" />
-              <button onClick={saveActual} className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Save</button>
-            </div>
-          </div>
+        {order.service_type === 'pabili' && order.status !== 'delivered' && (
+          <PabiliCalculator order={order} data={data} onChange={onChange} onNote={setNote} />
         )}
         {note && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>}
 
@@ -1197,3 +1181,110 @@ function GearIcon() { return <svg {...ic}><circle cx="12" cy="12" r="3" /><path 
 function BellIcon() { return <svg {...ic} width="20" height="20"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>; }
 function PhoneIcon() { return <svg {...ic} width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>; }
 function ChatIcon() { return <svg {...ic} width="14" height="14"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" /></svg>; }
+
+/**
+ * Pabili goods calculator. The rider punches in each item's price; the running
+ * total becomes the order's goods amount (what the customer repays). Stays
+ * editable after saving so extra items the customer adds can be tacked on.
+ */
+function PabiliCalculator({ order, data, onChange, onNote }: {
+  order: RiderOrder; data: RiderData; onChange: () => Promise<void>;
+  onNote: (n: string | null) => void;
+}) {
+  const saved = order.actual_amount;
+  const [open, setOpen] = useState(saved == null);
+  const [rows, setRows] = useState<{ label: string; amount: string }[]>([{ label: '', amount: '' }]);
+  const [busy, setBusy] = useState(false);
+  const cap = order.budget_cap ?? 0;
+
+  const total = rows.reduce((sum, r) => {
+    const n = Number(r.amount);
+    return sum + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+  const counted = rows.filter((r) => Number(r.amount) > 0).length;
+  const overCap = cap > 0 && total > cap;
+
+  function setRow(i: number, patch: Partial<{ label: string; amount: string }>) {
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() { setRows((rs) => [...rs, { label: '', amount: '' }]); }
+  function removeRow(i: number) {
+    setRows((rs) => (rs.length === 1 ? [{ label: '', amount: '' }] : rs.filter((_, j) => j !== i)));
+  }
+
+  async function save() {
+    if (total <= 0) return;
+    setBusy(true);
+    try {
+      const res = await data.setActual(order, Math.round(total * 100) / 100);
+      onNote(res.overCap ? 'Over the cap — confirm with the customer before collecting.' : null);
+      await onChange();
+      setOpen(false);
+    } finally { setBusy(false); }
+  }
+
+  // Saved and closed: show the total with an Edit button.
+  if (!open) {
+    return (
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-yellow/15 p-3">
+        <span>
+          <span className="block text-xs text-black/50">Goods total (receipt)</span>
+          <span className="text-lg font-black">{peso(saved ?? 0)}</span>
+        </span>
+        <button onClick={() => { setRows([{ label: 'Current total', amount: String(saved ?? '') }]); setOpen(true); }}
+          className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-semibold text-white">
+          ✏️ Edit / add items
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl bg-brand-yellow/15 p-3">
+      <p className="mb-2 text-xs font-medium">
+        🧮 Add each item's price{cap > 0 && <span className="text-black/50"> · cap {peso(cap)}</span>}
+      </p>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="flex gap-2">
+            <input value={r.label} onChange={(e) => setRow(i, { label: e.target.value })}
+              placeholder={`Item ${i + 1}`}
+              className="min-w-0 flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm" />
+            <input type="number" inputMode="decimal" min={0} value={r.amount}
+              onChange={(e) => setRow(i, { amount: e.target.value })}
+              placeholder="₱"
+              className="w-24 shrink-0 rounded-lg border border-black/10 px-3 py-2 text-sm" />
+            <button onClick={() => removeRow(i)} aria-label="Remove item"
+              className="shrink-0 rounded-lg border border-black/10 px-2 text-sm text-black/40">✕</button>
+          </div>
+        ))}
+      </div>
+      <button onClick={addRow}
+        className="mt-2 w-full rounded-lg border border-dashed border-black/20 py-2 text-sm font-medium text-black/60">
+        ＋ Add item
+      </button>
+
+      <div className="mt-3 flex items-center justify-between border-t border-black/10 pt-2">
+        <span className="text-sm">
+          Total <span className="text-xs text-black/45">({counted} item{counted === 1 ? '' : 's'})</span>
+        </span>
+        <span className={`text-xl font-black ${overCap ? 'text-red-600' : ''}`}>{peso(total)}</span>
+      </div>
+      {overCap && (
+        <p className="mt-1 text-xs text-red-600">
+          ⚠️ Over the {peso(cap)} cap — confirm with the customer before paying.
+        </p>
+      )}
+      <div className="mt-2 flex gap-2">
+        <button onClick={save} disabled={busy || total <= 0}
+          className="flex-1 rounded-lg bg-brand-purple py-2.5 text-sm font-bold text-white disabled:opacity-50">
+          {busy ? 'Saving…' : `Save ${peso(total)} as goods total`}
+        </button>
+        {saved != null && (
+          <button onClick={() => setOpen(false)}
+            className="rounded-lg border border-black/15 px-3 text-sm font-medium text-black/60">Cancel</button>
+        )}
+      </div>
+    </div>
+  );
+}
