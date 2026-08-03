@@ -20,6 +20,8 @@ export interface RiderOrder {
   estimated_amount: number | null;
   budget_cap: number | null;
   actual_amount: number | null;
+  /** Pabili: the rider's photo of the store receipt backing actual_amount. */
+  goodsReceiptUrl: string | null;
   store_contact: string | null;
   /** Linked store(s) for the order, so the rider can call the restaurant. */
   stores: { id: string | null; name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
@@ -57,6 +59,8 @@ export interface RiderData {
   releaseOrder(orderId: string, reason?: string): Promise<void>;
   confirmPayment(orderId: string, note?: string): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
-  setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
+  setActual(order: RiderOrder, amount: number, receiptUrl?: string): Promise<{ overCap: boolean }>;
+  /** Upload the store receipt photo backing a pabili total; returns its URL. */
+  uploadGoodsReceipt(orderId: string, file: File): Promise<string>;
   settle(businessDay: string, amount: number, extra?: { reference?: string; receiptUrl?: string }): Promise<void>;
 }

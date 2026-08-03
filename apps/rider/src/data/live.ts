@@ -7,6 +7,7 @@ import {
   releaseOrder,
   advanceOrderStatus,
   updatePabiliActualAmount,
+  uploadPabiliReceipt,
   createSettlement,
   riderConfirmPayment,
   getRiderOnline,
@@ -35,6 +36,7 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     estimated_amount: row.estimated_amount == null ? null : Number(row.estimated_amount),
     budget_cap: row.budget_cap == null ? null : Number(row.budget_cap),
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
+    goodsReceiptUrl: (row.goods_receipt_url as string) ?? null,
     store_contact: (row.store_contact as string) ?? null,
     stores: Array.isArray(row.order_stores)
       ? (row.order_stores as { store: { id: string | null; name: string | null; contact_number: string | null; lat: number | null; lng: number | null } | null }[])
@@ -98,12 +100,16 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);
     },
-    async setActual(order, amount) {
+    async setActual(order, amount, receiptUrl) {
       return updatePabiliActualAmount(
         db,
         { id: order.id, estimated_amount: order.estimated_amount ?? 0, budget_cap: order.budget_cap ?? amount },
         amount,
+        receiptUrl,
       );
+    },
+    async uploadGoodsReceipt(orderId, file) {
+      return uploadPabiliReceipt(db, orderId, file);
     },
     async settle(businessDay, amount, extra) {
       await createSettlement(db, {

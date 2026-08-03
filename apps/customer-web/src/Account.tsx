@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress, cancelOrder,
+  orderGoodsAmount, orderGoodsIsFinal,
   type MyCustomer, type CustomerOrder, type CustomerAddress,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -19,7 +20,7 @@ const serviceTint: Record<string, string> = {
 };
 
 function orderTotal(o: CustomerOrder): number {
-  return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
+  return orderGoodsAmount(o) + o.delivery_fee + o.store_fee_total + o.convenience_fee;
 }
 /** Cancel a still-pending order (before any rider accepts). */
 function CancelOrderButton({ orderId, onCancelled }: { orderId: string; onCancelled: () => void }) {
@@ -104,8 +105,25 @@ export function Account() {
                         {o.recipient_name ? ` · 🎁 to ${o.recipient_name}` : ''}
                       </span>
                     </div>
-                    <span className="shrink-0 text-sm font-bold">{peso(orderTotal(o))}</span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-sm font-bold">{peso(orderTotal(o))}</span>
+                      {!orderGoodsIsFinal(o) && <span className="block text-[10px] text-black/40">estimated</span>}
+                    </span>
                   </div>
+                  {o.service_type === 'pabili' && (
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] text-black/50">
+                      <span>
+                        Goods {peso(orderGoodsAmount(o))}
+                        {orderGoodsIsFinal(o) ? ' (receipt)' : ' (your estimate)'}
+                        {' · '}delivery {peso(o.delivery_fee)}
+                        {o.convenience_fee > 0 ? ` · convenience ${peso(o.convenience_fee)}` : ''}
+                      </span>
+                      {o.goods_receipt_url && (
+                        <a href={o.goods_receipt_url} target="_blank" rel="noreferrer"
+                          className="shrink-0 font-medium text-brand-purple underline">🧾 Receipt</a>
+                      )}
+                    </div>
+                  )}
                   {o.payment_method === 'rider_qr' && !['delivered', 'cancelled'].includes(o.status) && (
                     <PayRider orderId={o.id} />
                   )}

@@ -118,6 +118,19 @@ export interface ActualAmountResult {
 }
 
 /**
+ * Upload the rider's photo of the store receipt for a pabili run. Lives in the
+ * public store-assets bucket so the customer can open it from their order.
+ */
+export async function uploadPabiliReceipt(db: SupabaseClient, orderId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `pabili-receipts/${orderId}/${Date.now()}.${ext}`;
+  const { error } = await db.storage.from('store-assets')
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (error) throw error;
+  return db.storage.from('store-assets').getPublicUrl(path).data.publicUrl;
+}
+
+/**
  * Rider records the actual amount spent after buying. Sets goods_cost so the
  * amount-to-collect is accurate. Returns whether the spend exceeded the cap
  * (the caller/UI should prompt for customer confirmation before collecting).
@@ -126,12 +139,12 @@ export async function updatePabiliActualAmount(
   db: SupabaseClient,
   order: { id: string; estimated_amount: number; budget_cap: number },
   actualAmount: number,
+  receiptUrl?: string,
 ): Promise<ActualAmountResult> {
   if (actualAmount < 0) throw new Error('actualAmount must be non-negative');
-  const { error } = await db
-    .from('orders')
-    .update({ actual_amount: actualAmount, goods_cost: actualAmount })
-    .eq('id', order.id);
+  const patch: Record<string, unknown> = { actual_amount: actualAmount, goods_cost: actualAmount };
+  if (receiptUrl) patch.goods_receipt_url = receiptUrl;
+  const { error } = await db.from('orders').update(patch).eq('id', order.id);
   if (error) throw error;
   return {
     overCap: needsOverBudgetConfirmation(actualAmount, {

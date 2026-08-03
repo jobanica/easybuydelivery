@@ -37,7 +37,29 @@ export interface CustomerOrder {
   payment_method: string | null;
   recipient_name: string | null;
   recipient_contact: string | null;
+  /** Pabili: the customer's estimate, and the rider's receipt total once known. */
+  estimated_amount: number | null;
+  actual_amount: number | null;
+  /** Pabili: the rider's photo of the store receipt. */
+  goods_receipt_url: string | null;
   order_stores: { store: { name: string | null } | null }[];
+}
+
+/**
+ * The goods figure to charge for an order. A pabili run has no goods_cost until
+ * the rider records the receipt total, so fall back to the customer's estimate —
+ * otherwise the total looks like fees only.
+ */
+export function orderGoodsAmount(o: Pick<CustomerOrder, 'service_type' | 'goods_cost' | 'actual_amount' | 'estimated_amount'>): number {
+  if (o.service_type === 'pabili') {
+    return Number(o.goods_cost) || Number(o.actual_amount ?? o.estimated_amount ?? 0);
+  }
+  return Number(o.goods_cost ?? 0);
+}
+
+/** True once the goods figure is the rider's real receipt total, not an estimate. */
+export function orderGoodsIsFinal(o: Pick<CustomerOrder, 'service_type' | 'actual_amount'>): boolean {
+  return o.service_type !== 'pabili' || o.actual_amount != null;
 }
 
 export interface ActiveDelivery {
@@ -113,6 +135,13 @@ export interface OrderPayToRider {
   rider_name: string | null;
   payout_number: string | null;
   amount: number;
+  /** Goods portion of `amount` — an estimate until the rider records the receipt. */
+  goods_amount: number;
+  goods_is_final: boolean;
+  goods_receipt_url: string | null;
+  delivery_fee: number;
+  store_fee_total: number;
+  convenience_fee: number;
   /** Flips to 'paid' once the rider confirms the GCash transfer arrived. */
   payment_status: 'unpaid' | 'paid';
   /** Proof already on file, so a reload doesn't look like nothing was sent. */
@@ -134,6 +163,12 @@ export async function getOrderPayToRider(db: SupabaseClient, orderId: string): P
     rider_name: row.rider_name ?? null,
     payout_number: row.payout_number ?? null,
     amount: Number(row.amount ?? 0),
+    goods_amount: Number(row.goods_amount ?? 0),
+    goods_is_final: row.goods_is_final !== false,
+    goods_receipt_url: row.goods_receipt_url ?? null,
+    delivery_fee: Number(row.delivery_fee ?? 0),
+    store_fee_total: Number(row.store_fee_total ?? 0),
+    convenience_fee: Number(row.convenience_fee ?? 0),
     payment_status: row.payment_status === 'paid' ? 'paid' : 'unpaid',
     payment_receipt_url: row.payment_receipt_url ?? null,
     payment_reference: row.payment_reference ?? null,
@@ -171,7 +206,7 @@ export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
     .from('orders')
-    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, order_stores(store:stores(name))')
+    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, order_stores(store:stores(name))')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(30);

@@ -716,7 +716,14 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
               : isRiderQr
                 ? <span className="text-brand-purple">GCash to rider{qrAmount != null ? ` · ${peso(qrAmount)}` : ''} — no cash to collect</span>
                 : collect == null
-                  ? <span className="text-black/50">Collect: enter actual first</span>
+                  ? <span className="text-black/50">
+                      Collect: save the receipt total first
+                      {order.estimated_amount != null && (
+                        <span className="block text-xs">
+                          about {peso(order.estimated_amount + order.delivery_fee + order.convenience_fee)} at the customer's estimate
+                        </span>
+                      )}
+                    </span>
                   : <>Collect <span className="font-bold">{peso(collect)}</span></>}
           </span>
           {next && (
@@ -1281,6 +1288,10 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
   const [open, setOpen] = useState(saved == null);
   const [rows, setRows] = useState<{ label: string; amount: string }[]>([{ label: '', amount: '' }]);
   const [busy, setBusy] = useState(false);
+  // The customer pays this total, so it has to be backed by the store receipt.
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(order.goodsReceiptUrl);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const cap = order.budget_cap ?? 0;
 
   const total = rows.reduce((sum, r) => {
@@ -1298,27 +1309,44 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
     setRows((rs) => (rs.length === 1 ? [{ label: '', amount: '' }] : rs.filter((_, j) => j !== i)));
   }
 
+  async function pickReceipt(file: File) {
+    setUploading(true); setErr(null);
+    try { setReceiptUrl(await data.uploadGoodsReceipt(order.id, file)); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setUploading(false); }
+  }
+
   async function save() {
     if (total <= 0) return;
-    setBusy(true);
+    if (!receiptUrl) { setErr('Please attach a photo of the store receipt first.'); return; }
+    setBusy(true); setErr(null);
     try {
-      const res = await data.setActual(order, Math.round(total * 100) / 100);
+      const res = await data.setActual(order, Math.round(total * 100) / 100, receiptUrl);
       onNote(res.overCap ? 'Over the cap — confirm with the customer before collecting.' : null);
       await onChange();
       setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
   }
 
   // Saved and closed: show the total with an Edit button.
   if (!open) {
     return (
-      <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-yellow/15 p-3">
-        <span>
-          <span className="block text-xs text-black/50">Goods total (receipt)</span>
-          <span className="text-lg font-black">{peso(saved ?? 0)}</span>
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-brand-yellow/15 p-3">
+        <span className="flex min-w-0 items-center gap-2">
+          {receiptUrl && (
+            <a href={receiptUrl} target="_blank" rel="noreferrer" aria-label="View receipt photo">
+              <img src={receiptUrl} alt="Store receipt" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-black/10" />
+            </a>
+          )}
+          <span className="min-w-0">
+            <span className="block text-xs text-black/50">Goods total (receipt)</span>
+            <span className="text-lg font-black">{peso(saved ?? 0)}</span>
+          </span>
         </span>
         <button onClick={() => { setRows([{ label: 'Current total', amount: String(saved ?? '') }]); setOpen(true); }}
-          className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-semibold text-white">
+          className="shrink-0 rounded-lg bg-brand-purple px-3 py-2 text-sm font-semibold text-white">
           ✏️ Edit / add items
         </button>
       </div>
@@ -1361,10 +1389,36 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
           ⚠️ Over the {peso(cap)} cap — confirm with the customer before paying.
         </p>
       )}
+
+      {/* The customer is billed this amount, so back it with the actual receipt. */}
+      <div className="mt-3 border-t border-black/10 pt-2">
+        <p className="text-xs font-medium">🧾 Photo of the store receipt <span className="text-red-600">*</span></p>
+        {receiptUrl ? (
+          <div className="mt-1 flex items-center gap-3">
+            <a href={receiptUrl} target="_blank" rel="noreferrer">
+              <img src={receiptUrl} alt="Store receipt" className="h-16 w-16 rounded-lg object-cover ring-1 ring-black/10" />
+            </a>
+            <span className="text-sm font-medium text-green-700">✓ Attached</span>
+            <label className="cursor-pointer text-xs text-brand-purple underline">
+              Replace
+              <input type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickReceipt(f); e.target.value = ''; }} />
+            </label>
+          </div>
+        ) : (
+          <label className="mt-1 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-black/25 py-3 text-sm font-medium text-black/60">
+            {uploading ? 'Uploading…' : '📷 Take / upload receipt photo'}
+            <input type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickReceipt(f); e.target.value = ''; }} />
+          </label>
+        )}
+      </div>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+
       <div className="mt-2 flex gap-2">
-        <button onClick={save} disabled={busy || total <= 0}
+        <button onClick={save} disabled={busy || total <= 0 || !receiptUrl || uploading}
           className="flex-1 rounded-lg bg-brand-purple py-2.5 text-sm font-bold text-white disabled:opacity-50">
-          {busy ? 'Saving…' : `Save ${peso(total)} as goods total`}
+          {busy ? 'Saving…' : !receiptUrl ? 'Attach the receipt photo' : `Save ${peso(total)} as goods total`}
         </button>
         {saved != null && (
           <button onClick={() => setOpen(false)}

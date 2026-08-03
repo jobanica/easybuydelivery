@@ -31,7 +31,7 @@ export function createPreviewData(): RiderData {
       payment_method: 'cod', payment_status: 'unpaid', customerName: 'Rico Tan', recipientName: null, recipientContact: null,
       delivery_fee: 55, store_fee_total: 0, convenience_fee: 20, goods_cost: 320, commission_amount: 8.25,
       customer_contact: '0917 777 1010', item_description: null,
-      estimated_amount: null, budget_cap: null, actual_amount: null,
+      estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0200', stores: [{ id: 's2', name: 'Kowloon House', contact: '0918 555 0200', lat: 14.18, lng: 121.246 }],
       items: [{ store_id: 's2', name: 'Chicken Mami', qty: 2, unitPrice: 115, notes: null }, { store_id: 's2', name: 'Siopao', qty: 2, unitPrice: 45, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.192, deliveryLng: 121.258, notes: null,
@@ -44,7 +44,7 @@ export function createPreviewData(): RiderData {
       payment_method: 'cod', payment_status: 'unpaid', customerName: 'Maria Santos', recipientName: 'Lola Nena', recipientContact: '0917 999 8888',
       delivery_fee: 50, store_fee_total: 0, convenience_fee: 0, goods_cost: 280, commission_amount: 7.5,
       customer_contact: '0917 111 2222', item_description: null,
-      estimated_amount: null, budget_cap: null, actual_amount: null,
+      estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
       items: [{ store_id: 's1', name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { store_id: 's1', name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { store_id: 's1', name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
@@ -57,7 +57,7 @@ export function createPreviewData(): RiderData {
       delivery_fee: 60, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
-      budget_cap: 600, actual_amount: null, store_contact: null, stores: [],
+      budget_cap: 600, actual_amount: null, goodsReceiptUrl: null, store_contact: null, stores: [],
       items: [{ store_id: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { store_id: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
@@ -68,7 +68,7 @@ export function createPreviewData(): RiderData {
       payment_method: 'online', payment_status: 'paid', customerName: 'Ana Reyes', recipientName: null, recipientContact: null,
       delivery_fee: 40, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 6,
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
-      estimated_amount: null, budget_cap: null, actual_amount: null,
+      estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: null, stores: [],
       items: [{ store_id: null, name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
@@ -80,7 +80,7 @@ export function createPreviewData(): RiderData {
       payment_method: 'rider_qr', payment_status: 'unpaid', customerName: 'Josie Lim', recipientName: null, recipientContact: null,
       delivery_fee: 50, store_fee_total: 0, convenience_fee: 15, goods_cost: 245, commission_amount: 7.5,
       customer_contact: '0917 444 3030', item_description: null,
-      estimated_amount: null, budget_cap: null, actual_amount: null,
+      estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
       items: [{ store_id: 's1', name: 'Pork Sisig', qty: 1, unitPrice: 165, notes: null }, { store_id: 's1', name: 'Rice', qty: 4, unitPrice: 20, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
@@ -134,15 +134,21 @@ export function createPreviewData(): RiderData {
         active = active.map((x) => (x.id === order.id ? { ...x, status: next } : x));
       }
     },
-    async setActual(order, amount) {
+    async setActual(order, amount, receiptUrl) {
       active = active.map((x) =>
-        x.id === order.id ? { ...x, actual_amount: amount, goods_cost: amount } : x);
+        x.id === order.id
+          ? { ...x, actual_amount: amount, goods_cost: amount, goodsReceiptUrl: receiptUrl ?? x.goodsReceiptUrl }
+          : x);
       return {
         overCap: needsOverBudgetConfirmation(amount, {
           estimate: order.estimated_amount ?? 0,
           cap: order.budget_cap ?? amount,
         }),
       };
+    },
+    async uploadGoodsReceipt(_orderId, file) {
+      // Preview has no storage — show the picked file straight from memory.
+      return URL.createObjectURL(file);
     },
     async settle(businessDay) {
       // Preview: clear everything up to and including the paid day.

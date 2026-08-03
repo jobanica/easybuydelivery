@@ -90,6 +90,31 @@ export function PayRider({ orderId }: { orderId: string }) {
       ) : (
         <>
           <p className="text-sm">Send <b>{peso(info.amount)}</b> via GCash/Maya to:</p>
+          <div className="mt-1 space-y-0.5 rounded-lg bg-black/[0.03] px-3 py-2 text-xs text-black/60">
+            {info.goods_amount > 0 && (
+              <div className="flex justify-between">
+                <span>Goods {info.goods_is_final ? '(receipt)' : '(estimate)'}</span>
+                <span>{peso(info.goods_amount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between"><span>Delivery fee</span><span>{peso(info.delivery_fee)}</span></div>
+            {info.store_fee_total > 0 && (
+              <div className="flex justify-between"><span>Store fee</span><span>{peso(info.store_fee_total)}</span></div>
+            )}
+            {info.convenience_fee > 0 && (
+              <div className="flex justify-between"><span>Convenience fee</span><span>{peso(info.convenience_fee)}</span></div>
+            )}
+            {info.goods_receipt_url && (
+              <a href={info.goods_receipt_url} target="_blank" rel="noreferrer"
+                className="block pt-1 font-medium text-brand-purple underline">🧾 View the store receipt</a>
+            )}
+            {!info.goods_is_final && (
+              <p className="pt-1 text-[11px] text-black/45">
+                The goods amount is still your estimate — it updates to the real receipt total
+                once your rider has bought your items.
+              </p>
+            )}
+          </div>
           <div className="mt-1 rounded-lg bg-brand-purple/[0.06] px-3 py-2">
             <p className="text-sm font-bold text-brand-ink">{payNumber}</p>
             <p className="text-xs text-black/55">{payName}</p>
