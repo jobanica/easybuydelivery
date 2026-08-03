@@ -72,22 +72,61 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
   );
 }
 
+/**
+ * Branded entry layout — the first screen a customer sees. A deep-green hero
+ * carries the brand and the value proposition; the form sits in a white card
+ * that overlaps it, with the service line-up and trust points underneath.
+ */
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f6f7f4]">
-      <header className="bg-brand-green text-white">
-        <div className="mx-auto flex max-w-sm items-center gap-3 px-5 py-4">
-          <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white/20">
-            <img src="/icons/pwa-512x512.png" alt="" className="h-8 w-8 object-contain" />
+    <div className="flex min-h-screen flex-col bg-[#f4f6f3]">
+      {/* Hero */}
+      <header className="relative overflow-hidden bg-brand-green pb-20 pt-10 text-white">
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(120% 90% at 50% -10%, #86d33e 0%, #6DBE22 45%, #4d9417 100%)' }} />
+        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -left-20 top-24 h-48 w-48 rounded-full bg-black/5" />
+
+        <div className="relative mx-auto w-full max-w-md px-6 text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/95 p-2 shadow-lg ring-4 ring-white/20">
+            <img src="/icons/pwa-512x512.png" alt="Easy Buy Delivery" className="h-full w-full object-contain" />
           </span>
-          <div className="leading-tight">
-            <h1 className="text-lg font-extrabold">Easy Buy Delivery</h1>
-            <p className="text-xs opacity-90">{title}</p>
+          <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight">Easy Buy Delivery</h1>
+          <p className="mt-1.5 text-sm text-white/85">
+            Food, errands and parcels — delivered across your town by one trusted rider.
+          </p>
+          <div className="mt-4 flex justify-center gap-2 text-[11px] font-semibold">
+            {['🍽️ Food', '🛒 Pabili', '📦 Padala'].map((s) => (
+              <span key={s} className="rounded-full bg-white/15 px-3 py-1 ring-1 ring-white/25">{s}</span>
+            ))}
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-sm px-5 py-8">
-        <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">{children}</div>
+
+      {/* Form card, overlapping the hero */}
+      <main className="relative z-10 mx-auto -mt-14 w-full max-w-md flex-1 px-5 pb-10">
+        <div className="rounded-3xl bg-white p-6 shadow-xl ring-1 ring-black/5">
+          <h2 className="mb-4 text-lg font-extrabold text-brand-ink">{title}</h2>
+          {children}
+        </div>
+
+        {/* Trust points */}
+        <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+          {[
+            { icon: '📍', label: 'Live tracking' },
+            { icon: '💸', label: 'Cash or GCash' },
+            { icon: '⚡', label: 'Fast local riders' },
+          ].map((f) => (
+            <div key={f.label} className="rounded-2xl bg-white/70 px-2 py-3 ring-1 ring-black/5">
+              <div className="text-lg">{f.icon}</div>
+              <p className="mt-1 text-[11px] font-semibold leading-tight text-black/60">{f.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-6 text-center text-[11px] text-black/35">
+          © {new Date().getFullYear()} Easy Buy Delivery
+        </p>
       </main>
     </div>
   );
