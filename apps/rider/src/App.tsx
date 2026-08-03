@@ -453,6 +453,76 @@ function amountToCollect(o: RiderOrder): number | null {
   return fullCollectible(o);
 }
 
+/**
+ * GCash-to-rider payment proof.
+ *
+ * The customer can upload their receipt in the app, but plenty just hold up
+ * their phone at the door — so the rider can record the payment either way.
+ * Confirming is never a precondition for completing the delivery.
+ */
+function PaymentProof({ order, data, onChange }:
+  { order: RiderOrder; data: RiderData; onChange: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const paid = order.payment_status === 'paid';
+  const uploaded = Boolean(order.paymentReceiptUrl);
+  const amount = fullCollectible(order);
+
+  async function confirm() {
+    setBusy(true); setErr(null);
+    try {
+      await data.confirmPayment(order.id, uploaded ? 'Receipt uploaded in app' : 'Receipt shown in person');
+      await onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={`mt-3 rounded-xl p-3 ring-1 ${paid ? 'bg-green-50 ring-green-200' : 'bg-brand-purple/[0.06] ring-brand-purple/20'}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-black/45">Customer payment</p>
+        {amount != null && <span className="text-sm font-bold">{peso(amount)}</span>}
+      </div>
+
+      {uploaded ? (
+        <a href={order.paymentReceiptUrl!} target="_blank" rel="noreferrer"
+          className="mt-2 flex items-center gap-3 rounded-lg bg-white p-2 ring-1 ring-black/5">
+          <img src={order.paymentReceiptUrl!} alt="Payment receipt"
+            className="h-16 w-16 shrink-0 rounded-md object-cover" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-brand-ink">Receipt uploaded 📎</p>
+            {order.paymentReference && (
+              <p className="truncate text-xs text-black/50">Ref: {order.paymentReference}</p>
+            )}
+            <p className="text-[11px] text-brand-purple">Tap to view full size</p>
+          </div>
+        </a>
+      ) : (
+        <p className="mt-1.5 text-xs text-black/55">
+          No receipt uploaded yet. If the customer shows you the GCash receipt on their
+          phone, confirm it here.
+        </p>
+      )}
+
+      {paid ? (
+        <p className="mt-2 text-xs font-semibold text-green-700">
+          ✓ Payment confirmed
+          {order.paymentConfirmedAt ? ` · ${new Date(order.paymentConfirmedAt).toLocaleString()}` : ''}
+        </p>
+      ) : (
+        <button onClick={confirm} disabled={busy}
+          className="mt-2 w-full rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white disabled:opacity-50">
+          {busy ? 'Saving…' : uploaded ? '✓ Receipt checks out — mark paid' : '✓ Customer showed receipt — mark paid'}
+        </button>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [note, setNote] = useState<string | null>(null);
@@ -631,11 +701,18 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
           </div>
         )}
 
+        {/* GCash-to-rider: check the receipt (uploaded or shown in person). */}
+        {isRiderQr && order.status !== 'cancelled' && (
+          <PaymentProof order={order} data={data} onChange={onChange} />
+        )}
+
         {/* Collect + advance */}
         <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
           <span className="text-sm">
             {order.payment_status === 'paid'
-              ? <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
+              ? isRiderQr
+                ? <span className="text-green-700">✓ Paid by GCash to you — no cash to collect</span>
+                : <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
               : isRiderQr
                 ? <span className="text-brand-purple">GCash to rider{qrAmount != null ? ` · ${peso(qrAmount)}` : ''} — no cash to collect</span>
                 : collect == null

@@ -9,6 +9,16 @@ function isoDay(offsetDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Stand-in for a customer-uploaded GCash receipt (preview has no storage). */
+const RECEIPT_PLACEHOLDER =
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">'
+    + '<rect width="120" height="120" fill="#f1eaff"/>'
+    + '<text x="60" y="52" font-family="sans-serif" font-size="13" fill="#5b3fa8" text-anchor="middle">GCash</text>'
+    + '<text x="60" y="74" font-family="sans-serif" font-size="11" fill="#5b3fa8" text-anchor="middle">receipt</text>'
+    + '</svg>',
+  );
+
 /**
  * In-memory rider data for preview mode (no Supabase). Seeds an unsettled
  * previous-day balance so the settlement lock screen is demonstrable, plus a
@@ -25,6 +35,7 @@ export function createPreviewData(): RiderData {
       store_contact: '0918 555 0200', stores: [{ id: 's2', name: 'Kowloon House', contact: '0918 555 0200', lat: 14.18, lng: 121.246 }],
       items: [{ store_id: 's2', name: 'Chicken Mami', qty: 2, unitPrice: 115, notes: null }, { store_id: 's2', name: 'Siopao', qty: 2, unitPrice: 45, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.192, deliveryLng: 121.258, notes: null,
+      paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: true, transferReason: 'Flat tire', transferHadGoods: true,
       transferredFromName: 'Ben Cruz', transferredFromContact: '0918 555 2000',
     },
@@ -37,6 +48,7 @@ export function createPreviewData(): RiderData {
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
       items: [{ store_id: 's1', name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { store_id: 's1', name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { store_id: 's1', name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
+      paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
     {
@@ -48,6 +60,7 @@ export function createPreviewData(): RiderData {
       budget_cap: 600, actual_amount: null, store_contact: null, stores: [],
       items: [{ store_id: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { store_id: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
+      paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
     {
@@ -59,6 +72,19 @@ export function createPreviewData(): RiderData {
       store_contact: null, stores: [],
       items: [{ store_id: null, name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
+      paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
+      isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
+    },
+    {
+      id: 'ord-gcash-1', service_type: 'food', status: 'pending',
+      payment_method: 'rider_qr', payment_status: 'unpaid', customerName: 'Josie Lim', recipientName: null, recipientContact: null,
+      delivery_fee: 50, store_fee_total: 0, convenience_fee: 15, goods_cost: 245, commission_amount: 7.5,
+      customer_contact: '0917 444 3030', item_description: null,
+      estimated_amount: null, budget_cap: null, actual_amount: null,
+      store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
+      items: [{ store_id: 's1', name: 'Pork Sisig', qty: 1, unitPrice: 165, notes: null }, { store_id: 's1', name: 'Rice', qty: 4, unitPrice: 20, notes: null }],
+      pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
+      paymentReceiptUrl: RECEIPT_PLACEHOLDER, paymentReference: '9012 3456 7890', paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
   ];
@@ -81,6 +107,11 @@ export function createPreviewData(): RiderData {
       if (!o) return;
       open = open.filter((x) => x.id !== orderId);
       active = [...active, { ...o, status: 'accepted' }];
+    },
+    async confirmPayment(orderId) {
+      active = active.map((o) => o.id === orderId
+        ? { ...o, payment_status: 'paid' as const, paymentConfirmedAt: new Date().toISOString() }
+        : o);
     },
     async releaseOrder(orderId) {
       const o = active.find((x) => x.id === orderId);

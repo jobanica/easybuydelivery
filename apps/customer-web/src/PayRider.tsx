@@ -23,11 +23,14 @@ export function PayRider({ orderId }: { orderId: string }) {
   useEffect(() => {
     if (!supabase) return;
     let cancelled = false;
-    (async () => {
+    async function load() {
       try {
         const d = await getOrderPayToRider(supabase!, orderId);
         if (cancelled) return;
         setInfo(d);
+        // Proof already on file — show it instead of an empty upload box.
+        if (d?.payment_receipt_url) setReceiptUrl(d.payment_receipt_url);
+        if (d?.payment_reference) setReference((r) => r || d.payment_reference!);
         // Fall back to the operator's GCash when the rider has none on file.
         if (d && !d.payout_number) {
           const s = await getAppSettings(supabase!).catch(() => null);
@@ -35,8 +38,11 @@ export function PayRider({ orderId }: { orderId: string }) {
         }
       } catch { /* ignore */ }
       finally { if (!cancelled) setLoading(false); }
-    })();
-    return () => { cancelled = true; };
+    }
+    void load();
+    // Poll so the rider's confirmation shows up without a manual reload.
+    const t = window.setInterval(() => { void load(); }, 20_000);
+    return () => { cancelled = true; window.clearInterval(t); };
   }, [orderId]);
 
   const payNumber = info?.payout_number || operator.number || null;
@@ -65,6 +71,22 @@ export function PayRider({ orderId }: { orderId: string }) {
         <p className="py-2 text-sm text-black/55">Waiting for a rider to accept — payment details will appear here.</p>
       ) : !payNumber ? (
         <p className="py-2 text-sm text-black/55">Your rider ({info.rider_name}) hasn't set a GCash/Maya number yet. Please message them, or contact the operator.</p>
+      ) : info.payment_status === 'paid' ? (
+        <div className="rounded-lg bg-green-50 p-3 ring-1 ring-green-200">
+          <p className="text-sm font-bold text-green-800">✓ Payment confirmed by your rider</p>
+          <p className="mt-0.5 text-xs text-green-800/80">
+            {info.rider_name ?? 'Your rider'} received {peso(info.amount)}
+            {info.payment_confirmed_at ? ` · ${new Date(info.payment_confirmed_at).toLocaleString()}` : ''}.
+            Nothing to pay on delivery.
+          </p>
+          {info.payment_reference && (
+            <p className="mt-1 text-xs text-black/50">Ref: {info.payment_reference}</p>
+          )}
+          {info.payment_receipt_url && (
+            <a href={info.payment_receipt_url} target="_blank" rel="noreferrer"
+              className="mt-2 inline-block text-xs font-medium text-brand-purple underline">View your receipt</a>
+          )}
+        </div>
       ) : (
         <>
           <p className="text-sm">Send <b>{peso(info.amount)}</b> via GCash/Maya to:</p>
@@ -114,7 +136,10 @@ export function PayRider({ orderId }: { orderId: string }) {
             </label>
           )}
           {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-          <p className="mt-2 text-[11px] text-black/45">The rider/operator confirms your payment. The recipient pays nothing on delivery.</p>
+          <p className="mt-2 text-[11px] text-black/45">
+            Your rider checks the receipt and confirms it here — you can also just show it to
+            them on your phone. The recipient pays nothing on delivery.
+          </p>
         </>
       )}
     </div>

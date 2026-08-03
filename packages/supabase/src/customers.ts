@@ -113,6 +113,12 @@ export interface OrderPayToRider {
   rider_name: string | null;
   payout_number: string | null;
   amount: number;
+  /** Flips to 'paid' once the rider confirms the GCash transfer arrived. */
+  payment_status: 'unpaid' | 'paid';
+  /** Proof already on file, so a reload doesn't look like nothing was sent. */
+  payment_receipt_url: string | null;
+  payment_reference: string | null;
+  payment_confirmed_at: string | null;
 }
 
 /**
@@ -124,7 +130,15 @@ export async function getOrderPayToRider(db: SupabaseClient, orderId: string): P
   const { data, error } = await db.rpc('order_pay_to_rider', { p_order_id: orderId });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  return row ? { rider_name: row.rider_name ?? null, payout_number: row.payout_number ?? null, amount: Number(row.amount ?? 0) } : null;
+  return row ? {
+    rider_name: row.rider_name ?? null,
+    payout_number: row.payout_number ?? null,
+    amount: Number(row.amount ?? 0),
+    payment_status: row.payment_status === 'paid' ? 'paid' : 'unpaid',
+    payment_receipt_url: row.payment_receipt_url ?? null,
+    payment_reference: row.payment_reference ?? null,
+    payment_confirmed_at: row.payment_confirmed_at ?? null,
+  } : null;
 }
 
 /** Upload the sender's proof of payment for an order and record it on the order. */

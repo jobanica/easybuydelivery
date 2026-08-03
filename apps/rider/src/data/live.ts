@@ -8,6 +8,7 @@ import {
   advanceOrderStatus,
   updatePabiliActualAmount,
   createSettlement,
+  riderConfirmPayment,
   getRiderOnline,
   setRiderOnline,
   type SupabaseClient,
@@ -48,6 +49,9 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     deliveryLat: row.delivery_lat == null ? null : Number(row.delivery_lat),
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),
     notes: (row.notes as string) ?? null,
+    paymentReceiptUrl: (row.payment_receipt_url as string) ?? null,
+    paymentReference: (row.payment_reference as string) ?? null,
+    paymentConfirmedAt: (row.payment_confirmed_at as string) ?? null,
     isTransfer: Boolean(row.is_transfer),
     transferReason: (row.transfer_reason as string) ?? null,
     transferHadGoods: Boolean(row.transfer_had_goods),
@@ -87,6 +91,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async releaseOrder(orderId, reason) {
       await releaseOrder(db, orderId, reason);
+    },
+    async confirmPayment(orderId, note) {
+      await riderConfirmPayment(db, orderId, note);
     },
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);

@@ -108,3 +108,16 @@ export async function createSettlement(db: SupabaseClient, input: SettlementRowI
   if (error) throw new Error(error.message ?? 'Could not submit settlement');
   return data as string;
 }
+
+/**
+ * The assigned rider records that a GCash-to-rider payment arrived — either
+ * from the receipt the customer uploaded in the app, or one shown in person.
+ */
+export async function riderConfirmPayment(
+  db: SupabaseClient, orderId: string, note?: string,
+): Promise<void> {
+  const { error } = await db.rpc('rider_confirm_payment', {
+    p_order_id: orderId, p_note: note ?? null,
+  });
+  if (error) throw error;
+}

@@ -32,6 +32,10 @@ export interface RiderOrder {
   deliveryLat: number | null;
   deliveryLng: number | null;
   notes: string | null;
+  /** Proof of a GCash-to-rider payment (uploaded by the customer, if any). */
+  paymentReceiptUrl: string | null;
+  paymentReference: string | null;
+  paymentConfirmedAt: string | null;
   /** Released by another rider — prioritised in the pool. */
   isTransfer: boolean;
   transferReason: string | null;
@@ -51,6 +55,7 @@ export interface RiderData {
   getLedger(): Promise<LedgerEntry[]>;
   accept(orderId: string): Promise<void>;
   releaseOrder(orderId: string, reason?: string): Promise<void>;
+  confirmPayment(orderId: string, note?: string): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number): Promise<{ overCap: boolean }>;
   settle(businessDay: string, amount: number, extra?: { reference?: string; receiptUrl?: string }): Promise<void>;
