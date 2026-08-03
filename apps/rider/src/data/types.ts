@@ -1,5 +1,7 @@
 import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod } from '@ebd/shared';
-import type { OrderItemStatus } from '@ebd/supabase';
+import type { OrderItemStatus, OrderAddon } from '@ebd/supabase';
+
+export type { OrderAddon };
 
 /** The order shape the rider UI works with (subset of the orders row). */
 export interface RiderOrder {
@@ -63,6 +65,10 @@ export interface RiderData {
   markSoldOut(itemId: string): Promise<void>;
   /** Offer something else instead — stays off the bill until the customer agrees. */
   proposeReplacement(itemId: string, name: string, qty: number, unitPrice: number): Promise<void>;
+  /** Extra-stop requests the customer has made on this order. */
+  getAddons(orderId: string): Promise<OrderAddon[]>;
+  /** Take on (or turn down) an extra stop. Accepting bills it and adds commission. */
+  respondToAddon(addonId: string, accept: boolean): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number, receiptUrl?: string): Promise<{ overCap: boolean }>;
   /** Upload the store receipt photo backing a pabili total; returns its URL. */

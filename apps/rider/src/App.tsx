@@ -16,6 +16,7 @@ import {
   getAppSettings, uploadSettlementReceipt, type AppSettings,
 } from '@ebd/supabase';
 import { makeRiderData, type RiderData, type RiderOrder } from './data/index.ts';
+import type { OrderAddon } from './data/types.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
@@ -608,6 +609,67 @@ function PaymentProof({ order, data, onChange }:
   );
 }
 
+/**
+ * The customer wants an extra stop mid-run. It's the rider's trip, so it's the
+ * rider's call — accepting bills another store fee and lifts the spending cap,
+ * which also raises the commission on the order.
+ */
+function AddonRequests({ order, data, onChange }:
+  { order: RiderOrder; data: RiderData; onChange: () => Promise<void> }) {
+  const [addons, setAddons] = useState<OrderAddon[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try { setAddons(await data.getAddons(order.id)); } catch { /* ignore */ }
+  }, [data, order.id]);
+
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => { void load(); }, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const pending = addons.filter((a) => a.status === 'pending');
+  if (pending.length === 0) return null;
+
+  async function respond(id: string, accept: boolean) {
+    setBusy(id); setErr(null);
+    try { await data.respondToAddon(id, accept); await load(); await onChange(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <>
+      {pending.map((a) => (
+        <div key={a.id} className="mt-3 rounded-xl bg-brand-yellow/20 p-3 ring-1 ring-brand-yellow/50">
+          <p className="text-sm font-bold text-brand-ink">➕ Customer wants another stop</p>
+          <p className="mt-1 text-sm">{a.description}</p>
+          <p className="text-[11px] text-black/50">
+            {a.store_name ? `At ${a.store_name}` : 'No store given'}
+            {a.est_amount > 0 ? ` · about ${peso(a.est_amount)} of goods` : ''}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button onClick={() => void respond(a.id, true)} disabled={busy === a.id}
+              className="flex-1 rounded-lg bg-brand-green py-2 text-sm font-bold text-white disabled:opacity-50">
+              {busy === a.id ? '…' : 'Accept the stop'}
+            </button>
+            <button onClick={() => void respond(a.id, false)} disabled={busy === a.id}
+              className="flex-1 rounded-lg border border-black/15 py-2 text-sm font-medium text-black/60 disabled:opacity-50">
+              Can’t do it
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-black/50">
+            Accepting adds a store fee to the order — you earn on it, minus commission.
+          </p>
+          {err && <p className="mt-1 text-[11px] text-red-600">{err}</p>}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [note, setNote] = useState<string | null>(null);
@@ -768,7 +830,10 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         )}
 
         {order.service_type === 'pabili' && order.status !== 'delivered' && (
-          <PabiliCalculator order={order} data={data} onChange={onChange} onNote={setNote} />
+          <>
+            <AddonRequests order={order} data={data} onChange={onChange} />
+            <PabiliCalculator order={order} data={data} onChange={onChange} onNote={setNote} />
+          </>
         )}
         {note && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">⚠️ {note}</p>}
 

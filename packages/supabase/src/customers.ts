@@ -111,6 +111,69 @@ export async function cancelEmptyOrder(db: SupabaseClient, orderId: string): Pro
   return data === true;
 }
 
+export interface OrderAddon {
+  id: string;
+  order_id: string;
+  description: string;
+  store_name: string | null;
+  est_amount: number;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  store_fee: number;
+  created_at: string;
+}
+
+/** Add-on requests on an order, newest first (visible to its customer and rider). */
+export async function listOrderAddons(db: SupabaseClient, orderId: string): Promise<OrderAddon[]> {
+  const { data, error } = await db
+    .from('order_addons')
+    .select('id, order_id, description, store_name, est_amount, status, store_fee, created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const o = r as Record<string, unknown>;
+    return {
+      id: o.id as string,
+      order_id: o.order_id as string,
+      description: o.description as string,
+      store_name: (o.store_name as string) ?? null,
+      est_amount: Number(o.est_amount ?? 0),
+      status: (o.status as OrderAddon['status']) ?? 'pending',
+      store_fee: Number(o.store_fee ?? 0),
+      created_at: o.created_at as string,
+    };
+  });
+}
+
+/** Customer asks their rider for an extra stop on an order already under way. */
+export async function requestOrderAddon(
+  db: SupabaseClient, orderId: string,
+  input: { description: string; storeName?: string; lat?: number; lng?: number; estimate?: number },
+): Promise<string> {
+  const { data, error } = await db.rpc('customer_request_addon', {
+    p_order_id: orderId,
+    p_description: input.description,
+    p_store_name: input.storeName ?? null,
+    p_lat: input.lat ?? null,
+    p_lng: input.lng ?? null,
+    p_est: input.estimate ?? 0,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Rider accepts or declines the extra stop. Accepting bills it and recomputes commission. */
+export async function respondToAddon(db: SupabaseClient, addonId: string, accept: boolean): Promise<void> {
+  const { error } = await db.rpc('rider_respond_addon', { p_addon_id: addonId, p_accept: accept });
+  if (error) throw error;
+}
+
+/** Customer withdraws a request the rider hasn't answered yet. */
+export async function cancelOrderAddon(db: SupabaseClient, addonId: string): Promise<void> {
+  const { error } = await db.rpc('customer_cancel_addon', { p_addon_id: addonId });
+  if (error) throw error;
+}
+
 export interface ActiveDelivery {
   id: string;
   status: string;

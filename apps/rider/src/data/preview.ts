@@ -135,6 +135,8 @@ export function createPreviewData(): RiderData {
           }
         : o)).map(rebill);
     },
+    async getAddons() { return []; },
+    async respondToAddon() { /* preview: nothing to persist */ },
     async confirmPayment(orderId) {
       active = active.map((o) => o.id === orderId
         ? { ...o, payment_status: 'paid' as const, paymentConfirmedAt: new Date().toISOString() }

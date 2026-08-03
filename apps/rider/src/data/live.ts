@@ -12,6 +12,8 @@ import {
   riderConfirmPayment,
   riderMarkItemSoldOut,
   riderProposeReplacement,
+  listOrderAddons,
+  respondToAddon as respondToAddonRpc,
   getRiderOnline,
   setRiderOnline,
   type SupabaseClient,
@@ -109,6 +111,12 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async proposeReplacement(itemId, name, qty, unitPrice) {
       await riderProposeReplacement(db, itemId, name, qty, unitPrice);
+    },
+    async getAddons(orderId) {
+      return listOrderAddons(db, orderId);
+    },
+    async respondToAddon(addonId, accept) {
+      await respondToAddonRpc(db, addonId, accept);
     },
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);

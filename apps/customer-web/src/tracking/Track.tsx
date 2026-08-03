@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getActiveDelivery, getOrderRiderInfo, respondToItemChange, cancelEmptyOrder,
-  orderGoodsAmount, orderGoodsIsFinal,
-  type ActiveDelivery, type OrderRiderInfo } from '@ebd/supabase';
+  orderGoodsAmount, orderGoodsIsFinal, listOrderAddons, requestOrderAddon, cancelOrderAddon,
+  getAppSettings,
+  type ActiveDelivery, type OrderRiderInfo, type OrderAddon } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
@@ -139,6 +140,116 @@ function PayOnDelivery({ delivery }: { delivery: ActiveDelivery }) {
   );
 }
 
+/**
+ * "Can you also grab something from the other store?" — asked properly.
+ *
+ * The rider has to agree (it's their extra trip), and accepting bills one more
+ * store fee, so the operator earns commission on the added work instead of it
+ * happening off the books in the chat.
+ */
+function AddonPanel({ delivery, storeFee }: { delivery: ActiveDelivery; storeFee: number }) {
+  const [addons, setAddons] = useState<OrderAddon[]>([]);
+  const [open, setOpen] = useState(false);
+  const [desc, setDesc] = useState('');
+  const [store, setStore] = useState('');
+  const [est, setEst] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!supabase) return;
+    try { setAddons(await listOrderAddons(supabase, delivery.id)); } catch { /* ignore */ }
+  }, [delivery.id]);
+
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => { void load(); }, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const pending = addons.find((a) => a.status === 'pending');
+  const accepted = addons.filter((a) => a.status === 'accepted');
+
+  async function submit() {
+    if (!supabase || !desc.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      await requestOrderAddon(supabase, delivery.id, {
+        description: desc.trim(),
+        storeName: store.trim() || undefined,
+        estimate: Number(est) > 0 ? Number(est) : 0,
+      });
+      setDesc(''); setStore(''); setEst(''); setOpen(false);
+      await load();
+    } catch (e) { setErr(errMessage(e)); }
+    finally { setBusy(false); }
+  }
+  async function withdraw(id: string) {
+    if (!supabase) return;
+    setBusy(true); setErr(null);
+    try { await cancelOrderAddon(supabase, id); await load(); }
+    catch (e) { setErr(errMessage(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <h3 className="mb-2 font-bold">➕ Need something else?</h3>
+
+      {accepted.map((a) => (
+        <div key={a.id} className="mb-2 rounded-lg bg-green-50 px-3 py-2 ring-1 ring-green-200">
+          <p className="text-sm font-medium text-green-800">✅ {a.description}</p>
+          <p className="text-[11px] text-green-800/70">
+            {a.store_name ? `${a.store_name} · ` : ''}added to your order
+            {a.store_fee > 0 ? ` · +${peso(a.store_fee)} stop fee` : ''}
+          </p>
+        </div>
+      ))}
+
+      {pending ? (
+        <div className="rounded-lg bg-brand-yellow/20 p-3 ring-1 ring-brand-yellow/50">
+          <p className="text-sm font-medium text-brand-ink">⏳ Waiting for your rider to confirm</p>
+          <p className="mt-0.5 text-sm">{pending.description}</p>
+          {pending.store_name && <p className="text-[11px] text-black/50">at {pending.store_name}</p>}
+          <button onClick={() => void withdraw(pending.id)} disabled={busy}
+            className="mt-2 rounded-lg border border-black/15 px-3 py-1.5 text-xs font-medium text-black/60 disabled:opacity-50">
+            Withdraw request
+          </button>
+        </div>
+      ) : open ? (
+        <div className="space-y-2">
+          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2}
+            placeholder="e.g. 1kg sugar and a loaf of bread"
+            className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-brand-green" />
+          <div className="flex gap-2">
+            <input value={store} onChange={(e) => setStore(e.target.value)} placeholder="Which store? (optional)"
+              className="min-w-0 flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm" />
+            <input type="number" inputMode="decimal" min={0} value={est} onChange={(e) => setEst(e.target.value)}
+              placeholder="Est. ₱" className="w-24 shrink-0 rounded-lg border border-black/10 px-3 py-2 text-sm" />
+          </div>
+          <p className="text-[11px] text-black/50">
+            An extra stop adds a {peso(storeFee)} fee on top of the goods. Your rider has to accept it first.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => void submit()} disabled={busy || !desc.trim()}
+              className="flex-1 rounded-lg bg-brand-green py-2 text-sm font-bold text-white disabled:opacity-50">
+              {busy ? 'Sending…' : 'Ask my rider'}
+            </button>
+            <button onClick={() => { setOpen(false); setErr(null); }}
+              className="rounded-lg border border-black/15 px-3 text-sm font-medium text-black/60">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setOpen(true)}
+          className="w-full rounded-lg border border-dashed border-brand-purple/40 py-2.5 text-sm font-semibold text-brand-purple">
+          Ask your rider to buy from another store
+        </button>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 // Demo route for preview mode (no backend).
 const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
 const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
@@ -153,6 +264,12 @@ export function Track({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<'loading' | 'none' | 'ok' | 'nocoords'>('loading');
   const [delivery, setDelivery] = useState<ActiveDelivery | null>(null);
   const [riderInfo, setRiderInfo] = useState<OrderRiderInfo | null>(null);
+  const [storeFee, setStoreFee] = useState(0);
+
+  useEffect(() => {
+    if (!supabase) return;
+    getAppSettings(supabase).then((s) => setStoreFee(Number(s.per_store_fee ?? 0))).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     if (!live || !supabase || !customerId) return;
@@ -185,6 +302,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         <OrderItemsCard delivery={delivery} onChange={() => void load()} />
         {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
         {delivery.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}
+        {delivery.service_type === 'pabili' && <AddonPanel delivery={delivery} storeFee={storeFee} />}
       </div>
     );
   }
@@ -212,6 +330,7 @@ export function Track({ onClose }: { onClose: () => void }) {
       {delivery && <OrderItemsCard delivery={delivery} onChange={() => void load()} />}
       {delivery?.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
       {delivery?.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}
+      {delivery?.service_type === 'pabili' && <AddonPanel delivery={delivery} storeFee={storeFee} />}
     </div>
   );
 }
