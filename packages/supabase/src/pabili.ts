@@ -15,14 +15,30 @@ import {
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export interface PabiliItemInput {
+  qty: number;
+  name: string;
+  notes?: string;
+}
+
+/** Render a shopping list as the one-line summary older screens still show. */
+export function pabiliItemsSummary(items: PabiliItemInput[]): string {
+  return items
+    .filter((i) => i.name.trim() !== '')
+    .map((i) => `${Math.max(1, Math.round(i.qty || 1))}x ${i.name.trim()}`)
+    .join(', ');
+}
+
 export interface PabiliRequestInput {
   customerId: string;
   customerContact: string;
   deliveryFee: number;
   /** Operator-set convenience fee (from app settings; not customer-editable). */
   convenienceFee?: number;
-  /** Free-text list of what to buy. */
+  /** Free-text list of what to buy (kept as the human-readable summary). */
   itemsDescription: string;
+  /** Structured shopping list — one row per item, so the rider can tick them off. */
+  items?: PabiliItemInput[];
   estimate: number;
   cap: number;
   /** Where to buy (specific store or "any nearest"). */
@@ -110,7 +126,27 @@ export async function createPabiliOrder(
   const row = buildPabiliOrderRow(input);
   const { data, error } = await db.from('orders').insert(row).select('id').single();
   if (error) throw error;
-  return (data as { id: string }).id;
+  const id = (data as { id: string }).id;
+
+  // Store the list as real line items so the rider gets a tickable list rather
+  // than a paragraph. Prices are unknown until the receipt, hence unit_price 0.
+  const items = (input.items ?? []).filter((i) => i.name.trim() !== '');
+  if (items.length > 0) {
+    const { error: itemsError } = await db.from('order_items').insert(
+      items.map((i) => ({
+        order_id: id,
+        store_id: null,
+        name: i.name.trim(),
+        qty: Math.max(1, Math.round(i.qty || 1)),
+        unit_price: 0,
+        notes: i.notes?.trim() || null,
+      })),
+    );
+    // The order itself is placed; a failed item insert shouldn't lose it. The
+    // description still carries the full list.
+    if (itemsError) console.warn('pabili items not saved:', itemsError.message);
+  }
+  return id;
 }
 
 export interface ActualAmountResult {

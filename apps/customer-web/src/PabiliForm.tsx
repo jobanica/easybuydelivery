@@ -3,7 +3,8 @@ import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
   type DeliveryFeeModel, type DistanceFeeConfig,
   errMessage,
 } from '@ebd/shared';
-import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
+import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, pabiliItemsSummary,
+  type PabiliRequestInput, type PabiliItemInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
@@ -12,7 +13,7 @@ import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 interface FormState {
-  itemsDescription: string;
+  items: PabiliItemInput[];
   where: string;
   estimate: number;
   cap: number;
@@ -22,7 +23,7 @@ interface FormState {
 }
 
 const initial: FormState = {
-  itemsDescription: '', where: '', estimate: 300, cap: 400,
+  items: [{ qty: 1, name: '' }], where: '', estimate: 300, cap: 400,
   customerContact: '', notes: '', pay: null,
 };
 
@@ -71,9 +72,22 @@ export function PabiliForm() {
   const estimatedTotal = form.estimate + deliveryFee + convenienceFee;
   const maxTotal = form.cap + deliveryFee + convenienceFee;
   const capValid = form.cap >= form.estimate;
+  const hasItems = form.items.some((i) => i.name.trim() !== '');
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+  function setItem(i: number, patch: Partial<PabiliItemInput>) {
+    setForm((f) => ({ ...f, items: f.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+  }
+  function addItem() {
+    setForm((f) => ({ ...f, items: [...f.items, { qty: 1, name: '' }] }));
+  }
+  function removeItem(i: number) {
+    setForm((f) => ({
+      ...f,
+      items: f.items.length === 1 ? [{ qty: 1, name: '' }] : f.items.filter((_, j) => j !== i),
+    }));
   }
 
   function toInput(customerId: string): PabiliRequestInput {
@@ -82,7 +96,8 @@ export function PabiliForm() {
       customerContact: form.customerContact,
       deliveryFee,
       convenienceFee,
-      itemsDescription: form.itemsDescription,
+      itemsDescription: pabiliItemsSummary(form.items),
+      items: form.items,
       estimate: form.estimate,
       cap: form.cap,
       where: form.where,
@@ -103,6 +118,7 @@ export function PabiliForm() {
     e.preventDefault();
     if (submitting) return; // guard against double taps
     setError(null);
+    if (!hasItems) { setError('Please add at least one item to buy.'); return; }
     if (!form.pay) { setError('Please choose a payment method.'); return; }
     if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
     if (needsPinsForFee) { setError('Please pin where to buy so we can compute the delivery fee.'); return; }
@@ -159,11 +175,32 @@ export function PabiliForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <Field label="What should we buy?">
-        <textarea className={inputCls} rows={3} value={form.itemsDescription}
-          onChange={(e) => set('itemsDescription', e.target.value)}
-          placeholder="e.g. 2x paracetamol, 1L fresh milk, a bouquet" required />
-      </Field>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">What should we buy?</span>
+        <div className="space-y-2">
+          {form.items.map((it, i) => (
+            <div key={i} className="flex gap-2">
+              <input type="number" min={1} value={it.qty} aria-label={`Quantity for item ${i + 1}`}
+                onChange={(e) => setItem(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                className="w-16 shrink-0 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30 text-center" />
+              <input value={it.name} aria-label={`Item ${i + 1}`}
+                onChange={(e) => setItem(i, { name: e.target.value })}
+                placeholder={i === 0 ? 'e.g. paracetamol 500mg' : 'Another item'}
+                className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30" />
+              <button type="button" onClick={() => removeItem(i)} aria-label={`Remove item ${i + 1}`}
+                disabled={form.items.length === 1}
+                className="shrink-0 rounded-lg border border-black/10 px-3 text-sm text-black/40 disabled:opacity-30">✕</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addItem}
+          className="mt-2 w-full rounded-lg border border-dashed border-brand-purple/40 py-2 text-sm font-semibold text-brand-purple">
+          ＋ Add more item
+        </button>
+        <p className="mt-1 text-xs text-black/40">
+          One line per item so your rider can tick them off as they shop.
+        </p>
+      </div>
       <Field label="Where? (optional — leave blank for nearest store)">
         <input className={inputCls} value={form.where}
           onChange={(e) => set('where', e.target.value)} placeholder="e.g. Botica Central" />
@@ -226,9 +263,10 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
+      <button type="submit" disabled={submitting || !hasItems || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
         {submitting ? 'Sending…'
+          : !hasItems ? 'Add what to buy'
           : areaRequired && !area ? 'Choose your delivery area'
           : needsPinsForFee || !dropoff ? 'Pin both locations'
           : !form.pay ? 'Choose a payment method'

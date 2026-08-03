@@ -1436,7 +1436,14 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
 }) {
   const saved = order.actual_amount;
   const [open, setOpen] = useState(saved == null);
-  const [rows, setRows] = useState<{ label: string; amount: string }[]>([{ label: '', amount: '' }]);
+  // Start from the customer's shopping list so the rider just fills in prices
+  // next to each item instead of retyping the whole thing.
+  const [rows, setRows] = useState<{ label: string; amount: string }[]>(() => {
+    const wanted = order.items.filter((i) => i.status !== 'removed' && i.status !== 'replaced');
+    return wanted.length > 0
+      ? wanted.map((i) => ({ label: i.qty > 1 ? `${i.qty}x ${i.name}` : i.name, amount: '' }))
+      : [{ label: '', amount: '' }];
+  });
   const [busy, setBusy] = useState(false);
   // The customer pays this total, so it has to be backed by the store receipt.
   const [receiptUrl, setReceiptUrl] = useState<string | null>(order.goodsReceiptUrl);
