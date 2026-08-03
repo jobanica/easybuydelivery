@@ -62,6 +62,55 @@ export function orderGoodsIsFinal(o: Pick<CustomerOrder, 'service_type' | 'actua
   return o.service_type !== 'pabili' || o.actual_amount != null;
 }
 
+/**
+ * Line-item lifecycle when a store runs out mid-order:
+ *   ok       — on the bill
+ *   sold_out — the rider couldn't get it; off the bill
+ *   proposed — the rider's suggested replacement, awaiting the customer's answer
+ *   replaced — swapped out for an accepted replacement
+ *   removed  — a suggestion the customer declined (or the rider withdrew)
+ */
+export type OrderItemStatus = 'ok' | 'sold_out' | 'proposed' | 'replaced' | 'removed';
+
+export interface OrderItem {
+  id?: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  status?: OrderItemStatus;
+  replacesItemId?: string | null;
+}
+
+/** The rider suggests something else in place of a sold-out item. */
+export async function riderProposeReplacement(
+  db: SupabaseClient, itemId: string, name: string, qty: number, unitPrice: number,
+): Promise<string> {
+  const { data, error } = await db.rpc('rider_propose_replacement', {
+    p_item_id: itemId, p_name: name, p_qty: qty, p_unit_price: unitPrice,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** The rider marks an item unavailable — it comes off the bill immediately. */
+export async function riderMarkItemSoldOut(db: SupabaseClient, itemId: string): Promise<void> {
+  const { error } = await db.rpc('rider_mark_item_sold_out', { p_item_id: itemId });
+  if (error) throw error;
+}
+
+/** The customer accepts or declines a suggested replacement. */
+export async function respondToItemChange(db: SupabaseClient, itemId: string, accept: boolean): Promise<void> {
+  const { error } = await db.rpc('customer_respond_item_change', { p_item_id: itemId, p_accept: accept });
+  if (error) throw error;
+}
+
+/** Cancel an order whose items have all sold out. Returns false if any remain. */
+export async function cancelEmptyOrder(db: SupabaseClient, orderId: string): Promise<boolean> {
+  const { data, error } = await db.rpc('customer_cancel_empty_order', { p_order_id: orderId });
+  if (error) throw error;
+  return data === true;
+}
+
 export interface ActiveDelivery {
   id: string;
   status: string;
@@ -70,7 +119,7 @@ export interface ActiveDelivery {
   pickup: { lat: number; lng: number } | null;
   dropoff: { lat: number; lng: number } | null;
   storeName: string | null;
-  items: { name: string; qty: number; unitPrice: number }[];
+  items: OrderItem[];
 }
 
 /**
@@ -81,7 +130,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(name, qty, unit_price)')
+    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -93,12 +142,15 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     pickup_lat: number | null; pickup_lng: number | null;
     delivery_lat: number | null; delivery_lng: number | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
-    order_items?: { name: string; qty: number; unit_price: number }[];
+    order_items?: { id: string; name: string; qty: number; unit_price: number; status: string | null; replaces_item_id: string | null }[];
   } | undefined;
   if (!row) return null;
   const store = row.order_stores?.find((os) => os.store?.lat != null && os.store?.lng != null)?.store
     ?? row.order_stores?.[0]?.store ?? null;
-  const items = (row.order_items ?? []).map((it) => ({ name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0) }));
+  const items = (row.order_items ?? []).map((it) => ({
+    id: it.id, name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0),
+    status: (it.status ?? 'ok') as OrderItemStatus, replacesItemId: it.replaces_item_id ?? null,
+  }));
   return {
     id: row.id,
     status: row.status,

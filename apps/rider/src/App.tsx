@@ -313,23 +313,107 @@ const serviceTint: Record<string, string> = {
  * Order items grouped by store: each restaurant shows its name + phone, with its
  * items listed underneath — so a multi-store order is clear at a glance.
  */
-function StoreGroups({ order }: { order: RiderOrder }) {
+/**
+ * One line item on an active delivery, with the sold-out controls.
+ *
+ * Taking an item off the bill is unilateral — the customer only ever pays less,
+ * so waiting for a reply at the counter would help nobody. Offering a
+ * replacement is a suggestion: it stays off the bill until the customer accepts,
+ * because nobody should be charged for something they didn't pick.
+ */
+function ItemActions({ item, data, onChange }: {
+  item: RiderOrder['items'][number]; data: RiderData; onChange: () => Promise<void>;
+}) {
+  const [mode, setMode] = useState<'idle' | 'suggest'>('idle');
+  const [name, setName] = useState('');
+  const [qty, setQty] = useState('1');
+  const [price, setPrice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!item.id) return null;
+
+  async function run(fn: () => Promise<void>) {
+    setBusy(true); setErr(null);
+    try { await fn(); await onChange(); setMode('idle'); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  if (mode === 'suggest') {
+    return (
+      <div className="mt-1.5 rounded-lg bg-white p-2 ring-1 ring-black/10">
+        <p className="mb-1.5 text-[11px] font-medium text-black/60">Suggest instead of {item.name}</p>
+        <div className="flex gap-1.5">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 px-2 py-1.5 text-sm" />
+          <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)}
+            className="w-12 shrink-0 rounded-lg border border-black/10 px-2 py-1.5 text-sm" />
+          <input type="number" inputMode="decimal" min={0} value={price} onChange={(e) => setPrice(e.target.value)}
+            placeholder="₱" className="w-20 shrink-0 rounded-lg border border-black/10 px-2 py-1.5 text-sm" />
+        </div>
+        <div className="mt-1.5 flex gap-1.5">
+          <button disabled={busy || !name.trim() || !(Number(price) >= 0)}
+            onClick={() => void run(() => data.proposeReplacement(item.id!, name.trim(), Math.max(1, Number(qty) || 1), Number(price) || 0))}
+            className="flex-1 rounded-lg bg-brand-purple py-1.5 text-xs font-bold text-white disabled:opacity-50">
+            {busy ? 'Sending…' : 'Ask the customer'}
+          </button>
+          <button onClick={() => setMode('idle')} className="rounded-lg border border-black/15 px-2 text-xs text-black/60">Cancel</button>
+        </div>
+        {err && <p className="mt-1 text-[11px] text-red-600">{err}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex gap-1.5">
+      <button disabled={busy} onClick={() => void run(() => data.markSoldOut(item.id!))}
+        className="rounded-lg border border-red-300 px-2 py-1 text-[11px] font-medium text-red-600 disabled:opacity-50">
+        Sold out
+      </button>
+      <button disabled={busy} onClick={() => { setName(''); setPrice(''); setQty(String(item.qty)); setMode('suggest'); }}
+        className="rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple disabled:opacity-50">
+        🔁 Suggest another
+      </button>
+      {err && <span className="text-[11px] text-red-600">{err}</span>}
+    </div>
+  );
+}
+
+function StoreGroups({ order, data, onChange }: {
+  order: RiderOrder; data?: RiderData; onChange?: () => Promise<void>;
+}) {
   const byStore = new Map<string, RiderOrder['items']>();
   const noStore: RiderOrder['items'] = [];
-  for (const it of order.items) {
+  // Declined suggestions and swapped-out originals are history, not the bag.
+  for (const it of order.items.filter((i) => i.status !== 'removed' && i.status !== 'replaced')) {
     if (it.store_id) byStore.set(it.store_id, [...(byStore.get(it.store_id) ?? []), it]);
     else noStore.push(it);
   }
 
-  const ItemRow = (it: RiderOrder['items'][number], j: number) => (
-    <li key={j} className="flex justify-between gap-2">
-      <span className="min-w-0">
-        <span className="font-medium">{it.qty}×</span> {it.name}
-        {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
-      </span>
-      {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
-    </li>
-  );
+  const ItemRow = (it: RiderOrder['items'][number], j: number) => {
+    const gone = it.status === 'sold_out';
+    const waiting = it.status === 'proposed';
+    return (
+      <li key={it.id ?? j}>
+        <div className="flex justify-between gap-2">
+          <span className={`min-w-0 ${gone ? 'text-black/35' : ''}`}>
+            <span className={gone ? 'line-through' : ''}>
+              <span className="font-medium">{it.qty}×</span> {it.name}
+            </span>
+            {gone && <span className="ml-1.5 text-[11px] font-medium text-red-500">sold out</span>}
+            {waiting && <span className="ml-1.5 text-[11px] font-medium text-brand-purple">awaiting customer</span>}
+            {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
+          </span>
+          {it.unitPrice > 0 && (
+            <span className={`shrink-0 ${gone || waiting ? 'text-black/35' : 'text-black/50'}`}>{peso(it.unitPrice * it.qty)}</span>
+          )}
+        </div>
+        {data && onChange && !gone && !waiting && (
+          <ItemActions item={it} data={data} onChange={onChange} />
+        )}
+      </li>
+    );
+  };
 
   if (order.stores.length === 0 && noStore.length === 0) return null;
 
@@ -672,7 +756,7 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         )}
 
         {/* Restaurant / store with its items grouped underneath. */}
-        <StoreGroups order={order} />
+        <StoreGroups order={order} data={data} onChange={onChange} />
         <div className="mt-2">
           <ChatButton orderId={order.id} role="rider"
             title={`Chat with ${order.recipientContact ? 'sender' : 'customer'}`}

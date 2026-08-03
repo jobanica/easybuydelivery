@@ -10,6 +10,8 @@ import {
   uploadPabiliReceipt,
   createSettlement,
   riderConfirmPayment,
+  riderMarkItemSoldOut,
+  riderProposeReplacement,
   getRiderOnline,
   setRiderOnline,
   type SupabaseClient,
@@ -43,8 +45,13 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
           .map((os) => ({ id: os.store?.id ?? null, name: os.store?.name ?? null, contact: os.store?.contact_number ?? null, lat: os.store?.lat ?? null, lng: os.store?.lng ?? null }))
       : [],
     items: Array.isArray(row.order_items)
-      ? (row.order_items as { store_id: string | null; name: string; qty: number; unit_price: number; notes: string | null }[])
-          .map((it) => ({ store_id: it.store_id ?? null, name: it.name, qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null }))
+      ? (row.order_items as { id: string; store_id: string | null; name: string; qty: number; unit_price: number; notes: string | null; status: string | null; replaces_item_id: string | null }[])
+          .map((it) => ({
+            id: it.id ?? null, store_id: it.store_id ?? null, name: it.name,
+            qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null,
+            status: (it.status ?? 'ok') as RiderOrder['items'][number]['status'],
+            replacesItemId: it.replaces_item_id ?? null,
+          }))
       : [],
     pickupLat: row.pickup_lat == null ? null : Number(row.pickup_lat),
     pickupLng: row.pickup_lng == null ? null : Number(row.pickup_lng),
@@ -96,6 +103,12 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async confirmPayment(orderId, note) {
       await riderConfirmPayment(db, orderId, note);
+    },
+    async markSoldOut(itemId) {
+      await riderMarkItemSoldOut(db, itemId);
+    },
+    async proposeReplacement(itemId, name, qty, unitPrice) {
+      await riderProposeReplacement(db, itemId, name, qty, unitPrice);
     },
     async advance(order, next) {
       await advanceOrderStatus(db, order, next);

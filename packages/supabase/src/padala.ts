@@ -125,7 +125,7 @@ export async function createPadalaOrder(
 export async function listOpenOrders(db: SupabaseClient) {
   const { data, error } = await db
     .from('orders')
-    .select('*, order_stores(store:stores(id, name, contact_number, lat, lng)), order_items(store_id, name, qty, unit_price, notes)')
+    .select('*, order_stores(store:stores(id, name, contact_number, lat, lng)), order_items(id, store_id, name, qty, unit_price, notes, status, replaces_item_id)')
     .eq('status', 'pending')
     .is('rider_id', null)
     .order('created_at', { ascending: true });

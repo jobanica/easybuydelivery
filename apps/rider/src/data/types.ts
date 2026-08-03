@@ -1,4 +1,5 @@
 import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod } from '@ebd/shared';
+import type { OrderItemStatus } from '@ebd/supabase';
 
 /** The order shape the rider UI works with (subset of the orders row). */
 export interface RiderOrder {
@@ -26,7 +27,7 @@ export interface RiderOrder {
   /** Linked store(s) for the order, so the rider can call the restaurant. */
   stores: { id: string | null; name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
   /** What the customer ordered (store_id links each item to its store). */
-  items: { store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null }[];
+  items: { id: string | null; store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null; status: OrderItemStatus; replacesItemId: string | null }[];
   /** Where the rider buys/collects (pabili & padala pin the source). */
   pickupLat: number | null;
   pickupLng: number | null;
@@ -58,6 +59,10 @@ export interface RiderData {
   accept(orderId: string): Promise<void>;
   releaseOrder(orderId: string, reason?: string): Promise<void>;
   confirmPayment(orderId: string, note?: string): Promise<void>;
+  /** Store ran out: drop the item from the bill (no customer approval needed). */
+  markSoldOut(itemId: string): Promise<void>;
+  /** Offer something else instead — stays off the bill until the customer agrees. */
+  proposeReplacement(itemId: string, name: string, qty: number, unitPrice: number): Promise<void>;
   advance(order: RiderOrder, next: OrderStatus): Promise<void>;
   setActual(order: RiderOrder, amount: number, receiptUrl?: string): Promise<{ overCap: boolean }>;
   /** Upload the store receipt photo backing a pabili total; returns its URL. */

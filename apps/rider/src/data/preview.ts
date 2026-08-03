@@ -9,6 +9,15 @@ function isoDay(offsetDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Food totals follow the live line items, same as the database does. */
+function rebill(o: RiderOrder): RiderOrder {
+  if (o.service_type !== 'food') return o;
+  const goods = o.items
+    .filter((i) => i.status === 'ok')
+    .reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
+  return { ...o, goods_cost: goods };
+}
+
 /** Stand-in for a customer-uploaded GCash receipt (preview has no storage). */
 const RECEIPT_PLACEHOLDER =
   'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -33,7 +42,7 @@ export function createPreviewData(): RiderData {
       customer_contact: '0917 777 1010', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0200', stores: [{ id: 's2', name: 'Kowloon House', contact: '0918 555 0200', lat: 14.18, lng: 121.246 }],
-      items: [{ store_id: 's2', name: 'Chicken Mami', qty: 2, unitPrice: 115, notes: null }, { store_id: 's2', name: 'Siopao', qty: 2, unitPrice: 45, notes: null }],
+      items: [{ id: 'it-1', store_id: 's2', status: 'ok' as const, replacesItemId: null, name: 'Chicken Mami', qty: 2, unitPrice: 115, notes: null }, { id: 'it-2', store_id: 's2', status: 'ok' as const, replacesItemId: null, name: 'Siopao', qty: 2, unitPrice: 45, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.192, deliveryLng: 121.258, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: true, transferReason: 'Flat tire', transferHadGoods: true,
@@ -46,7 +55,7 @@ export function createPreviewData(): RiderData {
       customer_contact: '0917 111 2222', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
-      items: [{ store_id: 's1', name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { store_id: 's1', name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { store_id: 's1', name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
+      items: [{ id: 'it-3', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { id: 'it-4', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { id: 'it-5', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
@@ -58,7 +67,7 @@ export function createPreviewData(): RiderData {
       customer_contact: '0917 333 4444',
       item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
       budget_cap: 600, actual_amount: null, goodsReceiptUrl: null, store_contact: null, stores: [],
-      items: [{ store_id: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { store_id: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
+      items: [{ id: 'it-6', store_id: null, status: 'ok' as const, replacesItemId: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { id: 'it-7', store_id: null, status: 'ok' as const, replacesItemId: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
@@ -70,7 +79,7 @@ export function createPreviewData(): RiderData {
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: null, stores: [],
-      items: [{ store_id: null, name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
+      items: [{ id: 'it-8', store_id: null, status: 'ok' as const, replacesItemId: null, name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
@@ -82,7 +91,7 @@ export function createPreviewData(): RiderData {
       customer_contact: '0917 444 3030', item_description: null,
       estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
-      items: [{ store_id: 's1', name: 'Pork Sisig', qty: 1, unitPrice: 165, notes: null }, { store_id: 's1', name: 'Rice', qty: 4, unitPrice: 20, notes: null }],
+      items: [{ id: 'it-9', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Pork Sisig', qty: 1, unitPrice: 165, notes: null }, { id: 'it-10', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Rice', qty: 4, unitPrice: 20, notes: null }],
       pickupLat: null, pickupLng: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: RECEIPT_PLACEHOLDER, paymentReference: '9012 3456 7890', paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
@@ -107,6 +116,24 @@ export function createPreviewData(): RiderData {
       if (!o) return;
       open = open.filter((x) => x.id !== orderId);
       active = [...active, { ...o, status: 'accepted' }];
+    },
+    async markSoldOut(itemId) {
+      active = active.map((o) => rebill({
+        ...o,
+        items: o.items.map((i) => (i.id === itemId ? { ...i, status: 'sold_out' as const } : i)),
+      }));
+    },
+    async proposeReplacement(itemId, name, qty, unitPrice) {
+      active = active.map((o) => (o.items.some((i) => i.id === itemId)
+        ? {
+            ...o,
+            items: [
+              ...o.items.map((i) => (i.id === itemId ? { ...i, status: 'sold_out' as const } : i)),
+              { id: `it-new-${Date.now()}`, store_id: o.items.find((i) => i.id === itemId)?.store_id ?? null,
+                status: 'proposed' as const, replacesItemId: itemId, name, qty, unitPrice, notes: null },
+            ],
+          }
+        : o)).map(rebill);
     },
     async confirmPayment(orderId) {
       active = active.map((o) => o.id === orderId

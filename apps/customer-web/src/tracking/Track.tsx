@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { getActiveDelivery, getOrderRiderInfo, type ActiveDelivery, type OrderRiderInfo } from '@ebd/supabase';
+import { useCallback, useEffect, useState } from 'react';
+import { getActiveDelivery, getOrderRiderInfo, respondToItemChange, cancelEmptyOrder,
+  type ActiveDelivery, type OrderRiderInfo } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { TrackingMap } from './TrackingMap.tsx';
@@ -8,8 +9,34 @@ import { ChatButton } from '../Chat.tsx';
 import { peso } from '../ui.tsx';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
-function OrderItemsCard({ delivery }: { delivery: ActiveDelivery }) {
+function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onChange: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   if (delivery.items.length === 0) return null;
+
+  const proposed = delivery.items.filter((it) => it.status === 'proposed');
+  const soldOut = delivery.items.filter((it) => it.status === 'sold_out');
+  const live = delivery.items.filter((it) => (it.status ?? 'ok') === 'ok');
+  const nothingLeft = live.length === 0 && proposed.length === 0 && soldOut.length > 0;
+
+  async function respond(itemId: string, accept: boolean) {
+    if (!supabase) return;
+    setBusy(itemId); setErr(null);
+    try { await respondToItemChange(supabase, itemId, accept); onChange(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+  async function cancelAll() {
+    if (!supabase) return;
+    if (!window.confirm('Cancel this order? Everything you ordered is sold out.')) return;
+    setBusy('cancel'); setErr(null);
+    try {
+      if (!(await cancelEmptyOrder(supabase, delivery.id))) setErr('Some items are still available — this order can’t be cancelled here.');
+      onChange();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+
   return (
     <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
       <div className="mb-2 flex items-center justify-between">
@@ -17,13 +44,52 @@ function OrderItemsCard({ delivery }: { delivery: ActiveDelivery }) {
         {delivery.storeName && <span className="truncate text-xs text-black/45">{delivery.storeName}</span>}
       </div>
       <ul className="space-y-1 text-sm">
-        {delivery.items.map((it, i) => (
-          <li key={i} className="flex justify-between gap-2">
+        {live.map((it, i) => (
+          <li key={it.id ?? i} className="flex justify-between gap-2">
             <span className="min-w-0"><span className="font-medium">{it.qty}×</span> {it.name}</span>
             {it.unitPrice > 0 && <span className="shrink-0 text-black/50">{peso(it.unitPrice * it.qty)}</span>}
           </li>
         ))}
+        {soldOut.map((it, i) => (
+          <li key={it.id ?? `s${i}`} className="flex justify-between gap-2 text-black/35">
+            <span className="min-w-0 line-through"><span className="font-medium">{it.qty}×</span> {it.name}</span>
+            <span className="shrink-0 text-[11px] font-medium text-red-500">sold out</span>
+          </li>
+        ))}
       </ul>
+
+      {/* The rider found something else — nothing is charged until you agree. */}
+      {proposed.map((it) => (
+        <div key={it.id} className="mt-3 rounded-lg bg-brand-yellow/20 p-3 ring-1 ring-brand-yellow/50">
+          <p className="text-sm font-bold text-brand-ink">🔁 Your rider suggests a replacement</p>
+          <p className="mt-1 text-sm">
+            <span className="font-medium">{it.qty}× {it.name}</span>
+            {it.unitPrice > 0 && <span className="text-black/55"> · {peso(it.unitPrice * it.qty)}</span>}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button onClick={() => void respond(it.id!, true)} disabled={busy === it.id}
+              className="flex-1 rounded-lg bg-brand-green py-2 text-sm font-bold text-white disabled:opacity-50">
+              {busy === it.id ? '…' : 'Accept'}
+            </button>
+            <button onClick={() => void respond(it.id!, false)} disabled={busy === it.id}
+              className="flex-1 rounded-lg border border-black/15 py-2 text-sm font-medium text-black/60 disabled:opacity-50">
+              No thanks
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-black/50">You’re not charged for this unless you accept it.</p>
+        </div>
+      ))}
+
+      {nothingLeft && (
+        <div className="mt-3 rounded-lg bg-red-50 p-3 ring-1 ring-red-200">
+          <p className="text-sm font-medium text-red-700">Everything you ordered is sold out.</p>
+          <button onClick={() => void cancelAll()} disabled={busy === 'cancel'}
+            className="mt-2 w-full rounded-lg border border-red-300 py-2 text-sm font-semibold text-red-600 disabled:opacity-50">
+            {busy === 'cancel' ? 'Cancelling…' : 'Cancel this order'}
+          </button>
+        </div>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
@@ -43,24 +109,24 @@ export function Track({ onClose }: { onClose: () => void }) {
   const [delivery, setDelivery] = useState<ActiveDelivery | null>(null);
   const [riderInfo, setRiderInfo] = useState<OrderRiderInfo | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!live || !supabase || !customerId) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const d = await getActiveDelivery(supabase!, customerId!);
-        if (cancelled) return;
-        setDelivery(d);
-        setStatus(!d ? 'none' : d.pickup && d.dropoff ? 'ok' : 'nocoords');
-        setRiderInfo(d ? await getOrderRiderInfo(supabase!, d.id).catch(() => null) : null);
-      } catch {
-        if (!cancelled) setStatus('none');
-      }
+    try {
+      const d = await getActiveDelivery(supabase, customerId);
+      setDelivery(d);
+      setStatus(!d ? 'none' : d.pickup && d.dropoff ? 'ok' : 'nocoords');
+      setRiderInfo(d ? await getOrderRiderInfo(supabase, d.id).catch(() => null) : null);
+    } catch {
+      setStatus('none');
     }
-    void load();
-    const t = setInterval(load, 15_000); // re-check which order is active / its status
-    return () => { cancelled = true; clearInterval(t); };
   }, [live, customerId]);
+
+  useEffect(() => {
+    void load();
+    // Re-check which order is active, its status, and any sold-out changes.
+    const t = setInterval(() => { void load(); }, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
 
   // Preview mode: show the simulated demo so the map is demonstrable.
   if (!live) return <TrackingMap pickup={DEMO_PICKUP} dropoff={DEMO_DROPOFF} onClose={onClose} />;
@@ -71,7 +137,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
           deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
         <ChatButton orderId={delivery.id} role="customer" title="Chat with your rider" />
-        <OrderItemsCard delivery={delivery} />
+        <OrderItemsCard delivery={delivery} onChange={() => void load()} />
         {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
       </div>
     );
@@ -97,7 +163,7 @@ export function Track({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
-      {delivery && <OrderItemsCard delivery={delivery} />}
+      {delivery && <OrderItemsCard delivery={delivery} onChange={() => void load()} />}
       {delivery?.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
     </div>
   );
