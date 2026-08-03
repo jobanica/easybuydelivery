@@ -4,32 +4,13 @@ import { supabase } from './lib/supabase.ts';
 
 const sel = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green';
 
-const norm = (s: string) => s.trim().toLowerCase().replace(/^(city of|municipality of)\s+/, '').replace(/\s+city$/, '');
-
-/**
- * Reverse-geocode a pin (OpenStreetMap Nominatim — same free service as the map
- * tiles) and check the municipality/city against the serviceable list.
- *
- * Returns `null` when the answer isn't trustworthy (offline, rate-limited, or
- * no city in the response) so a lookup failure never blocks a real order —
- * only a confident mismatch does.
- */
-export async function checkPinServiceable(
-  lat: number, lng: number, areas: ServiceArea[],
-): Promise<{ ok: boolean; place: string } | null> {
-  if (areas.length === 0) return null;
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=12`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-    if (!res.ok) return null;
-    const a = (await res.json())?.address ?? {};
-    const city: string | undefined = a.city ?? a.town ?? a.municipality ?? a.village ?? a.county;
-    if (!city) return null;
-    const served = new Set(areas.map((x) => norm(x.city)));
-    return { ok: served.has(norm(city)), place: city };
-  } catch {
-    return null; // never block on a lookup failure
-  }
+/** Great-circle distance in km. */
+export function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371, toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**

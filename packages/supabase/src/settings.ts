@@ -34,6 +34,10 @@ export interface AppSettings {
   settlement_gcash_number: string | null;
   settlement_gcash_name: string | null;
   settlement_qr_url: string | null;
+  /** Delivery-area guard: pin + radius the drop-off must fall inside (0 = off). */
+  service_center_lat: number | null;
+  service_center_lng: number | null;
+  service_radius_km: number;
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {

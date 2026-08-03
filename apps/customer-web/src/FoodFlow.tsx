@@ -22,8 +22,8 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
-import { AreaPicker, checkPinServiceable } from './AreaPicker.tsx';
-import type { AreaSelection, ServiceArea } from '@ebd/supabase';
+import { AreaPicker, kmBetween } from './AreaPicker.tsx';
+import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 const DELIVERY_FEE = 50;
@@ -107,7 +107,7 @@ export function FoodFlow() {
   const [cutlery, setCutlery] = useState(false);
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [areaRequired, setAreaRequired] = useState(false);
-  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([]);
+  const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   const [cartOpen, setCartOpen] = useState(false); // full-screen cart popup
   // Prefill the delivery contact with the account's verified phone.
   useEffect(() => { if (mobile && !contact) setContact(mobile); }, [mobile]);
@@ -135,6 +135,13 @@ export function FoodFlow() {
                 convenienceFee: settings.convenience_fee_food ?? settings.convenience_fee,
               },
             });
+            if (settings.service_center_lat != null && settings.service_center_lng != null
+                && Number(settings.service_radius_km) > 0) {
+              setServiceArea({
+                lat: settings.service_center_lat, lng: settings.service_center_lng,
+                radiusKm: Number(settings.service_radius_km),
+              });
+            }
           }
           // Only the store list up front — each menu loads lazily when opened.
           setStores((rows as { id: string; name: string; category: string | null; address: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null }[])
@@ -270,12 +277,12 @@ export function FoodFlow() {
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     if (!pay) { setError('Please choose a payment method.'); return; }
     if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
-    // The barangay is self-declared, so verify the actual pin is in a city we
-    // serve. A failed/uncertain lookup never blocks — only a clear mismatch.
-    if (areaRequired && dropoff) {
-      const check = await checkPinServiceable(dropoff.lat, dropoff.lng, serviceAreas);
-      if (check && !check.ok) {
-        setError(`Sorry, we don't deliver to ${check.place} yet. Please pin a location inside our service area.`);
+    // The barangay is self-declared, so check the pin itself against the
+    // operator's service radius (also enforced in the database).
+    if (serviceArea && dropoff) {
+      const km = kmBetween(serviceArea, dropoff);
+      if (km > serviceArea.radiusKm) {
+        setError(`That drop-off is about ${km.toFixed(1)} km away, outside our ${serviceArea.radiusKm} km delivery area. Please pin a location we serve.`);
         return;
       }
     }
@@ -519,7 +526,7 @@ export function FoodFlow() {
                   <LocationPicker value={dropoff} onChange={setDropoff} />
                 </div>
               )}
-              <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} onAreasLoaded={setServiceAreas} />
+              <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
               <div>
                 <label className="mb-1 block text-sm font-medium">Your name</label>
                 <input value={custName} onChange={(e) => setCustName(e.target.value)}

@@ -13,6 +13,7 @@ const SAMPLE: AppSettings = {
   service_food: true, service_pabili: true, service_padala: true,
   max_active_orders_per_rider: 0,
   settlement_gcash_number: null, settlement_gcash_name: null, settlement_qr_url: null,
+  service_center_lat: null, service_center_lng: null, service_radius_km: 0,
 };
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -187,6 +188,31 @@ export function Settings() {
         <p className="mt-4 rounded-lg bg-brand-green/10 px-3 py-2 text-sm text-green-800">
           Example: ₱{s.default_delivery_fee} delivery + {peso(s.per_store_fee)}×2 added stores →
           commission <span className="font-bold">{peso(example)}</span>
+        </p>
+      </Card>
+
+      {/* Delivery-area guard */}
+      <Card title="Delivery area (service radius)">
+        <p className="mb-3 text-sm text-black/60">
+          Orders whose drop-off pin falls outside this radius are rejected — even if the customer
+          picked a serviceable barangay. Set the radius to <b>0</b> to turn the check off.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Centre latitude">
+            <input type="number" step="0.00001" className={inp} value={s.service_center_lat ?? ''}
+              onChange={(e) => set('service_center_lat', e.target.value === '' ? null : Number(e.target.value))} />
+          </Field>
+          <Field label="Centre longitude">
+            <input type="number" step="0.00001" className={inp} value={s.service_center_lng ?? ''}
+              onChange={(e) => set('service_center_lng', e.target.value === '' ? null : Number(e.target.value))} />
+          </Field>
+          <Field label="Radius (km)">
+            <input type="number" min={0} step={0.5} className={inp} value={s.service_radius_km}
+              onChange={(e) => set('service_radius_km', Number(e.target.value))} />
+          </Field>
+        </div>
+        <p className="mt-2 text-xs text-black/40">
+          Tip: use the centre of your town. The radius should reach the farthest barangay you serve.
         </p>
       </Card>
 
