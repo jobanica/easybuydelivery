@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { listStaff, setUserRole, revokeStaff, createStaff, type StaffMember } from '@ebd/supabase';
-import { STAFF_ROLES, ROLE_LABEL, type StaffRole } from '@ebd/shared';
+import { STAFF_ROLES, ROLE_LABEL, type StaffRole,
+  errMessage,
+} from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote } from './ui.tsx';
 
@@ -35,7 +37,7 @@ export function Staff() {
     if (!supabase) { setRows(SAMPLE); setLoading(false); return; }
     setLoading(true);
     try { setRows(await listStaff(supabase)); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
@@ -61,7 +63,7 @@ export function Staff() {
       setNotice('Staff account created.');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally { setBusy(false); }
   }
 

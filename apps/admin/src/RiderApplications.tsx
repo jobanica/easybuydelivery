@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listRiders, setRiderApplicationStatus, getRiderDocumentUrl, RIDER_DOCUMENT_LABELS, type RiderDocumentKind } from '@ebd/supabase';
 import type { RiderApplicationStatus } from '@ebd/shared';
+import { errMessage } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Th, Td, Muted, ErrorNote, StatusPill, Card } from './ui.tsx';
 
@@ -65,7 +66,7 @@ export function RiderApplications() {
     if (!supabase) { setRows(SAMPLE); setLoading(false); return; }
     setLoading(true);
     try { setRows((await listRiders(supabase)) as RiderRow[]); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);

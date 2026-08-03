@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthChange, onPasswordRecovery, sendPasswordReset, updatePassword, signOut } from '@ebd/supabase';
-import { isStaffRole, type StaffRole } from '@ebd/shared';
+import { isStaffRole, type StaffRole,
+  errMessage,
+} from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { IconScooter } from './icons.tsx';
 
@@ -65,7 +67,7 @@ function SignIn() {
         if (error) throw error;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errMessage(err));
     } finally {
       setBusy(false);
     }
@@ -123,7 +125,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
     if (password.length < 6) { setError('Use at least 6 characters.'); return; }
     setBusy(true); setError(null);
     try { await updatePassword(supabase!, password); onDone(); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); setBusy(false); }
+    catch (err) { setError(errMessage(err)); setBusy(false); }
   }
 
   return (

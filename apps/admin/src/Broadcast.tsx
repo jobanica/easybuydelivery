@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { countAudience, type BroadcastAudience } from '@ebd/supabase';
-import { smsSegments } from '@ebd/shared';
+import { smsSegments,
+  errMessage,
+} from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card } from './ui.tsx';
 
@@ -37,7 +39,7 @@ export function Broadcast() {
       setResult(`Sent to ${(data as { recipients?: number })?.recipients ?? count} recipient(s).`);
       setMessage('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally { setSending(false); }
   }
 

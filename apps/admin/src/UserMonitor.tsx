@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getUserActivity, type UserActivity } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, ErrorNote } from './ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 const SAMPLE: UserActivity = {
   window_days: 30,
@@ -33,7 +34,7 @@ export function UserMonitor() {
         const res = await getUserActivity(supabase, days);
         if (alive) { setD(res); setError(null); }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(errMessage(e));
       } finally { if (alive) setLoading(false); }
     }
     void load();

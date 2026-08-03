@@ -10,3 +10,4 @@ export * from './roles.ts';
 export * from './hours.ts';
 export * from './settlement.ts';
 export * from './types.ts';
+export * from './errors.ts';

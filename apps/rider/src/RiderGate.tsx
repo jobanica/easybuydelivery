@@ -7,6 +7,7 @@ import {
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { App } from './App.tsx';
 import { REQUIRE_DOCUMENTS } from './config.ts';
+import { errMessage } from '@ebd/shared';
 
 interface RiderRec {
   id: string;
@@ -142,7 +143,7 @@ function DocumentsGate({ rider, onChange }: { rider: RiderRec; onChange: () => P
   async function upload(kind: RiderDocumentKind, file: File) {
     setBusy(kind); setError(null);
     try { await uploadRiderDocument(supabase!, kind, file); await onChange(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setBusy(null); }
   }
 
@@ -281,7 +282,7 @@ function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; i
       }
       // onAuthChange in LiveGate takes over on success.
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -362,7 +363,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
     if (password.length < 6) { setError('Use at least 6 characters.'); return; }
     setBusy(true); setError(null);
     try { await updatePassword(supabase!, password); onDone(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    catch (e) { setError(errMessage(e)); setBusy(false); }
   }
 
   return (
@@ -391,7 +392,7 @@ function Onboard({ onDone }: { onDone: () => void | Promise<void> }) {
   async function apply() {
     setBusy(true); setError(null);
     try { await ensureRider(supabase!, { name, mobile, vehicle }); await onDone(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    catch (e) { setError(errMessage(e)); setBusy(false); }
   }
 
   return (

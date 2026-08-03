@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { commission, type FeePayer } from '@ebd/shared';
+import { commission, type FeePayer,
+  errMessage,
+} from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG, type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
 import { getAppSettings } from '@ebd/supabase';
@@ -112,7 +114,7 @@ export function PadalaForm() {
         setCreatedId('preview-only');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errMessage(err));
     } finally {
       setSubmitting(false);
     }

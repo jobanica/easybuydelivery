@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.ts';
 import { useAuth } from './AuthContext.tsx';
 import { inputCls } from '../ui.tsx';
 import { REQUIRE_ACCOUNT } from '../config.ts';
+import { errMessage } from '@ebd/shared';
 
 /**
  * Account gate. With REQUIRE_ACCOUNT on, a customer must sign in with their
@@ -53,7 +54,7 @@ function SetNewPassword({ onDone }: { onDone: () => void }) {
     if (password.length < 6) { setError('Use at least 6 characters.'); return; }
     setBusy(true); setError(null);
     try { await updatePassword(supabase!, password); onDone(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    catch (e) { setError(errMessage(e)); setBusy(false); }
   }
 
   return (
@@ -161,7 +162,7 @@ function EmailSignIn() {
       }
       // The auth listener in AuthContext takes over on success.
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -236,7 +237,7 @@ function PhoneSetup() {
     if (phone.trim().length < 7) { setError('Enter a valid mobile number.'); return; }
     setBusy(true); setError(null);
     try { await ensureContact(phone.trim(), name.trim() || undefined); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    catch (e) { setError(errMessage(e)); setBusy(false); }
   }
 
   return (

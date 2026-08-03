@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { parseMenuCsv, groupByStore } from '@ebd/shared';
+import { parseMenuCsv, groupByStore,
+  errMessage,
+} from '@ebd/shared';
 import { importMenuRows } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, peso } from './ui.tsx';
@@ -35,7 +37,7 @@ export function ImportMenu({ onDone }: { onDone?: () => void }) {
       setText('');
       onDone?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally { setBusy(false); }
   }
 

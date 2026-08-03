@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listOrders, getOrderDetail } from '@ebd/supabase';
 import type { ServiceType, OrderStatus } from '@ebd/shared';
+import { errMessage } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 
@@ -70,7 +71,7 @@ export function OrderHistory() {
           limit: PAGE, offset: page * PAGE,
         });
         setRows(res.rows as unknown as OrderRow[]); setCount(res.count);
-      } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+      } catch (e) { setError(errMessage(e)); }
       finally { setLoading(false); }
     })();
   }, [service, status, search, page]);
@@ -161,7 +162,7 @@ function OrderDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
       ], events: [] });
       return;
     }
-    getOrderDetail(supabase, id).then(setDetail).catch((e) => setError(String(e)));
+    getOrderDetail(supabase, id).then(setDetail).catch((e) => setError(errMessage(e)));
   }, [id]);
 
   return (

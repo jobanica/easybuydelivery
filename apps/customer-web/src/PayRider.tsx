@@ -3,6 +3,7 @@ import { getOrderPayToRider, getAppSettings, uploadPaymentReceipt, setOrderPayme
 import { supabase } from './lib/supabase.ts';
 import { Qr } from './Qr.tsx';
 import { peso } from './ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 /**
  * Pay-your-rider panel for GCash-to-rider orders: shows who/where to pay
@@ -52,14 +53,14 @@ export function PayRider({ orderId }: { orderId: string }) {
     if (!supabase) return;
     setUploading(true); setErr(null);
     try { setReceiptUrl(await uploadPaymentReceipt(supabase, orderId, file, reference.trim() || undefined)); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setUploading(false); }
   }
   async function saveRef() {
     if (!supabase || !reference.trim()) return;
     setErr(null);
     try { await setOrderPaymentReference(supabase, orderId, reference.trim()); setSavedRef(true); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAnalytics, type Analytics as Data } from '@ebd/supabase';
 import type { ServiceType } from '@ebd/shared';
+import { errMessage } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, ErrorNote, peso } from './ui.tsx';
 
@@ -39,7 +40,7 @@ export function Analytics() {
   useEffect(() => {
     setD(null); setError(null);
     if (!supabase) { setD(sample(days)); return; }
-    getAnalytics(supabase, days).then(setD).catch((e) => setError(String(e)));
+    getAnalytics(supabase, days).then(setD).catch((e) => setError(errMessage(e)));
   }, [days]);
 
   if (error) return <ErrorNote msg={error} />;

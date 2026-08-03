@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { listActiveRiders, setRiderLocked, setRiderSuspended, deleteRider, type ActiveRider } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -28,7 +29,7 @@ export function Riders() {
     if (!supabase) { setRows(SAMPLE); setLoading(false); return; }
     setLoading(true);
     try { setRows(await listActiveRiders(supabase, today)); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
@@ -62,7 +63,7 @@ export function Riders() {
       const res = await deleteRider(supabase, r.id);
       if (!res.deleted) { window.alert(res.message ?? 'This rider could not be deleted.'); return; }
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(errMessage(e)); }
   }
 
   if (loading) return <Muted>Loading…</Muted>;

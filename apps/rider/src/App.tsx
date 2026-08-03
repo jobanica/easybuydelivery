@@ -8,6 +8,7 @@ import {
   riderEarnings,
   type LedgerEntry,
   type OrderStatus,
+  errMessage,
 } from '@ebd/shared';
 import {
   subscribeToNewOrders, signOut,
@@ -60,7 +61,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
       const [l, o, a] = await Promise.all([data.getLedger(), data.getOpenOrders(), data.getActiveOrders()]);
       setLedger(l); setOpen(o); setActive(a); setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     }
   }, [data]);
 
@@ -88,13 +89,13 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   async function toggleOnline() {
     setOnlineBusy(true);
     try { setOnline(await data.setOnline(!online)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setOnlineBusy(false); }
   }
 
   async function accept(orderId: string) {
     try { await data.accept(orderId); setTab('deliveries'); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     await refresh();
   }
 
@@ -335,7 +336,7 @@ function ItemActions({ item, data, onChange }: {
   async function run(fn: () => Promise<void>) {
     setBusy(true); setErr(null);
     try { await fn(); await onChange(); setMode('idle'); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
   }
 
@@ -558,7 +559,7 @@ function PaymentProof({ order, data, onChange }:
       await data.confirmPayment(order.id, uploaded ? 'Receipt uploaded in app' : 'Receipt shown in person');
       await onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -631,7 +632,7 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
     if (reason === null) return; // cancelled
     setReleasing(true); setReleaseErr(null);
     try { await data.releaseOrder(order.id, reason.trim() || undefined); await onChange(); }
-    catch (e) { setReleaseErr(e instanceof Error ? e.message : String(e)); setReleasing(false); }
+    catch (e) { setReleaseErr(errMessage(e)); setReleasing(false); }
   }
 
   return (
@@ -915,13 +916,13 @@ function SettleModal({ amount, settings, live, onClose, onSubmit }: {
     if (!supabase) return;
     setUploading(true); setErr(null);
     try { setReceiptUrl(await uploadSettlementReceipt(supabase, file)); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setUploading(false); }
   }
   async function submit() {
     setSubmitting(true); setErr(null);
     try { await onSubmit({ reference: reference.trim() || undefined, receiptUrl: receiptUrl ?? undefined }); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setSubmitting(false); }
+    catch (e) { setErr(errMessage(e)); setSubmitting(false); }
   }
   function copyNum() {
     if (!num) return;
@@ -1073,7 +1074,7 @@ function useSaver(onSaved: () => Promise<void>) {
   async function run(fn: () => Promise<void>) {
     setBusy(true); setSaved(false); setErr(null);
     try { await fn(); await onSaved(); setSaved(true); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
   }
   return { busy, saved, err, run, setSaved };
@@ -1396,7 +1397,7 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
   async function pickReceipt(file: File) {
     setUploading(true); setErr(null);
     try { setReceiptUrl(await data.uploadGoodsReceipt(order.id, file)); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setUploading(false); }
   }
 
@@ -1410,7 +1411,7 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
       await onChange();
       setOpen(false);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(errMessage(e));
     } finally { setBusy(false); }
   }
 

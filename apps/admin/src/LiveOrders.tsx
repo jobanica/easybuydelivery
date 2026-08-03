@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { listActiveOrdersAdmin, adminCancelOrder } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Th, Td, Muted, ErrorNote, Card, peso } from './ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 interface RiderRef { id: string; name: string; mobile_number: string | null }
 interface OrderRow {
@@ -51,7 +52,7 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
   async function reload() {
     if (!supabase) return;
     try { setRows((await listActiveOrdersAdmin(supabase)) as OrderRow[]); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
   }
 
   async function cancel(o: OrderRow) {
@@ -64,7 +65,7 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
       const ok = await adminCancelOrder(supabase, o.id, reason.trim() || undefined);
       if (!ok) window.alert('This order could not be cancelled (already delivered?).');
       await reload();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(errMessage(e)); }
     finally { setBusyId(null); }
   }
 
@@ -76,7 +77,7 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
         const data = (await listActiveOrdersAdmin(supabase)) as OrderRow[];
         if (alive) { setRows(data); setError(null); }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(errMessage(e));
       } finally {
         if (alive) setLoading(false);
       }

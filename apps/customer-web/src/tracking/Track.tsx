@@ -7,6 +7,7 @@ import { TrackingMap } from './TrackingMap.tsx';
 import { PayRider } from '../PayRider.tsx';
 import { ChatButton } from '../Chat.tsx';
 import { peso } from '../ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
 function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onChange: () => void }) {
@@ -23,7 +24,7 @@ function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onCh
     if (!supabase) return;
     setBusy(itemId); setErr(null);
     try { await respondToItemChange(supabase, itemId, accept); onChange(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
   }
   async function cancelAll() {
@@ -33,7 +34,7 @@ function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onCh
     try {
       if (!(await cancelEmptyOrder(supabase, delivery.id))) setErr('Some items are still available — this order can’t be cancelled here.');
       onChange();
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
   }
 

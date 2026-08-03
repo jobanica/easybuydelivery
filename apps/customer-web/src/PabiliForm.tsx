@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
-  type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
+  type DeliveryFeeModel, type DistanceFeeConfig,
+  errMessage,
+} from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequestInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -117,7 +119,7 @@ export function PabiliForm() {
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errMessage(err));
       return;
     }
     setSubmitting(true);
@@ -130,7 +132,7 @@ export function PabiliForm() {
         setCreatedId('preview-only');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errMessage(err));
     } finally {
       setSubmitting(false);
     }

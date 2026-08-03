@@ -5,6 +5,7 @@ import {
 } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, ErrorNote, Toggle } from './ui.tsx';
+import { errMessage } from '@ebd/shared';
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
@@ -28,7 +29,7 @@ export function ServiceAreas() {
   async function load() {
     if (!supabase) { setRows(SAMPLE); setLoading(false); return; }
     try { setRows(await listServiceAreas(supabase)); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
@@ -44,7 +45,7 @@ export function ServiceAreas() {
       setForm({ province: province.trim(), city: city.trim(), barangay: '' }); // keep province/city for fast entry
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errMessage(e);
       setError(/duplicate key/i.test(msg) ? 'That barangay is already on the list.' : msg);
     } finally { setBusy(false); }
   }

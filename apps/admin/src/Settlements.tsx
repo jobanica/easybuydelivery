@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { summarizeRiderBalances, type RiderBalance } from '@ebd/shared';
+import { summarizeRiderBalances, type RiderBalance,
+  errMessage,
+} from '@ebd/shared';
 import { listRiderBalances, listPendingSettlements, confirmSettlement } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 
@@ -55,7 +57,7 @@ export function Settlements() {
       setPending(p as PendingRow[]);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setLoading(false);
     }
@@ -73,7 +75,7 @@ export function Settlements() {
       });
       await load();
     } catch (e) {
-      setConfirmErr(e instanceof Error ? e.message : String(e));
+      setConfirmErr(errMessage(e));
     } finally {
       setConfirmingId(null);
     }

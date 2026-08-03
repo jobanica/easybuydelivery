@@ -10,6 +10,7 @@ import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { PayRider } from './PayRider.tsx';
 import { peso } from './ui.tsx';
 import { REQUIRE_ACCOUNT, SUPPORT_CONTACT, APP_VERSION } from './config.ts';
+import { errMessage } from '@ebd/shared';
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
@@ -34,7 +35,7 @@ function CancelOrderButton({ orderId, onCancelled }: { orderId: string; onCancel
       const ok = await cancelOrder(supabase, orderId);
       if (ok) onCancelled();
       else setErr('This order can no longer be cancelled — a rider has accepted it.');
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
   }
   return (
@@ -170,7 +171,7 @@ function ProfileSection({ customer, ensureContact, onSaved }: {
     if (!mobile.trim()) { setErr('Enter your mobile number.'); return; }
     setBusy(true); setSaved(false); setErr(null);
     try { await ensureContact(mobile.trim(), name.trim() || undefined); await onSaved(); setSaved(true); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
   }
 

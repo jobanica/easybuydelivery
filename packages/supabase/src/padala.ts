@@ -140,7 +140,9 @@ export async function listOpenOrders(db: SupabaseClient) {
 export async function listActiveOrdersAdmin(db: SupabaseClient) {
   const { data, error } = await db
     .from('orders')
-    .select('*, rider:riders(id, name, mobile_number)')
+    // Name the FK explicitly: orders points at riders twice (rider_id and
+    // payment_confirmed_by), so a bare riders(...) embed is ambiguous.
+    .select('*, rider:riders!orders_rider_id_fkey(id, name, mobile_number)')
     .not('status', 'in', '(delivered,cancelled)')
     .order('created_at', { ascending: false });
   if (error) throw error;

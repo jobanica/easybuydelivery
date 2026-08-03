@@ -16,6 +16,7 @@ import {
   type DeliveryFeeModel,
   type DistanceFeeConfig,
   type FeeConfig,
+  errMessage,
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -158,7 +159,7 @@ export function FoodFlow() {
           })));
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errMessage(e));
       } finally {
         setLoading(false);
       }
@@ -203,7 +204,7 @@ export function FoodFlow() {
         const built = buildStoreMenu(menu);
         setStores((prev) => prev.map((x) => x.id === openStoreId ? { ...x, ...built, loaded: true } : x));
       })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => !cancelled && setError(errMessage(e)))
       .finally(() => !cancelled && setMenuLoading(false));
     return () => { cancelled = true; };
   }, [openStoreId, stores]);
@@ -316,7 +317,7 @@ export function FoodFlow() {
         setCreatedId('preview-only');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setPlacing(false);
     }

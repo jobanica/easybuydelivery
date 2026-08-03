@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getAppSettings, updateAppSettings, uploadSettlementQr, type AppSettings } from '@ebd/supabase';
-import { commission, distanceDeliveryFee } from '@ebd/shared';
+import { commission, distanceDeliveryFee,
+  errMessage,
+} from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, peso } from './ui.tsx';
 
@@ -30,7 +32,7 @@ export function Settings() {
     if (!supabase) return;
     setQrBusy(true); setError(null);
     try { set('settlement_qr_url', await uploadSettlementQr(supabase, file)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
     finally { setQrBusy(false); }
   }
 
@@ -38,7 +40,7 @@ export function Settings() {
     (async () => {
       if (!supabase) { setS(SAMPLE); return; }
       try { setS(await getAppSettings(supabase)); }
-      catch (e) { setError(e instanceof Error ? e.message : String(e)); setS(SAMPLE); }
+      catch (e) { setError(errMessage(e)); setS(SAMPLE); }
     })();
   }, []);
 
@@ -55,7 +57,7 @@ export function Settings() {
     try {
       await updateAppSettings(supabase, s);
       setSaved(true);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(errMessage(e)); }
     finally { setSaving(false); }
   }
 

@@ -22,7 +22,9 @@ import {
   deleteMenuItem,
   copyStoreMenu,
 } from '@ebd/supabase';
-import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS } from '@ebd/shared';
+import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS,
+  errMessage,
+} from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
@@ -100,7 +102,7 @@ export function Stores() {
       setRows((await listAllStores(supabase)) as StoreRow[]);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setLoading(false);
     }
@@ -125,7 +127,7 @@ export function Stores() {
       setName(''); setCategory(''); setContact(''); setAddress(''); setOpensAt(''); setClosesAt(''); setDays([...ALL_DAYS]); setPin(null); setError(null);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errMessage(e);
       setError(/row-level security|42501/.test(msg)
         ? 'Not authorized — sign in with an admin account to add stores.'
         : msg);
@@ -143,7 +145,7 @@ export function Stores() {
     if (!window.confirm(`Delete “${s.name}” and its whole menu? This can’t be undone.`)) return;
     setError(null);
     try { await deleteStore(supabase, s.id); setOpenId(null); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(errMessage(e)); }
   }
 
   if (loading) return <Muted>Loading…</Muted>;
@@ -303,7 +305,7 @@ function StoreDetailsEditor({ store, onSaved }: { store: StoreRow; onSaved: () =
         openDays: daysOrNull(days),
       });
       setSaved(true); onSaved();
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErr(errMessage(e)); }
     finally { setSaving(false); }
   }
 
@@ -549,7 +551,7 @@ function ItemEditor({ item, groups, options, cats, onSaved, sources }:
       setCopyMsg(`Copied ${res.groups} customization${res.groups === 1 ? '' : 's'} · ${res.options} option${res.options === 1 ? '' : 's'}. Edit any prices below.`);
       setCopyFrom('');
       onSaved();
-    } catch (e) { setCopyMsg(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setCopyMsg(errMessage(e)); }
     finally { setCopyBusy(false); }
   }
 
@@ -558,7 +560,7 @@ function ItemEditor({ item, groups, options, cats, onSaved, sources }:
     if (!window.confirm(`Delete “${item.name}”? This can’t be undone.`)) return;
     setDelErr(null);
     try { await deleteMenuItem(supabase, item.id); onSaved(); }
-    catch (e) { setDelErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setDelErr(errMessage(e)); }
   }
 
   async function saveMeta() {
@@ -684,7 +686,7 @@ function OptionGroupEditor({ group, base, options, onChanged }:
         optionName: optName.trim(), priceDelta: Number(optExtra) || 0,
       });
       setOptName(''); setOptExtra(''); onChanged();
-    } catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+    } catch (e2) { setErr(errMessage(e2)); }
   }
   async function removeOption(id: string) { if (supabase) { await deleteMenuItemOption(supabase, id); onChanged(); } }
   async function removeGroup() { if (supabase) { await deleteOptionGroup(supabase, group.id); onChanged(); } }
@@ -734,7 +736,7 @@ function ImageUpload({ url, onUpload, rounded = 'rounded-lg', size = 'h-14 w-14'
     if (!file || !supabase) return;
     setBusy(true); setErr(null);
     try { await onUpload(file); }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : String(ex)); }
+    catch (ex) { setErr(errMessage(ex)); }
     finally { setBusy(false); }
   }
   return (
@@ -780,7 +782,7 @@ function CopyMenuPanel({ store, stores }: { store: StoreRow; stores: StoreRow[] 
     try {
       const res = await copyStoreMenu(supabase, store.id, target, replace);
       setMsg(`Copied ${res.items} item(s) and ${res.categories} new category(ies) to ${to?.name}.`);
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
   }
 
