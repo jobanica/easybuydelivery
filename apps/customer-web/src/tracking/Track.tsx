@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getActiveDelivery, getOrderRiderInfo, respondToItemChange, cancelEmptyOrder,
+  orderGoodsAmount, orderGoodsIsFinal,
   type ActiveDelivery, type OrderRiderInfo } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
@@ -95,6 +96,49 @@ function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onCh
   );
 }
 
+/**
+ * Cash-on-delivery total. A COD customer gets no payment panel (that's only for
+ * GCash-to-rider), so without this they'd reach the door not knowing what to
+ * hand over. Pabili stays an estimate until the rider records the real receipt.
+ */
+function PayOnDelivery({ delivery }: { delivery: ActiveDelivery }) {
+  const goods = orderGoodsAmount(delivery);
+  const isFinal = orderGoodsIsFinal(delivery);
+  const total = goods + delivery.delivery_fee + delivery.store_fee_total + delivery.convenience_fee;
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="font-bold">💵 Pay on delivery</h3>
+        <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-[11px] font-semibold text-green-800">Cash</span>
+      </div>
+      <div className="space-y-1 text-sm">
+        {goods > 0 && (
+          <div className="flex justify-between text-black/60">
+            <span>{delivery.service_type === 'food' ? 'Food subtotal' : 'Goods'}{!isFinal && ' (estimate)'}</span>
+            <span>{peso(goods)}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-black/60"><span>Delivery fee</span><span>{peso(delivery.delivery_fee)}</span></div>
+        {delivery.store_fee_total > 0 && (
+          <div className="flex justify-between text-black/60"><span>Store fee</span><span>{peso(delivery.store_fee_total)}</span></div>
+        )}
+        {delivery.convenience_fee > 0 && (
+          <div className="flex justify-between text-black/60"><span>Convenience fee</span><span>{peso(delivery.convenience_fee)}</span></div>
+        )}
+        <div className="mt-1 flex justify-between border-t border-black/10 pt-2 font-bold">
+          <span>{isFinal ? 'Total to pay' : 'Estimated total'}</span>
+          <span className="text-lg">{peso(total)}</span>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-black/45">
+        {isFinal
+          ? 'Please prepare this amount in cash for your rider.'
+          : 'This updates to the exact amount once your rider has bought your items and saved the receipt.'}
+      </p>
+    </div>
+  );
+}
+
 // Demo route for preview mode (no backend).
 const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
 const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
@@ -140,6 +184,7 @@ export function Track({ onClose }: { onClose: () => void }) {
         <ChatButton orderId={delivery.id} role="customer" title="Chat with your rider" />
         <OrderItemsCard delivery={delivery} onChange={() => void load()} />
         {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
+        {delivery.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}
       </div>
     );
   }
@@ -166,6 +211,7 @@ export function Track({ onClose }: { onClose: () => void }) {
       </div>
       {delivery && <OrderItemsCard delivery={delivery} onChange={() => void load()} />}
       {delivery?.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
+      {delivery?.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}
     </div>
   );
 }

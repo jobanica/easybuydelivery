@@ -120,6 +120,13 @@ export interface ActiveDelivery {
   dropoff: { lat: number; lng: number } | null;
   storeName: string | null;
   items: OrderItem[];
+  /** What the customer owes, so a COD order can show the cash to prepare. */
+  goods_cost: number;
+  delivery_fee: number;
+  store_fee_total: number;
+  convenience_fee: number;
+  estimated_amount: number | null;
+  actual_amount: number | null;
 }
 
 /**
@@ -130,7 +137,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
+    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -141,6 +148,9 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     id: string; status: string; service_type: string; payment_method: string | null; item_description: string | null;
     pickup_lat: number | null; pickup_lng: number | null;
     delivery_lat: number | null; delivery_lng: number | null;
+    goods_cost: number | null; delivery_fee: number | null;
+    store_fee_total: number | null; convenience_fee: number | null;
+    estimated_amount: number | null; actual_amount: number | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
     order_items?: { id: string; name: string; qty: number; unit_price: number; status: string | null; replaces_item_id: string | null }[];
   } | undefined;
@@ -166,6 +176,12 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     dropoff: row.delivery_lat != null && row.delivery_lng != null ? { lat: row.delivery_lat, lng: row.delivery_lng } : null,
     storeName: store?.name ?? (row.service_type === 'padala' ? 'Pickup point' : row.service_type === 'pabili' ? 'Buy here' : null),
     items: items.length ? items : (row.item_description ? [{ name: row.item_description, qty: 1, unitPrice: 0 }] : []),
+    goods_cost: Number(row.goods_cost ?? 0),
+    delivery_fee: Number(row.delivery_fee ?? 0),
+    store_fee_total: Number(row.store_fee_total ?? 0),
+    convenience_fee: Number(row.convenience_fee ?? 0),
+    estimated_amount: row.estimated_amount == null ? null : Number(row.estimated_amount),
+    actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
   };
 }
 
