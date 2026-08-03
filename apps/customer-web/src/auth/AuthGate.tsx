@@ -22,6 +22,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+
+// Remember the last email used to sign in, so returning users only need their
+// password. The password itself is deliberately never stored — the device's own
+// password manager handles that safely via the autocomplete attributes below.
+const REMEMBER_KEY = 'ebd:remember-email';
+const rememberedEmail = () => {
+  try { return localStorage.getItem(REMEMBER_KEY) ?? ''; } catch { return ''; }
+};
+const setRememberedEmail = (email: string | null) => {
+  try {
+    if (email) localStorage.setItem(REMEMBER_KEY, email);
+    else localStorage.removeItem(REMEMBER_KEY);
+  } catch { /* storage unavailable — sign-in still works */ }
+};
+
 /** Shown after the user opens a password-reset link. */
 function SetNewPassword({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('');
@@ -82,7 +97,8 @@ const Splash = ({ sub }: { sub: string }) => <Shell title={sub}><p className="te
 
 function EmailSignIn() {
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(rememberedEmail);
+  const [remember, setRemember] = useState(true);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,8 +115,11 @@ function EmailSignIn() {
         await sendPasswordReset(supabase!, email.trim(), window.location.origin);
         setSent(true);
       }
-      else if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
-      else await signInWithPassword(supabase!, email.trim(), password);
+      else {
+        if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+        else await signInWithPassword(supabase!, email.trim(), password);
+        setRememberedEmail(remember ? email.trim() : null);
+      }
       // The auth listener in AuthContext takes over on success.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -146,8 +165,13 @@ function EmailSignIn() {
         placeholder="At least 6 characters"
         autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
         onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+      <label className="mt-3 flex items-center gap-2 text-sm text-black/70">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+          className="h-4 w-4 accent-[#6DBE22]" />
+        Remember me on this device
+      </label>
       <button onClick={submit} disabled={busy || !valid}
-        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        className="mt-3 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
       </button>
       {mode === 'signin' && (

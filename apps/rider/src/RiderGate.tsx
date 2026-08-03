@@ -31,6 +31,21 @@ export function RiderGate() {
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
+
+// Remember the last email used to sign in, so returning users only need their
+// password. The password itself is deliberately never stored — the device's own
+// password manager handles that safely via the autocomplete attributes below.
+const REMEMBER_KEY = 'ebd:remember-email';
+const rememberedEmail = () => {
+  try { return localStorage.getItem(REMEMBER_KEY) ?? ''; } catch { return ''; }
+};
+const setRememberedEmail = (email: string | null) => {
+  try {
+    if (email) localStorage.setItem(REMEMBER_KEY, email);
+    else localStorage.removeItem(REMEMBER_KEY);
+  } catch { /* storage unavailable — sign-in still works */ }
+};
+
 const RIDER_COLS = 'id, application_status, name, orcr_doc, license_doc, proof_address_doc';
 
 function LiveGate() {
@@ -241,7 +256,8 @@ function Shell({ title, sub, children }: { title: string; sub: string; children:
 
 function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; initialMode?: 'signin' | 'signup' }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(initialMode);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(rememberedEmail);
+  const [remember, setRemember] = useState(true);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,8 +274,11 @@ function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; i
         await sendPasswordReset(supabase!, email.trim(), window.location.origin);
         setSent(true);
       }
-      else if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
-      else await signInWithPassword(supabase!, email.trim(), password);
+      else {
+        if (mode === 'signup') await signUpWithPassword(supabase!, email.trim(), password);
+        else await signInWithPassword(supabase!, email.trim(), password);
+        setRememberedEmail(remember ? email.trim() : null);
+      }
       // onAuthChange in LiveGate takes over on success.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -307,8 +326,13 @@ function EmailSignIn({ onBack, initialMode = 'signin' }: { onBack: () => void; i
         placeholder="At least 6 characters"
         autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
         onKeyDown={(e) => { if (e.key === 'Enter' && valid && !busy) void submit(); }} />
+      <label className="mt-3 flex items-center gap-2 text-sm text-black/70">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+          className="h-4 w-4 accent-[#6DBE22]" />
+        Remember me on this device
+      </label>
       <button disabled={busy || !valid} onClick={submit}
-        className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
+        className="mt-3 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
       </button>
       {mode === 'signin' && (
