@@ -5,8 +5,8 @@ import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, type PabiliRequ
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
-import { AreaPicker } from './AreaPicker.tsx';
-import type { AreaSelection } from '@ebd/supabase';
+import { AreaPicker, checkPinServiceable } from './AreaPicker.tsx';
+import type { AreaSelection, ServiceArea } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 interface FormState {
@@ -36,6 +36,7 @@ export function PabiliForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [areaRequired, setAreaRequired] = useState(false);
+  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([]);
   // Delivery pricing comes from the operator's settings — recalculated from the
   // pinned distance under per-km pricing, never typed by the customer.
   const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
@@ -100,6 +101,15 @@ export function PabiliForm() {
     if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
     if (needsPinsForFee) { setError('Please pin where to buy so we can compute the delivery fee.'); return; }
     if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
+    // The barangay is self-declared, so verify the actual pin is in a city we
+    // serve. A failed/uncertain lookup never blocks — only a clear mismatch.
+    if (areaRequired && dropoff) {
+      const check = await checkPinServiceable(dropoff.lat, dropoff.lng, serviceAreas);
+      if (check && !check.ok) {
+        setError(`Sorry, we don't deliver to ${check.place} yet. Please pin a location inside our service area.`);
+        return;
+      }
+    }
     try {
       validateBudget({ estimate: form.estimate, cap: form.cap });
     } catch (err) {
@@ -152,7 +162,7 @@ export function PabiliForm() {
         <input className={inputCls} value={form.where}
           onChange={(e) => set('where', e.target.value)} placeholder="e.g. Botica Central" />
       </Field>
-      <AreaPicker value={area} onChange={(v) => { setArea(v); setAreaRequired(true); }} />
+      <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} onAreasLoaded={setServiceAreas} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-black/40"> (optional)</span>}</span>
         <LocationPicker value={buyAt} onChange={setBuyAt} />

@@ -6,8 +6,8 @@ import { getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
-import { AreaPicker } from './AreaPicker.tsx';
-import type { AreaSelection } from '@ebd/supabase';
+import { AreaPicker, checkPinServiceable } from './AreaPicker.tsx';
+import type { AreaSelection, ServiceArea } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
 const DEFAULT_DELIVERY_FEE = 50;
@@ -35,6 +35,7 @@ export function PadalaForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [areaRequired, setAreaRequired] = useState(false);
+  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([]);
   // Delivery pricing is operator-controlled: recalculated from the pinned
   // pickup -> drop-off distance under per-km pricing.
   const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
@@ -92,6 +93,15 @@ export function PadalaForm() {
     if (!pickup) { setError('Please pin the pickup location.'); return; }
     if (!dropoff) { setError('Please pin the drop-off location.'); return; }
     if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
+    // The barangay is self-declared, so verify the actual pin is in a city we
+    // serve. A failed/uncertain lookup never blocks — only a clear mismatch.
+    if (areaRequired && dropoff) {
+      const check = await checkPinServiceable(dropoff.lat, dropoff.lng, serviceAreas);
+      if (check && !check.ok) {
+        setError(`Sorry, we don't deliver to ${check.place} yet. Please pin a location inside our service area.`);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       if (supabase && isSupabaseConfigured) {
@@ -134,7 +144,7 @@ export function PadalaForm() {
           onChange={(e) => set('itemDescription', e.target.value)}
           placeholder="e.g. Documents, small parcel" required />
       </Field>
-      <AreaPicker value={area} onChange={(v) => { setArea(v); setAreaRequired(true); }} />
+      <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} onAreasLoaded={setServiceAreas} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">📦 Pick up from</span>
         <LocationPicker value={pickup} onChange={setPickup} />
