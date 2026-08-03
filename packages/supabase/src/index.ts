@@ -15,6 +15,7 @@ export * from './staff.ts';
 export * from './tracking.ts';
 export * from './chat.ts';
 export * from './areas.ts';
+export * from './installs.ts';
 export * from './notifications.ts';
 export * from './settings.ts';
 export * from './analytics.ts';

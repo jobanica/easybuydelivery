@@ -5,6 +5,16 @@ import './index.css';
 import { App } from './App.tsx';
 import { AuthProvider } from './auth/AuthContext.tsx';
 import { AuthGate } from './auth/AuthGate.tsx';
+import { recordAppInstall, isInstalledApp } from '@ebd/supabase';
+import { supabase } from './lib/supabase.ts';
+
+// Count installs of the customer app: when the browser confirms an install, and
+// on launch when we're already running as an installed app (covers devices that
+// installed it before this tracking existed). Deduplicated per device.
+if (supabase) {
+  window.addEventListener('appinstalled', () => { void recordAppInstall(supabase!, 'customer', 'pwa'); });
+  if (isInstalledApp()) void recordAppInstall(supabase, 'customer', 'pwa');
+}
 
 // Auto-update the app when a new version is deployed: register immediately,
 // re-check for a new service worker every 30 min and on tab focus, and reload
