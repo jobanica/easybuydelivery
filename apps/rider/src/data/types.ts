@@ -36,6 +36,9 @@ export interface RiderOrder {
   /** Customer drop-off coordinates (for the tracking map / navigation). */
   deliveryLat: number | null;
   deliveryLng: number | null;
+  /** Written addresses — the pin gets them to the street, this to the door. */
+  deliveryAddress: string | null;
+  pickupAddress: string | null;
   notes: string | null;
   /** Proof of a GCash-to-rider payment (uploaded by the customer, if any). */
   paymentReceiptUrl: string | null;

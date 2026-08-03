@@ -670,6 +670,27 @@ function AddonRequests({ order, data, onChange }:
   );
 }
 
+/**
+ * The written address, next to the pin. When the pin lands on the wrong house
+ * this is all the rider has — a house number to look for, or a landmark to ask
+ * a neighbour about.
+ */
+function AddressLine({ label, address, icon }: { label: string; address: string; icon: string }) {
+  return (
+    <div className="mt-2 flex items-start justify-between gap-2 rounded-xl bg-brand-yellow/15 px-3 py-2">
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium text-black/45">{icon} {label}</span>
+        <span className="block text-sm font-medium text-brand-ink">{address}</span>
+      </span>
+      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+        target="_blank" rel="noreferrer" aria-label="Search this address on Maps"
+        className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
+        Search
+      </a>
+    </div>
+  );
+}
+
 function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [note, setNote] = useState<string | null>(null);
@@ -745,6 +766,9 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
             </div>
           </div>
         )}
+
+        {order.pickupAddress && <AddressLine label="Pick up at" address={order.pickupAddress} icon="🛒" />}
+        {order.deliveryAddress && <AddressLine label="Deliver to" address={order.deliveryAddress} icon="📍" />}
 
         {/* What the customer ordered */}
         {/* Fee breakdown — so the delivery fee is always visible */}

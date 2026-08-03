@@ -23,6 +23,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
+import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -104,6 +105,12 @@ export function FoodFlow() {
   const [note, setNote] = useState('');
   const [gift, setGift] = useState(false);
   const [recipientName, setRecipientName] = useState('');
+  const [addressText, setAddressText] = useState('');
+  const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
+  useAddressPrefill({
+    address: savedAddress, loaded: addressLoaded, dropoff, text: addressText,
+    setDropoff, setText: setAddressText,
+  });
   const [recipientContact, setRecipientContact] = useState('');
   const [cutlery, setCutlery] = useState(false);
   const [area, setArea] = useState<AreaSelection | null>(null);
@@ -300,6 +307,7 @@ export function FoodFlow() {
           areaCity: area?.city,
           areaBarangay: area?.barangay,
           recipientName: gift ? recipientName.trim() || undefined : undefined,
+          deliveryAddress: addressText,
           recipientContact: gift ? recipientContact.trim() || undefined : undefined,
           deliveryFee,
           lines: cart,
@@ -334,7 +342,7 @@ export function FoodFlow() {
           {createdId === 'preview-only' ? 'Preview only — connect Supabase to notify riders.' : 'Riders have been notified.'}
         </p>
         <p className="mt-2 font-mono text-xs text-black/40">{createdId}</p>
-        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setGift(false); setRecipientName(''); setRecipientContact(''); setPay(null); setCartOpen(false); }}
+        <button onClick={() => { setCart([]); setCreatedId(null); setOpenStoreId(null); setDropoff(null); setContact(''); setCustName(''); setNote(''); setCutlery(false); setGift(false); setRecipientName(''); setAddressText(''); setRecipientContact(''); setPay(null); setCartOpen(false); }}
           className="mt-5 rounded-lg border border-brand-purple px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/5">
           Order again
         </button>
@@ -525,6 +533,9 @@ export function FoodFlow() {
                 <div>
                   {gift && <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>}
                   <LocationPicker value={dropoff} onChange={setDropoff} />
+                  <div className="mt-2">
+                    <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+                  </div>
                 </div>
               )}
               <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
@@ -549,10 +560,15 @@ export function FoodFlow() {
               {gift && (
                 <div className="space-y-3 rounded-xl bg-black/[0.03] p-3">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Recipient name</label>
+                    <label className="mb-1 block text-sm font-medium">
+                      Recipient&apos;s complete name <span className="text-red-600">*</span>
+                    </label>
                     <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)}
-                      placeholder="Who receives the order"
+                      placeholder="Juan Dela Cruz"
                       className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
+                    <p className="mt-1 text-xs text-black/45">
+                      Full name, so your rider can ask for them if the call isn&apos;t answered.
+                    </p>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">Recipient mobile number</label>
@@ -566,6 +582,12 @@ export function FoodFlow() {
                     <div>
                       <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>
                       <LocationPicker value={dropoff} onChange={setDropoff} />
+                      <div className="mt-2">
+                        <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+                      </div>
+                  <div className="mt-2">
+                    <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+                  </div>
                       <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the order should be delivered.</p>
                     </div>
                   )}

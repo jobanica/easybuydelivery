@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isInAppBrowser, inAppBrowserName, isAndroid, openInChrome, copyCurrentLink } from './inAppBrowser.tsx';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -17,6 +18,41 @@ const pinIcon = L.divIcon({
 });
 
 export interface LatLngValue { lat: number; lng: number }
+
+/**
+ * Shown only inside Messenger/Instagram/etc., where geolocation is blocked by
+ * the embedded browser and no amount of retrying will help.
+ */
+export function InAppBrowserNotice() {
+  const [copied, setCopied] = useState(false);
+  if (!isInAppBrowser()) return null;
+  const app = inAppBrowserName();
+  return (
+    <div className="mb-2 rounded-lg bg-brand-yellow/25 p-3 ring-1 ring-brand-yellow/60">
+      <p className="text-sm font-bold text-yellow-900">⚠️ Open in Chrome to use your location</p>
+      <p className="mt-0.5 text-xs text-yellow-900/80">
+        You&apos;re browsing inside {app}, which blocks &ldquo;Use my location&rdquo;. Open Easy Buy
+        Delivery in Chrome and it will work — or just tap the map to drop your pin manually.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" onClick={openInChrome}
+          className="rounded-lg bg-brand-green px-3 py-1.5 text-xs font-bold text-white">
+          Open in Chrome
+        </button>
+        <button type="button"
+          onClick={() => { void copyCurrentLink().then((ok) => setCopied(ok)); }}
+          className="rounded-lg border border-yellow-900/25 px-3 py-1.5 text-xs font-medium text-yellow-900">
+          {copied ? 'Link copied ✓' : 'Copy link'}
+        </button>
+      </div>
+      {!isAndroid() && (
+        <p className="mt-1.5 text-[11px] text-yellow-900/70">
+          On iPhone: tap the ••• menu at the top right, then &ldquo;Open in browser&rdquo;.
+        </p>
+      )}
+    </div>
+  );
+}
 
 /**
  * Drop-off location picker for checkout. Auto-centres on the customer's current
@@ -96,6 +132,7 @@ export function LocationPicker({
 
   return (
     <div>
+      <InAppBrowserNotice />
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium">Delivery location</span>
         <button type="button" onClick={useMyLocation}

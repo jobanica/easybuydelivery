@@ -352,6 +352,10 @@ export interface CustomerAddress {
   lat: number | null;
   lng: number | null;
   is_default: boolean;
+  /** Serviceable area saved with the address, so ordering can prefill it. */
+  province: string | null;
+  city: string | null;
+  barangay: string | null;
 }
 
 export async function listAddresses(db: SupabaseClient, customerId: string): Promise<CustomerAddress[]> {
@@ -366,6 +370,8 @@ export async function listAddresses(db: SupabaseClient, customerId: string): Pro
 
 export async function addAddress(db: SupabaseClient, input: {
   customerId: string; label?: string; address: string; lat?: number | null; lng?: number | null; isDefault?: boolean;
+  /** Saved alongside so ordering can prefill the serviceable area too. */
+  province?: string | null; city?: string | null; barangay?: string | null;
 }) {
   if (input.isDefault) {
     await db.from('customer_addresses').update({ is_default: false }).eq('customer_id', input.customerId);
@@ -377,6 +383,9 @@ export async function addAddress(db: SupabaseClient, input: {
     lat: input.lat ?? null,
     lng: input.lng ?? null,
     is_default: input.isDefault ?? false,
+    province: input.province ?? null,
+    city: input.city ?? null,
+    barangay: input.barangay ?? null,
   });
   if (error) throw error;
 }

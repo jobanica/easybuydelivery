@@ -22,8 +22,10 @@ export interface PadalaRequestInput {
   deliveryFee: number;
   feePayer: FeePayer;
   itemDescription: string;
-  pickup: { lat?: number; lng?: number; contact: string };
-  dropoff: { lat?: number; lng?: number; contact: string };
+  pickup: { lat?: number; lng?: number; contact: string; address?: string };
+  /** The receiver's full name matters: if the call goes unanswered the rider
+   *  needs a name to ask for at the gate. */
+  dropoff: { lat?: number; lng?: number; contact: string; name?: string; address?: string };
   /** Serviceable area chosen by the customer (province / city / barangay). */
   areaProvince?: string;
   areaCity?: string;
@@ -53,6 +55,10 @@ export interface PadalaOrderRow {
   dropoff_lat: number | null;
   dropoff_lng: number | null;
   dropoff_contact: string;
+  recipient_name: string | null;
+  recipient_contact: string;
+  delivery_address: string | null;
+  pickup_address: string | null;
   /** Mirrors the drop-off so live tracking (which reads delivery_*) works. */
   delivery_lat: number | null;
   delivery_lng: number | null;
@@ -95,6 +101,10 @@ export function buildPadalaOrderRow(
     dropoff_lat: input.dropoff.lat ?? null,
     dropoff_lng: input.dropoff.lng ?? null,
     dropoff_contact: input.dropoff.contact,
+    recipient_name: input.dropoff.name?.trim() || null,
+    recipient_contact: input.dropoff.contact,
+    delivery_address: input.dropoff.address?.trim() || null,
+    pickup_address: input.pickup.address?.trim() || null,
     delivery_lat: input.dropoff.lat ?? null,
     delivery_lng: input.dropoff.lng ?? null,
     area_province: input.areaProvince?.trim() || null,

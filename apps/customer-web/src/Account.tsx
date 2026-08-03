@@ -7,6 +7,8 @@ import {
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { useAuth } from './auth/AuthContext.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
+import { AreaPicker } from './AreaPicker.tsx';
+import type { AreaSelection } from '@ebd/supabase';
 import { PayRider } from './PayRider.tsx';
 import { peso } from './ui.tsx';
 import { REQUIRE_ACCOUNT, SUPPORT_CONTACT, APP_VERSION } from './config.ts';
@@ -197,6 +199,7 @@ function AddressesSection({ customerId, addresses, onChange }: {
   const [label, setLabel] = useState('');
   const [text, setText] = useState('');
   const [pin, setPin] = useState<LatLngValue | null>(null);
+  const [area, setArea] = useState<AreaSelection | null>(null);
   const [makeDefault, setMakeDefault] = useState(addresses.length === 0);
   const [busy, setBusy] = useState(false);
 
@@ -204,8 +207,12 @@ function AddressesSection({ customerId, addresses, onChange }: {
     if (!supabase || !text.trim()) return;
     setBusy(true);
     try {
-      await addAddress(supabase, { customerId, label, address: text, lat: pin?.lat ?? null, lng: pin?.lng ?? null, isDefault: makeDefault });
-      setLabel(''); setText(''); setPin(null); setAdding(false);
+      await addAddress(supabase, {
+        customerId, label, address: text, lat: pin?.lat ?? null, lng: pin?.lng ?? null,
+        isDefault: makeDefault,
+        province: area?.province ?? null, city: area?.city ?? null, barangay: area?.barangay ?? null,
+      });
+      setLabel(''); setText(''); setPin(null); setArea(null); setAdding(false);
       await onChange();
     } finally { setBusy(false); }
   }
@@ -237,6 +244,7 @@ function AddressesSection({ customerId, addresses, onChange }: {
         <div className="mt-3 space-y-2 rounded-xl bg-black/[0.02] p-3">
           <input className={inp} placeholder="Label (e.g. Home, Office)" value={label} onChange={(e) => setLabel(e.target.value)} />
           <input className={inp} placeholder="Address / landmark" value={text} onChange={(e) => setText(e.target.value)} />
+          <div className="mb-2"><AreaPicker value={area} onChange={setArea} onRequired={() => {}} /></div>
           <LocationPicker value={pin} onChange={setPin} height={180} />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} className="h-4 w-4 accent-[#6DBE22]" />

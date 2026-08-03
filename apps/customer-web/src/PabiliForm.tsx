@@ -9,6 +9,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
+import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
@@ -38,6 +39,12 @@ export function PabiliForm() {
   const [buyAt, setBuyAt] = useState<LatLngValue | null>(null);   // where to buy
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
+  const [addressText, setAddressText] = useState('');
+  const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
+  useAddressPrefill({
+    address: savedAddress, loaded: addressLoaded, dropoff, text: addressText,
+    setDropoff, setText: setAddressText, setArea,
+  });
   const [areaRequired, setAreaRequired] = useState(false);
   const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   // Delivery pricing comes from the operator's settings — recalculated from the
@@ -108,6 +115,7 @@ export function PabiliForm() {
       pickupLng: buyAt?.lng,
       deliveryLat: dropoff?.lat,
       deliveryLng: dropoff?.lng,
+      deliveryAddress: addressText,
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
@@ -119,6 +127,7 @@ export function PabiliForm() {
     if (submitting) return; // guard against double taps
     setError(null);
     if (!hasItems) { setError('Please add at least one item to buy.'); return; }
+    if (!addressText.trim()) { setError('Please give your complete delivery address.'); return; }
     if (!form.pay) { setError('Please choose a payment method.'); return; }
     if (!dropoff) { setError('Please pin where the order should be delivered.'); return; }
     if (needsPinsForFee) { setError('Please pin where to buy so we can compute the delivery fee.'); return; }
@@ -216,6 +225,7 @@ export function PabiliForm() {
         <LocationPicker value={dropoff} onChange={setDropoff} />
         <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the rider should deliver.</p>
       </div>
+      <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Estimated cost (₱)">
           <input type="number" min={0} className={inputCls} value={form.estimate}
@@ -263,10 +273,11 @@ export function PabiliForm() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !hasItems || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
+      <button type="submit" disabled={submitting || !hasItems || !addressText.trim() || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
         {submitting ? 'Sending…'
           : !hasItems ? 'Add what to buy'
+          : !addressText.trim() ? 'Add your complete address'
           : areaRequired && !area ? 'Choose your delivery area'
           : needsPinsForFee || !dropoff ? 'Pin both locations'
           : !form.pay ? 'Choose a payment method'

@@ -25,6 +25,8 @@ export interface FoodCheckoutInput {
   areaBarangay?: string;
   /** Recipient when delivering to someone else (sender still pays). */
   recipientName?: string;
+  /** Written drop-off address, so the rider isn't relying on the pin alone. */
+  deliveryAddress?: string;
   recipientContact?: string;
   deliveryFee: number;
   lines: CartLine[];
@@ -54,6 +56,7 @@ export interface FoodOrderRow {
   area_city: string | null;
   area_barangay: string | null;
   recipient_name: string | null;
+  delivery_address: string | null;
   recipient_contact: string | null;
   notes: string | null;
 }
@@ -105,6 +108,7 @@ export function buildFoodOrder(
     area_city: input.areaCity?.trim() || null,
     area_barangay: input.areaBarangay?.trim() || null,
       recipient_name: input.recipientName?.trim() || null,
+      delivery_address: input.deliveryAddress?.trim() || null,
       recipient_contact: input.recipientContact?.trim() || null,
       notes: input.notes?.trim() || null,
     },

@@ -9,6 +9,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
+import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
@@ -19,6 +20,10 @@ interface FormState {
   feePayer: FeePayer;
   pickupContact: string;
   dropoffContact: string;
+  /** Full name of whoever receives it — the rider needs someone to ask for. */
+  receiverName: string;
+  pickupAddress: string;
+  dropoffAddress: string;
   customerContact: string;
   notes: string;
   pay: PayChoice | null;
@@ -26,7 +31,8 @@ interface FormState {
 
 const initial: FormState = {
   itemDescription: '', feePayer: 'sender',
-  pickupContact: '', dropoffContact: '', customerContact: '', notes: '', pay: null,
+  pickupContact: '', dropoffContact: '', receiverName: '', pickupAddress: '', dropoffAddress: '',
+  customerContact: '', notes: '', pay: null,
 };
 
 export function PadalaForm() {
@@ -36,6 +42,11 @@ export function PadalaForm() {
   const [pickup, setPickup] = useState<LatLngValue | null>(null);   // where to get it
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
+  const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
+  useAddressPrefill({
+    address: savedAddress, loaded: addressLoaded, dropoff: pickup, text: form.pickupAddress,
+    setDropoff: setPickup, setText: (v) => set('pickupAddress', v),
+  });
   const [areaRequired, setAreaRequired] = useState(false);
   const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   // Delivery pricing is operator-controlled: recalculated from the pinned
@@ -79,8 +90,8 @@ export function PadalaForm() {
       areaProvince: area?.province,
       areaCity: area?.city,
       areaBarangay: area?.barangay,
-      pickup: { contact: form.pickupContact, lat: pickup?.lat, lng: pickup?.lng },
-      dropoff: { contact: form.dropoffContact, lat: dropoff?.lat, lng: dropoff?.lng },
+      pickup: { contact: form.pickupContact, lat: pickup?.lat, lng: pickup?.lng, address: form.pickupAddress },
+      dropoff: { contact: form.dropoffContact, name: form.receiverName, lat: dropoff?.lat, lng: dropoff?.lng, address: form.dropoffAddress },
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
       paid: form.pay === 'online',
@@ -91,6 +102,9 @@ export function PadalaForm() {
     e.preventDefault();
     if (submitting) return; // guard against double taps
     setError(null);
+    if (!form.receiverName.trim()) { setError("Please give the receiver's complete name."); return; }
+    if (!form.dropoffAddress.trim()) { setError('Please give the complete drop-off address.'); return; }
+    if (!form.pickupAddress.trim()) { setError('Please give the complete pickup address.'); return; }
     if (!form.pay) { setError('Please choose a payment method.'); return; }
     if (!pickup) { setError('Please pin the pickup location.'); return; }
     if (!dropoff) { setError('Please pin the drop-off location.'); return; }
@@ -157,6 +171,13 @@ export function PadalaForm() {
         <LocationPicker value={dropoff} onChange={setDropoff} />
         <p className="mt-1 text-xs text-black/40">Where the item should be dropped off.</p>
       </div>
+      <DeliveryAddressField value={form.dropoffAddress} onChange={(v) => set('dropoffAddress', v)}
+        label="Complete drop-off address" />
+      <Field label="Receiver's complete name *">
+        <input className={inputCls} value={form.receiverName}
+          onChange={(e) => set('receiverName', e.target.value)}
+          placeholder="Juan Dela Cruz" required />
+      </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Pickup contact #">
           <input className={inputCls} value={form.pickupContact}
@@ -198,7 +219,7 @@ export function PadalaForm() {
         <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !form.pay || !pickup || !dropoff || (areaRequired && !area)}
+      <button type="submit" disabled={submitting || !form.pay || !pickup || !dropoff || !form.receiverName.trim() || !form.dropoffAddress.trim() || !form.pickupAddress.trim() || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
         {submitting ? 'Sending…' : areaRequired && !area ? 'Choose your delivery area' : !pickup || !dropoff ? 'Pin pickup and drop-off' : !form.pay ? 'Choose a payment method' : 'Request a rider'}
       </button>

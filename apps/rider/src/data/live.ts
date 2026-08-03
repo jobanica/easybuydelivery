@@ -59,6 +59,8 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     pickupLng: row.pickup_lng == null ? null : Number(row.pickup_lng),
     deliveryLat: row.delivery_lat == null ? null : Number(row.delivery_lat),
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),
+    deliveryAddress: (row.delivery_address as string) ?? null,
+    pickupAddress: (row.pickup_address as string) ?? null,
     notes: (row.notes as string) ?? null,
     paymentReceiptUrl: (row.payment_receipt_url as string) ?? null,
     paymentReference: (row.payment_reference as string) ?? null,

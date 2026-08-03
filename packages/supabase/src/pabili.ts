@@ -48,6 +48,8 @@ export interface PabiliRequestInput {
   pickupLng?: number;
   deliveryLat?: number;
   deliveryLng?: number;
+  /** Written drop-off address, so the rider isn't relying on the pin alone. */
+  deliveryAddress?: string;
   /** Serviceable area chosen by the customer (province / city / barangay). */
   areaProvince?: string;
   areaCity?: string;
@@ -79,6 +81,7 @@ export interface PabiliOrderRow {
   area_city: string | null;
   area_barangay: string | null;
   customer_contact: string;
+  delivery_address: string | null;
   notes: string | null;
 }
 
@@ -115,6 +118,7 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     area_city: input.areaCity?.trim() || null,
     area_barangay: input.areaBarangay?.trim() || null,
     customer_contact: input.customerContact,
+    delivery_address: input.deliveryAddress?.trim() || null,
     notes: (whereLine + noteLine).trim() || null,
   };
 }
