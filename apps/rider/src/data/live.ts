@@ -16,6 +16,8 @@ import {
   riderProposeReplacement,
   listOrderAddons,
   respondToAddon as respondToAddonRpc,
+  declineOrder as declineOrderRpc,
+  listMyDeclinedOrderIds,
   getRiderOnline,
   setRiderOnline,
   type SupabaseClient,
@@ -122,6 +124,12 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async accept(orderId) {
       await acceptOrder(db, orderId, riderId);
+    },
+    async declineOrder(orderId) {
+      await declineOrderRpc(db, orderId);
+    },
+    async getDeclinedOrderIds() {
+      return listMyDeclinedOrderIds(db, riderId);
     },
     async releaseOrder(orderId, reason) {
       await releaseOrder(db, orderId, reason);

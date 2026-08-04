@@ -70,6 +70,10 @@ export interface RiderData {
   /** Completed deliveries between two business days (inclusive), for earnings. */
   getEarnings(fromDay: string, toDay: string): Promise<EarningRecord[]>;
   accept(orderId: string): Promise<void>;
+  /** Pass on a pool request. Recorded, so the skip survives a new device. */
+  declineOrder(orderId: string): Promise<void>;
+  /** Requests this rider has already passed on. */
+  getDeclinedOrderIds(): Promise<string[]>;
   releaseOrder(orderId: string, reason?: string): Promise<void>;
   /** Tell the customer you're outside. Alerts their phone.  */
   markArrived(orderId: string): Promise<void>;

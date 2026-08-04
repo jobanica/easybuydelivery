@@ -93,6 +93,11 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
     } catch (e) {
       setError(errMessage(e));
     }
+    // Passes recorded from any device, so a skip doesn't come back on a new one.
+    try {
+      const ids = await data.getDeclinedOrderIds();
+      if (ids.length) setDeclined((d) => new Set([...d, ...ids]));
+    } catch { /* the local list still holds */ }
   }, [data]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -116,13 +121,21 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const transfers = pool.filter((o) => o.isTransfer);
   const newRequests = pool.filter((o) => !o.isTransfer);
 
-  /** Pass on the request at the head of the queue; the next one opens up. */
+  /**
+   * Pass on the request at the head of the queue; the next one opens up.
+   *
+   * Hidden locally straight away so the queue moves on a tap, and recorded in
+   * the background — the record is what carries the skip to the rider's other
+   * devices, and what the operator's decline history is built from. A failed
+   * write must never leave the rider stuck on a request they've turned down.
+   */
   function passRequest(orderId: string) {
     setDeclined((d) => {
       const next = new Set(d).add(orderId);
       savePassed([...next]);
       return next;
     });
+    void data.declineOrder(orderId).catch(() => { /* local skip already applied */ });
   }
 
   async function toggleOnline() {

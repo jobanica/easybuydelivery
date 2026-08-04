@@ -9,6 +9,7 @@ export * from './stores.ts';
 export * from './import.ts';
 export * from './riders.ts';
 export * from './adminRiders.ts';
+export * from './riderEvents.ts';
 export * from './settlement.ts';
 export * from './adminSettlement.ts';
 export * from './staff.ts';

@@ -141,6 +141,7 @@ export function createPreviewData(): RiderData {
     { amount: 22.5, businessDay: isoDay(-1), settled: false },
   ];
   const earnings: EarningRecord[] = seedEarnings();
+  const declined = new Set<string>();
 
   return {
     live: false,
@@ -150,6 +151,8 @@ export function createPreviewData(): RiderData {
     async getActiveOrders() { return [...active]; },
     async getLedger() { return [...ledger]; },
     async getEarnings(fromDay, toDay) { return filterEarnings(earnings, { from: fromDay, to: toDay }); },
+    async declineOrder(orderId) { declined.add(orderId); },
+    async getDeclinedOrderIds() { return [...declined]; },
     async accept(orderId) {
       const o = open.find((x) => x.id === orderId);
       if (!o) return;

@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase.ts';
 import { Card, peso } from './ui.tsx';
 import { LiveOrders } from './LiveOrders.tsx';
 import { OnDuty } from './OnDuty.tsx';
+import { RefusalSummary } from './Refusals.tsx';
 import { IconStore, IconRiders, IconOrders, IconWallet, IconScooter } from './icons.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -67,6 +68,8 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
           <LiveOrders embedded />
         </Card>
       </div>
+
+      <RefusalSummary onNavigate={onNavigate} />
     </div>
   );
 }
