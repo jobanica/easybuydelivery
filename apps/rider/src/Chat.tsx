@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listOrderMessages, sendOrderMessage, subscribeOrderMessages, type OrderMessage } from '@ebd/supabase';
+import { listOrderMessages, sendOrderMessage, uploadChatPhoto, subscribeOrderMessages, type OrderMessage } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 
 /** A button that opens the order chat and shows an unread-message badge. */
@@ -44,6 +44,7 @@ export function Chat({ orderId, role, title, onClose }: {
   const [msgs, setMsgs] = useState<OrderMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +67,20 @@ export function Chat({ orderId, role, title, onClose }: {
     finally { setBusy(false); }
   }
 
+  /** A photo can carry the whole message — send it with whatever was typed. */
+  async function sendPhoto(file: File) {
+    if (!supabase) return;
+    setBusy(true); setErr(null);
+    const caption = text.trim();
+    try {
+      const url = await uploadChatPhoto(supabase, orderId, file);
+      await sendOrderMessage(supabase, orderId, role, caption, url);
+      setText('');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not send that photo.');
+    } finally { setBusy(false); }
+  }
+
   return (
     <div className="fixed inset-0 z-[10000] flex flex-col justify-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
       <div className="flex h-[75vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
@@ -79,15 +94,33 @@ export function Chat({ orderId, role, title, onClose }: {
             const mine = m.sender_role === role;
             return (
               <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                <span className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-brand-green text-white' : 'bg-black/[0.06] text-black'}`}>
-                  {m.body}
+                <span className={`max-w-[78%] overflow-hidden rounded-2xl text-sm ${mine ? 'bg-brand-green text-white' : 'bg-black/[0.06] text-black'}`}>
+                  {m.image_url && (
+                    <a href={m.image_url} target="_blank" rel="noreferrer" className="block">
+                      <img src={m.image_url} alt="Shared photo" className="max-h-64 w-full object-cover" />
+                    </a>
+                  )}
+                  {m.body && <span className="block px-3 py-2">{m.body}</span>}
                 </span>
               </div>
             );
           })}
           <div ref={endRef} />
         </div>
-        <div className="flex gap-2 border-t border-black/5 p-3">
+        {err && <p className="px-3 pb-1 text-xs text-red-600">{err}</p>}
+        <div className="flex items-center gap-2 border-t border-black/5 p-3">
+          <label aria-label="Take a photo"
+            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-black/[0.06] text-base">
+            📷
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={busy}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendPhoto(f); e.target.value = ''; }} />
+          </label>
+          <label aria-label="Attach a photo"
+            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-black/[0.06] text-base">
+            📎
+            <input type="file" accept="image/*" className="hidden" disabled={busy}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendPhoto(f); e.target.value = ''; }} />
+          </label>
           <input value={text} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
             placeholder="Message…"

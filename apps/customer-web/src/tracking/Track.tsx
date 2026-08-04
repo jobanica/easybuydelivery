@@ -10,6 +10,7 @@ import { PayRider } from '../PayRider.tsx';
 import { ChatButton } from '../Chat.tsx';
 import { peso } from '../ui.tsx';
 import { errMessage } from '@ebd/shared';
+import { useArrivalAlert, ArrivalBanner, NotificationOptIn } from '../ArrivalAlert.tsx';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
 function OrderItemsCard({ delivery, onChange }: { delivery: ActiveDelivery; onChange: () => void }) {
@@ -265,6 +266,7 @@ export function Track({ onClose }: { onClose: () => void }) {
   const [delivery, setDelivery] = useState<ActiveDelivery | null>(null);
   const [riderInfo, setRiderInfo] = useState<OrderRiderInfo | null>(null);
   const [storeFee, setStoreFee] = useState(0);
+  useArrivalAlert(delivery?.arrived_at, riderInfo?.name);
 
   useEffect(() => {
     if (!supabase) return;
@@ -296,6 +298,8 @@ export function Track({ onClose }: { onClose: () => void }) {
   if (status === 'ok' && delivery?.pickup && delivery.dropoff) {
     return (
       <div className="space-y-3">
+        <ArrivalBanner arrivedAt={delivery.arrived_at} riderName={riderInfo?.name} />
+        <NotificationOptIn show={!delivery.arrived_at} />
         <TrackingMap pickup={delivery.pickup} dropoff={delivery.dropoff} orderId={delivery.id}
           deliveryStatus={delivery.status} courier={riderInfo} onClose={onClose} />
         <ChatButton orderId={delivery.id} role="customer" title="Chat with your rider" />
@@ -327,6 +331,7 @@ export function Track({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
+      {delivery && <ArrivalBanner arrivedAt={delivery.arrived_at} riderName={riderInfo?.name} />}
       {delivery && <OrderItemsCard delivery={delivery} onChange={() => void load()} />}
       {delivery?.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
       {delivery?.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}

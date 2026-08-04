@@ -731,6 +731,7 @@ function AddressLine({ label, address, icon }: { label: string; address: string;
 function DeliveryCard({ order, data, onChange, payoutNumber }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
   const [note, setNote] = useState<string | null>(null);
+  const [arriving, setArriving] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [releaseErr, setReleaseErr] = useState<string | null>(null);
   const next = nextStatus(order);
@@ -743,6 +744,16 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
   useLocationPublisher(order.id, order.status);
 
   const hasGoods = order.status === 'picked_up' || order.status === 'on_the_way';
+
+  /** Only worth offering once the goods are with the rider and moving. */
+  const canAnnounceArrival = order.status === 'picked_up' || order.status === 'on_the_way';
+
+  async function announceArrival() {
+    setArriving(true);
+    try { await data.markArrived(order.id); await onChange(); }
+    catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    finally { setArriving(false); }
+  }
 
   async function release() {
     const msg = hasGoods
@@ -917,6 +928,20 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         {/* GCash-to-rider: check the receipt (uploaded or shown in person). */}
         {isRiderQr && order.status !== 'cancelled' && (
           <PaymentProof order={order} data={data} onChange={onChange} />
+        )}
+
+        {canAnnounceArrival && (
+          order.arrivedAt ? (
+            <p className="mt-3 rounded-xl bg-brand-green/10 px-3 py-2 text-center text-xs font-medium text-green-800">
+              ✅ Customer alerted that you're outside ·{' '}
+              {new Date(order.arrivedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          ) : (
+            <button onClick={announceArrival} disabled={arriving}
+              className="mt-3 w-full rounded-xl bg-brand-yellow py-3 text-sm font-extrabold text-yellow-900 disabled:opacity-50">
+              {arriving ? 'Telling them…' : "🔔 I've arrived — tell the customer"}
+            </button>
+          )
         )}
 
         {/* Collect + advance */}
@@ -1538,10 +1563,9 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
 
   async function save() {
     if (total <= 0) return;
-    if (!receiptUrl) { setErr('Please attach a photo of the store receipt first.'); return; }
     setBusy(true); setErr(null);
     try {
-      const res = await data.setActual(order, Math.round(total * 100) / 100, receiptUrl);
+      const res = await data.setActual(order, Math.round(total * 100) / 100, receiptUrl ?? undefined);
       onNote(res.overCap ? 'Over the cap — confirm with the customer before collecting.' : null);
       await onChange();
       setOpen(false);
@@ -1612,7 +1636,9 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
 
       {/* The customer is billed this amount, so back it with the actual receipt. */}
       <div className="mt-3 border-t border-black/10 pt-2">
-        <p className="text-xs font-medium">🧾 Photo of the store receipt <span className="text-red-600">*</span></p>
+        <p className="text-xs font-medium">
+          🧾 Photo of the store receipt <span className="font-normal text-black/40">(optional)</span>
+        </p>
         {receiptUrl ? (
           <div className="mt-1 flex items-center gap-3">
             <a href={receiptUrl} target="_blank" rel="noreferrer">
@@ -1627,7 +1653,7 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
           </div>
         ) : (
           <label className="mt-1 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-black/25 py-3 text-sm font-medium text-black/60">
-            {uploading ? 'Uploading…' : '📷 Take / upload receipt photo'}
+            {uploading ? 'Uploading…' : '📷 Attach receipt photo (optional)'}
             <input type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickReceipt(f); e.target.value = ''; }} />
           </label>
@@ -1636,9 +1662,9 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
 
       <div className="mt-2 flex gap-2">
-        <button onClick={save} disabled={busy || total <= 0 || !receiptUrl || uploading}
+        <button onClick={save} disabled={busy || total <= 0 || uploading}
           className="flex-1 rounded-lg bg-brand-purple py-2.5 text-sm font-bold text-white disabled:opacity-50">
-          {busy ? 'Saving…' : !receiptUrl ? 'Attach the receipt photo' : `Save ${peso(total)} as goods total`}
+          {busy ? 'Saving…' : `Save ${peso(total)} as goods total`}
         </button>
         {saved != null && (
           <button onClick={() => setOpen(false)}

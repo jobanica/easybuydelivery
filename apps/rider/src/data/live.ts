@@ -10,6 +10,7 @@ import {
   uploadPabiliReceipt,
   createSettlement,
   riderConfirmPayment,
+  riderMarkArrived,
   riderMarkItemSoldOut,
   riderProposeReplacement,
   listOrderAddons,
@@ -65,6 +66,7 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     deliveryLng: row.delivery_lng == null ? null : Number(row.delivery_lng),
     deliveryAddress: (row.delivery_address as string) ?? null,
     pickupAddress: (row.pickup_address as string) ?? null,
+    arrivedAt: (row.arrived_at as string) ?? null,
     notes: (row.notes as string) ?? null,
     paymentReceiptUrl: (row.payment_receipt_url as string) ?? null,
     paymentReference: (row.payment_reference as string) ?? null,
@@ -108,6 +110,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async releaseOrder(orderId, reason) {
       await releaseOrder(db, orderId, reason);
+    },
+    async markArrived(orderId) {
+      await riderMarkArrived(db, orderId);
     },
     async confirmPayment(orderId, note) {
       await riderConfirmPayment(db, orderId, note);

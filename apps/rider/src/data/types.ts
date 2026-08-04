@@ -41,6 +41,8 @@ export interface RiderOrder {
   /** Written addresses — the pin gets them to the street, this to the door. */
   deliveryAddress: string | null;
   pickupAddress: string | null;
+  /** Set once the rider has told the customer they're at the door. */
+  arrivedAt: string | null;
   notes: string | null;
   /** Proof of a GCash-to-rider payment (uploaded by the customer, if any). */
   paymentReceiptUrl: string | null;
@@ -65,6 +67,8 @@ export interface RiderData {
   getLedger(): Promise<LedgerEntry[]>;
   accept(orderId: string): Promise<void>;
   releaseOrder(orderId: string, reason?: string): Promise<void>;
+  /** Tell the customer you're outside. Alerts their phone.  */
+  markArrived(orderId: string): Promise<void>;
   confirmPayment(orderId: string, note?: string): Promise<void>;
   /** Store ran out: drop the item from the bill (no customer approval needed). */
   markSoldOut(itemId: string): Promise<void>;

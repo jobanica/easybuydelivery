@@ -44,7 +44,7 @@ export function createPreviewData(): RiderData {
       buyStores: [],
       store_contact: '0918 555 0200', stores: [{ id: 's2', name: 'Kowloon House', contact: '0918 555 0200', lat: 14.18, lng: 121.246 }],
       items: [{ id: 'it-1', store_id: 's2', status: 'ok' as const, replacesItemId: null, name: 'Chicken Mami', qty: 2, unitPrice: 115, notes: null }, { id: 'it-2', store_id: 's2', status: 'ok' as const, replacesItemId: null, name: 'Siopao', qty: 2, unitPrice: 45, notes: null }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, deliveryLat: 14.192, deliveryLng: 121.258, notes: null,
+      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.192, deliveryLng: 121.258, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: true, transferReason: 'Flat tire', transferHadGoods: true,
       transferredFromName: 'Ben Cruz', transferredFromContact: '0918 555 2000',
@@ -58,7 +58,7 @@ export function createPreviewData(): RiderData {
       buyStores: [],
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
       items: [{ id: 'it-3', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Chicken Adobo', qty: 2, unitPrice: 95, notes: null }, { id: 'it-4', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Extra Rice', qty: 2, unitPrice: 20, notes: null }, { id: 'it-5', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Softdrink', qty: 1, unitPrice: 50, notes: 'Cold' }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
+      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.186, deliveryLng: 121.256, notes: 'Extra spicy, leave at the gate.',
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
@@ -71,7 +71,7 @@ export function createPreviewData(): RiderData {
       buyStores: [{ name: 'Botica Central', lat: null, lng: null }, { name: 'Aling Nena Store', lat: null, lng: null }],
       budget_cap: 600, actual_amount: null, goodsReceiptUrl: null, store_contact: null, stores: [],
       items: [{ id: 'it-6', store_id: null, status: 'ok' as const, replacesItemId: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { id: 'it-7', store_id: null, status: 'ok' as const, replacesItemId: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
+      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
@@ -84,7 +84,7 @@ export function createPreviewData(): RiderData {
       buyStores: [],
       store_contact: null, stores: [],
       items: [{ id: 'it-8', store_id: null, status: 'ok' as const, replacesItemId: null, name: 'Documents envelope', qty: 1, unitPrice: 0, notes: null }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
+      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
@@ -97,7 +97,7 @@ export function createPreviewData(): RiderData {
       buyStores: [],
       store_contact: '0918 555 0100', stores: [{ id: 's1', name: 'Barrio Diner', contact: '0918 555 0100', lat: 14.176, lng: 121.244 }],
       items: [{ id: 'it-9', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Pork Sisig', qty: 1, unitPrice: 165, notes: null }, { id: 'it-10', store_id: 's1', status: 'ok' as const, replacesItemId: null, name: 'Rice', qty: 4, unitPrice: 20, notes: null }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
+      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: RECEIPT_PLACEHOLDER, paymentReference: '9012 3456 7890', paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
@@ -142,6 +142,9 @@ export function createPreviewData(): RiderData {
     },
     async getAddons() { return []; },
     async respondToAddon() { /* preview: nothing to persist */ },
+    async markArrived(orderId) {
+      active = active.map((o) => (o.id === orderId ? { ...o, arrivedAt: new Date().toISOString() } : o));
+    },
     async confirmPayment(orderId) {
       active = active.map((o) => o.id === orderId
         ? { ...o, payment_status: 'paid' as const, paymentConfirmedAt: new Date().toISOString() }

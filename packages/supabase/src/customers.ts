@@ -190,6 +190,9 @@ export interface ActiveDelivery {
   convenience_fee: number;
   estimated_amount: number | null;
   actual_amount: number | null;
+  /** Set the moment the rider says they're at the door. */
+  arrived_at: string | null;
+  delivery_address: string | null;
 }
 
 /**
@@ -200,7 +203,7 @@ export interface ActiveDelivery {
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
+    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, arrived_at, delivery_address, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
     .eq('customer_id', customerId)
     .not('rider_id', 'is', null)
     .not('status', 'in', '(delivered,cancelled)')
@@ -214,6 +217,7 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     goods_cost: number | null; delivery_fee: number | null;
     store_fee_total: number | null; convenience_fee: number | null;
     estimated_amount: number | null; actual_amount: number | null;
+    arrived_at: string | null; delivery_address: string | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
     order_items?: { id: string; name: string; qty: number; unit_price: number; status: string | null; replaces_item_id: string | null }[];
   } | undefined;
@@ -245,6 +249,8 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     convenience_fee: Number(row.convenience_fee ?? 0),
     estimated_amount: row.estimated_amount == null ? null : Number(row.estimated_amount),
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
+    arrived_at: row.arrived_at ?? null,
+    delivery_address: row.delivery_address ?? null,
   };
 }
 
