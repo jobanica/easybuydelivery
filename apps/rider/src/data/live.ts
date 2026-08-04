@@ -42,6 +42,10 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
     goodsReceiptUrl: (row.goods_receipt_url as string) ?? null,
     store_contact: (row.store_contact as string) ?? null,
+    // Pabili names its stores ad-hoc on the order; food links registered ones.
+    buyStores: Array.isArray(row.buy_stores)
+      ? (row.buy_stores as { name: string; lat: number | null; lng: number | null }[])
+      : [],
     stores: Array.isArray(row.order_stores)
       ? (row.order_stores as { store: { id: string | null; name: string | null; contact_number: string | null; lat: number | null; lng: number | null } | null }[])
           .map((os) => ({ id: os.store?.id ?? null, name: os.store?.name ?? null, contact: os.store?.contact_number ?? null, lat: os.store?.lat ?? null, lng: os.store?.lng ?? null }))

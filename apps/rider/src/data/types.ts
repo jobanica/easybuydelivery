@@ -28,6 +28,8 @@ export interface RiderOrder {
   store_contact: string | null;
   /** Linked store(s) for the order, so the rider can call the restaurant. */
   stores: { id: string | null; name: string | null; contact: string | null; lat: number | null; lng: number | null }[];
+  /** Pabili: ad-hoc stores to visit. Each past the first billed a store fee. */
+  buyStores: { name: string; lat: number | null; lng: number | null }[];
   /** What the customer ordered (store_id links each item to its store). */
   items: { id: string | null; store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null; status: OrderItemStatus; replacesItemId: string | null }[];
   /** Where the rider buys/collects (pabili & padala pin the source). */

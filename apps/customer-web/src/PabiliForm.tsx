@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
+  DEFAULT_FEE_CONFIG, storeFeeTotal,
   type DeliveryFeeModel, type DistanceFeeConfig,
   errMessage,
 } from '@ebd/shared';
 import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, pabiliItemsSummary,
-  type PabiliRequestInput, type PabiliItemInput } from '@ebd/supabase';
+  type PabiliRequestInput, type PabiliItemInput, type PabiliStoreInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
@@ -40,6 +41,9 @@ export function PabiliForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const [addressText, setAddressText] = useState('');
+  const [stores, setStores] = useState<PabiliStoreInput[]>([{ name: '' }]);
+  // Operator's per-store fee; each store past the first bills one.
+  const [perStoreFee, setPerStoreFee] = useState(DEFAULT_FEE_CONFIG.perStoreFee);
   const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
   useAddressPrefill({
     address: savedAddress, loaded: addressLoaded, dropoff, text: addressText,
@@ -56,6 +60,7 @@ export function PabiliForm() {
     if (!supabase || !isSupabaseConfigured) return;
     getAppSettings(supabase).then((s) => {
       setConvenienceFee(s.convenience_fee_pabili ?? s.convenience_fee);
+      setPerStoreFee(Number(s.per_store_fee ?? DEFAULT_FEE_CONFIG.perStoreFee));
       setFeeCfg({
         model: s.delivery_fee_model,
         flatFee: s.default_delivery_fee,
@@ -74,12 +79,23 @@ export function PabiliForm() {
   }), [feeCfg, buyAt, dropoff]);
   // Per-km pricing needs both pins to measure the leg.
   const needsPinsForFee = feeCfg.model === 'per_km' && (!buyAt || !dropoff);
+  const namedStores = stores.filter((st) => st.name.trim() !== '');
+  const storeCount = Math.max(1, namedStores.length);
+  const storeFee = storeFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, perStoreFee });
   // What the customer actually pays: goods (estimate for now) + fees. The final
   // amount follows the rider's real receipt, capped by their spending cap.
-  const estimatedTotal = form.estimate + deliveryFee + convenienceFee;
-  const maxTotal = form.cap + deliveryFee + convenienceFee;
+  const estimatedTotal = form.estimate + deliveryFee + storeFee + convenienceFee;
+  const maxTotal = form.cap + deliveryFee + storeFee + convenienceFee;
   const capValid = form.cap >= form.estimate;
   const hasItems = form.items.some((i) => i.name.trim() !== '');
+
+  function setStore(i: number, patch: Partial<PabiliStoreInput>) {
+    setStores((ss) => ss.map((st, j) => (j === i ? { ...st, ...patch } : st)));
+  }
+  function addStore() { setStores((ss) => [...ss, { name: '' }]); }
+  function removeStore(i: number) {
+    setStores((ss) => (ss.length === 1 ? [{ name: '' }] : ss.filter((_, j) => j !== i)));
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -107,7 +123,8 @@ export function PabiliForm() {
       items: form.items,
       estimate: form.estimate,
       cap: form.cap,
-      where: form.where,
+      where: namedStores[0]?.name ?? form.where,
+      stores: namedStores,
       areaProvince: area?.province,
       areaCity: area?.city,
       areaBarangay: area?.barangay,
@@ -151,7 +168,7 @@ export function PabiliForm() {
     try {
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(form.customerContact);
-        setCreatedId(await createPabiliOrder(supabase, toInput(customerId)));
+        setCreatedId(await createPabiliOrder(supabase, toInput(customerId), { ...DEFAULT_FEE_CONFIG, perStoreFee }));
       } else {
         buildPabiliOrderRow(toInput('preview-customer'));
         setCreatedId('preview-only');
@@ -210,10 +227,33 @@ export function PabiliForm() {
           One line per item so your rider can tick them off as they shop.
         </p>
       </div>
-      <Field label="Where? (optional — leave blank for nearest store)">
-        <input className={inputCls} value={form.where}
-          onChange={(e) => set('where', e.target.value)} placeholder="e.g. Botica Central" />
-      </Field>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-black/70">
+          Which store? <span className="font-normal text-black/40">(optional — leave blank for the nearest)</span>
+        </span>
+        <div className="space-y-2">
+          {stores.map((st, i) => (
+            <div key={i} className="flex gap-2">
+              <input value={st.name} aria-label={`Store ${i + 1}`}
+                onChange={(e) => setStore(i, { name: e.target.value })}
+                placeholder={i === 0 ? 'e.g. Botica Central' : 'Another store'}
+                className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30" />
+              <button type="button" onClick={() => removeStore(i)} aria-label={`Remove store ${i + 1}`}
+                disabled={stores.length === 1}
+                className="shrink-0 rounded-lg border border-black/10 px-3 text-sm text-black/40 disabled:opacity-30">✕</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addStore}
+          className="mt-2 w-full rounded-lg border border-dashed border-brand-purple/40 py-2 text-sm font-semibold text-brand-purple">
+          ＋ Add another store
+        </button>
+        <p className="mt-1 text-xs text-black/40">
+          {namedStores.length > 1
+            ? `${namedStores.length} stores · extra stops add ${peso(storeFee)} in store fees.`
+            : `Each extra store adds a ${peso(perStoreFee)} store fee.`}
+        </p>
+      </div>
       <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-black/40"> (optional)</span>}</span>
@@ -259,6 +299,7 @@ export function PabiliForm() {
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label="Estimated goods" value={peso(form.estimate)} />
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
+        {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
           <span>Estimated total to pay</span>

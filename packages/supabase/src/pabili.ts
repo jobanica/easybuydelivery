@@ -8,12 +8,21 @@
 
 import {
   validateBudget,
-  pabiliCommission,
+  commission,
+  storeFeeTotal,
   needsOverBudgetConfirmation,
+  DEFAULT_FEE_CONFIG,
+  type FeeConfig,
   type PabiliBudget,
   type PaymentMethod,
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
+
+export interface PabiliStoreInput {
+  name: string;
+  lat?: number | null;
+  lng?: number | null;
+}
 
 export interface PabiliItemInput {
   qty: number;
@@ -43,6 +52,8 @@ export interface PabiliRequestInput {
   cap: number;
   /** Where to buy (specific store or "any nearest"). */
   where?: string;
+  /** Every store the rider must visit. Each one past the first bills a store fee. */
+  stores?: PabiliStoreInput[];
   /** Where the rider should buy (pickup pin). */
   pickupLat?: number;
   pickupLng?: number;
@@ -67,7 +78,8 @@ export interface PabiliOrderRow {
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   convenience_fee: number;
-  store_fee_total: 0;
+  store_fee_total: number;
+  buy_stores: PabiliStoreInput[];
   goods_cost: 0;
   commission_amount: number;
   estimated_amount: number;
@@ -86,12 +98,22 @@ export interface PabiliOrderRow {
 }
 
 /** Build the `orders` row for a Pabili request (pure, validated). */
-export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
+export function buildPabiliOrderRow(
+  input: PabiliRequestInput,
+  config: FeeConfig = DEFAULT_FEE_CONFIG,
+): PabiliOrderRow {
   if (!input.itemsDescription.trim()) {
     throw new Error('itemsDescription is required for a Pabili order');
   }
   const budget: PabiliBudget = { estimate: input.estimate, cap: input.cap };
   validateBudget(budget);
+
+  const stores = (input.stores ?? [])
+    .filter((st) => st.name.trim() !== '')
+    .map((st) => ({ name: st.name.trim(), lat: st.lat ?? null, lng: st.lng ?? null }));
+  // A pabili run always touches at least one store, even an unnamed "nearest".
+  const storeCount = Math.max(1, stores.length);
+  const storeFees = storeFeeTotal(storeCount, config);
 
   const whereLine = input.where?.trim() ? `Buy at: ${input.where.trim()}\n` : '';
   const noteLine = input.notes?.trim() ?? '';
@@ -104,9 +126,10 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
     payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
     convenience_fee: input.convenienceFee ?? 0,
-    store_fee_total: 0,
+    store_fee_total: storeFees,
+    buy_stores: stores,
     goods_cost: 0, // unknown until the rider buys
-    commission_amount: pabiliCommission(input.deliveryFee),
+    commission_amount: commission({ deliveryFee: input.deliveryFee, storeCount }, config),
     estimated_amount: input.estimate,
     budget_cap: input.cap,
     item_description: input.itemsDescription.trim(),
@@ -126,8 +149,9 @@ export function buildPabiliOrderRow(input: PabiliRequestInput): PabiliOrderRow {
 export async function createPabiliOrder(
   db: SupabaseClient,
   input: PabiliRequestInput,
+  config?: FeeConfig,
 ): Promise<string> {
-  const row = buildPabiliOrderRow(input);
+  const row = buildPabiliOrderRow(input, config);
   const { data, error } = await db.from('orders').insert(row).select('id').single();
   if (error) throw error;
   const id = (data as { id: string }).id;
