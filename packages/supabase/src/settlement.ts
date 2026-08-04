@@ -23,6 +23,38 @@ export async function listRiderActiveOrders(db: SupabaseClient, riderId: string)
   return data ?? [];
 }
 
+/** Manila is UTC+8 year-round (no DST), so a business day is a fixed offset. */
+const MANILA_OFFSET = '+08:00';
+
+/**
+ * The rider's completed deliveries between two Philippine business days
+ * (inclusive), newest first — the raw material for the earnings view.
+ *
+ * `delivered_at` is stamped when the order flips to delivered (migration 0054),
+ * so a run that was accepted before midnight and finished after it counts on the
+ * day it was actually completed — the same day the commission ledger books.
+ */
+export async function listRiderEarnings(
+  db: SupabaseClient,
+  riderId: string,
+  fromDay: string,
+  toDay: string,
+) {
+  // Half-open upper bound: everything before 00:00 Manila the day after `toDay`.
+  const dayAfter = new Date(`${toDay}T00:00:00Z`);
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+  const { data, error } = await db
+    .from('orders')
+    .select('id, service_type, delivery_fee, store_fee_total, convenience_fee, commission_amount, payment_method, delivered_at')
+    .eq('rider_id', riderId)
+    .eq('status', 'delivered')
+    .gte('delivered_at', `${fromDay}T00:00:00${MANILA_OFFSET}`)
+    .lt('delivered_at', `${dayAfter.toISOString().slice(0, 10)}T00:00:00${MANILA_OFFSET}`)
+    .order('delivered_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** The rider's commission ledger entries. */
 export async function listRiderLedger(db: SupabaseClient, riderId: string) {
   const { data, error } = await db

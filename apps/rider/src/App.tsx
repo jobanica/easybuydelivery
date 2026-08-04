@@ -6,6 +6,16 @@ import {
   owedBalance,
   pabiliCollectible,
   riderEarnings,
+  sortRequestQueue,
+  haversineMeters,
+  summarizeEarnings,
+  presetRange,
+  normalizeRange,
+  shiftDay,
+  RANGE_LABELS,
+  type RangePreset,
+  type EarningRecord,
+  type LatLng,
   type LedgerEntry,
   type OrderStatus,
   errMessage,
@@ -21,6 +31,7 @@ import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
+import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
 import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
@@ -35,6 +46,23 @@ const SERVICES: { key: string; label: string }[] = [
 const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
 
+// Requests the rider has passed on. Persisted, because the queue only means
+// something if a skip sticks: without this, every pool refresh would put the
+// request they just declined back at the head and block them all over again.
+const PASSED_KEY = 'ebd.rider.passedRequests';
+
+function loadPassed(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PASSED_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
+  } catch { return []; }
+}
+
+function savePassed(ids: readonly string[]): void {
+  // Keep the tail only — old ids are for orders long since delivered.
+  try { localStorage.setItem(PASSED_KEY, JSON.stringify(ids.slice(-100))); } catch { /* private mode */ }
+}
+
 export function App({ riderId, riderName }: { riderId?: string; riderName?: string } = {}) {
   // Which account this session belongs to — shown in the header so a leftover
   // login (e.g. a demo account) is obvious at a glance.
@@ -48,8 +76,9 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
   const [onlineBusy, setOnlineBusy] = useState(false);
-  const [declined, setDeclined] = useState<Set<string>>(new Set());
+  const [declined, setDeclined] = useState<Set<string>>(() => new Set(loadPassed()));
   const [profile, setProfile] = useState<RiderProfile | null>(null);
+  const riderPos = useRiderPosition();
 
   const loadProfile = useCallback(async () => {
     if (!supabase || !riderId) return;
@@ -79,13 +108,22 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const overdue = overdueBalance(ledger, today);
   const owed = owedBalance(ledger);
   const accepts = (t: string) => !profile?.services_accepted || profile.services_accepted.includes(t);
-  // Transfers first — a released delivery may already have paid-for goods
-  // waiting, so it should be taken before brand-new orders.
-  const pool = open
-    .filter((o) => !declined.has(o.id) && accepts(o.service_type))
-    .sort((a, b) => Number(b.isTransfer) - Number(a.isTransfer));
+  // The pool is a queue, not a menu: transfers first (a released delivery may
+  // already have paid-for goods waiting), then oldest request first. Only the
+  // head is acceptable — see the queue lock on RequestCard.
+  const pool = sortRequestQueue(open.filter((o) => !declined.has(o.id) && accepts(o.service_type)));
+  const head = pool[0] ?? null;
   const transfers = pool.filter((o) => o.isTransfer);
   const newRequests = pool.filter((o) => !o.isTransfer);
+
+  /** Pass on the request at the head of the queue; the next one opens up. */
+  function passRequest(orderId: string) {
+    setDeclined((d) => {
+      const next = new Set(d).add(orderId);
+      savePassed([...next]);
+      return next;
+    });
+  }
 
   async function toggleOnline() {
     setOnlineBusy(true);
@@ -95,6 +133,12 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   }
 
   async function accept(orderId: string) {
+    // Belt and braces: the cards behind the head don't offer an Accept button,
+    // but nothing should be able to jump the queue.
+    if (head && orderId !== head.id) {
+      setError('Answer the first request in the queue before taking another one.');
+      return;
+    }
     try { await data.accept(orderId); setTab('deliveries'); }
     catch (e) { setError(errMessage(e)); }
     await refresh();
@@ -145,8 +189,8 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
         {tab === 'dashboard' && (
           <Dashboard
             online={online} onlineBusy={onlineBusy} onToggleOnline={toggleOnline}
-            pool={pool} active={active} owed={owed} locked={locked}
-            onGo={setTab} onAccept={accept} data={data} onChange={refresh} />
+            pool={pool} active={active} owed={owed} locked={locked} riderPos={riderPos}
+            onGo={setTab} onAccept={accept} onDecline={passRequest} data={data} onChange={refresh} />
         )}
 
         {tab === 'requests' && (
@@ -154,28 +198,29 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
             : !online ? <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} />
             : pool.length === 0 ? <Empty icon="📭">No requests in the pool right now.</Empty>
             : <div className="space-y-5">
+                <QueueNote waiting={pool.length} />
                 {transfers.length > 0 && (
                   <div className="space-y-3">
                     <div className="rounded-2xl bg-brand-yellow/20 px-4 py-3 ring-1 ring-brand-yellow">
                       <h2 className="text-lg font-extrabold text-yellow-900">🔄 Transfer deliveries</h2>
                       <p className="text-xs text-yellow-900/80">
-                        Released by another rider — please take these first.
+                        Released by another rider — these come first in the queue.
                       </p>
                     </div>
                     {transfers.map((o) => (
-                      <RequestCard key={o.id} order={o}
-                        onAccept={() => accept(o.id)}
-                        onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
+                      <RequestCard key={o.id} order={o} riderPos={riderPos}
+                        queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
+                        onAccept={() => accept(o.id)} onDecline={() => passRequest(o.id)} />
                     ))}
                   </div>
                 )}
                 {newRequests.length > 0 && (
                   <div className="space-y-3">
-                    <SectionTitle>Available requests</SectionTitle>
+                    <SectionTitle>{transfers.length > 0 ? 'Behind the transfers' : 'Request queue'}</SectionTitle>
                     {newRequests.map((o) => (
-                      <RequestCard key={o.id} order={o}
-                        onAccept={() => accept(o.id)}
-                        onDecline={() => setDeclined((d) => new Set(d).add(o.id))} />
+                      <RequestCard key={o.id} order={o} riderPos={riderPos}
+                        queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
+                        onAccept={() => accept(o.id)} onDecline={() => passRequest(o.id)} />
                     ))}
                   </div>
                 )}
@@ -187,11 +232,13 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
             ? <Empty icon="✅">No active deliveries. Accept one from Requests.</Empty>
             : <div className="space-y-4">
                 <SectionTitle>My deliveries</SectionTitle>
-                {active.map((o) => <DeliveryCard key={o.id} order={o} data={data} onChange={refresh} payoutNumber={profile?.payout_number} />)}
+                {active.map((o) => <DeliveryCard key={o.id} order={o} data={data} onChange={refresh} payoutNumber={profile?.payout_number} riderPos={riderPos} />)}
               </div>
         )}
 
-        {tab === 'earnings' && <EarningsView live={data.live} ledger={ledger} owed={owed} overdue={overdue} onSettle={submitSettlement} />}
+        {tab === 'earnings' && (
+          <EarningsView live={data.live} data={data} ledger={ledger} owed={owed} overdue={overdue} onSettle={submitSettlement} />
+        )}
 
         {tab === 'settings' && (
           <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline}
@@ -208,10 +255,11 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 // Dashboard
 // ---------------------------------------------------------------------------
 
-function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, locked, onGo, onAccept, data, onChange }: {
+function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, locked, riderPos, onGo, onAccept, onDecline, data, onChange }: {
   online: boolean; onlineBusy: boolean; onToggleOnline: () => void;
-  pool: RiderOrder[]; active: RiderOrder[]; owed: number; locked: boolean;
-  onGo: (t: Tab) => void; onAccept: (id: string) => void; data: RiderData; onChange: () => Promise<void>;
+  pool: RiderOrder[]; active: RiderOrder[]; owed: number; locked: boolean; riderPos: LatLng | null;
+  onGo: (t: Tab) => void; onAccept: (id: string) => void; onDecline: (id: string) => void;
+  data: RiderData; onChange: () => Promise<void>;
 }) {
   const todaysPotential = active.reduce((s, o) => s + riderEarn(o), 0);
   const transferCount = pool.filter((o) => o.isTransfer).length;
@@ -262,12 +310,18 @@ function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, loc
       {active.length > 0 ? (
         <div>
           <SectionTitle>Continue delivery</SectionTitle>
-          <DeliveryCard order={active[0]!} data={data} onChange={onChange} />
+          <DeliveryCard order={active[0]!} data={data} onChange={onChange} riderPos={riderPos} />
         </div>
       ) : online && !locked && pool.length > 0 ? (
         <div>
-          <SectionTitle>{pool[0]!.isTransfer ? 'Transfer delivery' : 'New request'}</SectionTitle>
-          <RequestCard order={pool[0]!} onAccept={() => onAccept(pool[0]!.id)} onDecline={() => onGo('requests')} declineLabel="See all" />
+          <SectionTitle>{pool[0]!.isTransfer ? 'Transfer delivery' : 'Next in the queue'}</SectionTitle>
+          <RequestCard order={pool[0]!} riderPos={riderPos} queuePos={1}
+            onAccept={() => onAccept(pool[0]!.id)} onDecline={() => onDecline(pool[0]!.id)} />
+          {pool.length > 1 && (
+            <button onClick={() => onGo('requests')} className="mt-2 w-full text-center text-xs font-semibold text-brand-purple">
+              {pool.length - 1} more waiting behind this one →
+            </button>
+          )}
         </div>
       ) : (
         <Empty icon={online ? '📭' : '😴'}>
@@ -427,10 +481,19 @@ function StoreGroups({ order, data, onChange }: {
           <div key={s.id ?? i} className="rounded-xl bg-brand-purple/[0.06] p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="min-w-0 truncate text-sm font-bold">{s.name ?? 'Store'}</p>
-              {s.contact
-                ? <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
-                    className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-purple"><PhoneIcon /> {s.contact}</a>
-                : <span className="shrink-0 text-[11px] text-black/40">No number</span>}
+              <span className="flex shrink-0 items-center gap-2">
+                {s.contact
+                  ? <a href={`tel:${s.contact}`} aria-label={`Call ${s.name ?? 'store'}`}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-brand-purple"><PhoneIcon /> {s.contact}</a>
+                  : <span className="text-[11px] text-black/40">No number</span>}
+                {s.lat != null && s.lng != null && (
+                  <a href={directionsTo({ lat: s.lat, lng: s.lng })} target="_blank" rel="noreferrer"
+                    aria-label={`Navigate to ${s.name ?? 'store'}`}
+                    className="rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
+                    🧭 Go
+                  </a>
+                )}
+              </span>
             </div>
             {items.length > 0 && <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>}
           </div>
@@ -446,9 +509,161 @@ function StoreGroups({ order, data, onChange }: {
   );
 }
 
-function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
-  order: RiderOrder; onAccept: () => void; onDecline: () => void; declineLabel?: string;
+/**
+ * Everywhere the rider has to reach before the drop-off, in visiting order:
+ * the registered store(s) on a food order, the ad-hoc shops on a pabili run,
+ * or the single pickup pin a padala starts from.
+ */
+function pickupStops(order: RiderOrder): { name: string; lat: number; lng: number }[] {
+  const stops: { name: string; lat: number; lng: number }[] = [];
+  for (const s of order.stores) {
+    if (s.lat != null && s.lng != null) stops.push({ name: s.name ?? 'Store', lat: s.lat, lng: s.lng });
+  }
+  for (const s of order.buyStores) {
+    if (s.lat != null && s.lng != null) stops.push({ name: s.name, lat: s.lat, lng: s.lng });
+  }
+  if (stops.length === 0 && order.pickupLat != null && order.pickupLng != null) {
+    stops.push({
+      name: order.service_type === 'padala' ? 'Pickup point' : 'Buy here',
+      lat: order.pickupLat, lng: order.pickupLng,
+    });
+  }
+  return stops;
+}
+
+/** Turn-by-turn to a pin, in whatever maps app the phone uses. */
+const directionsTo = (p: { lat: number; lng: number }) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+
+/** How far the rider is from the first stop, or null without a fix / a pin. */
+function distanceToPickup(order: RiderOrder, from: LatLng | null): number | null {
+  const first = pickupStops(order)[0];
+  return from && first ? haversineMeters(from, first) : null;
+}
+
+/**
+ * Who the order is for. A name makes the call at the door ("Ma'am Maria?")
+ * land better than reading a number back at someone — and riders asked for it,
+ * because a phone number alone tells them nothing about who they're meeting.
+ */
+function CustomerLine({ name, contact }: { name: string | null; contact: string }) {
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
+        {(name?.trim()[0] ?? '👤').toUpperCase()}
+      </span>
+      <span className="min-w-0">
+        {name?.trim()
+          ? <span className="block truncate text-sm font-semibold text-brand-ink">{name.trim()}</span>
+          : <span className="block text-xs text-black/40">Name not given</span>}
+        <a href={`tel:${contact}`} className="inline-flex items-center gap-1 text-xs text-brand-purple">
+          <PhoneIcon /> {contact}
+        </a>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Where the pickup is, before the rider commits to the run.
+ *
+ * Stores are pinned when they're registered, so the pool card can say how far
+ * away the counter is — the difference between a run around the corner and one
+ * across town — and open the route without accepting first.
+ */
+function StoreRoute({ order, stops, away, open, onToggle }: {
+  order: RiderOrder;
+  stops: { name: string; lat: number; lng: number }[];
+  away: number | null;
+  open: boolean;
+  onToggle: () => void;
 }) {
+  const first = stops[0]!;
+  return (
+    <div className="mt-2 rounded-xl bg-brand-green/[0.07] p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold text-green-900">
+            🏬 {first.name}{stops.length > 1 ? ` +${stops.length - 1} more` : ''}
+          </span>
+          <span className="text-[11px] text-green-900/70">
+            {away == null ? 'Pinned on the map' : `${formatDistance(away)} from you`}
+          </span>
+        </span>
+        <span className="flex shrink-0 gap-1.5">
+          <button onClick={onToggle}
+            className="rounded-lg border border-green-900/15 px-2 py-1 text-[11px] font-semibold text-green-900">
+            {open ? 'Hide map' : 'Map'}
+          </button>
+          <a href={directionsTo(first)} target="_blank" rel="noreferrer"
+            className="rounded-lg bg-brand-green px-2 py-1 text-[11px] font-bold text-white">
+            🧭 Navigate
+          </a>
+        </span>
+      </div>
+      {open && (
+        <div className="mt-2">
+          <DeliveryMap height={170}
+            dropoff={order.deliveryLat != null && order.deliveryLng != null
+              ? { lat: order.deliveryLat, lng: order.deliveryLng } : null}
+            stores={stops.map((s) => ({ name: s.name, lat: s.lat, lng: s.lng }))} />
+          {stops.length > 1 && (
+            <ol className="mt-1.5 space-y-1">
+              {stops.slice(1).map((s, i) => (
+                <li key={i} className="flex items-center justify-between gap-2 text-[11px] text-green-900">
+                  <span className="min-w-0 truncate">{i + 2}. {s.name}</span>
+                  <a href={directionsTo(s)} target="_blank" rel="noreferrer" className="shrink-0 font-semibold underline">
+                    Route
+                  </a>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Explains the queue once, above the pool, instead of on every locked card. */
+function QueueNote({ waiting }: { waiting: number }) {
+  return (
+    <p className="rounded-2xl bg-brand-purple/[0.07] px-4 py-3 text-xs text-brand-purple">
+      <span className="font-bold">First come, first served.</span> Take or pass the request at the
+      top and the next one opens up — {waiting} waiting right now.
+    </p>
+  );
+}
+
+function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept, onDecline, declineLabel = 'Pass' }: {
+  order: RiderOrder; riderPos?: LatLng | null; queuePos?: number; locked?: boolean;
+  onAccept: () => void; onDecline: () => void; declineLabel?: string;
+}) {
+  const [mapOpen, setMapOpen] = useState(false);
+  const stops = pickupStops(order);
+  const away = distanceToPickup(order, riderPos ?? null);
+
+  if (locked) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-black/5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-xs font-black text-black/40">
+          {queuePos}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-black/45">
+            {order.isTransfer && '🔄 '}
+            {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
+            {stops[0] && <span className="font-normal"> · {stops[0].name}</span>}
+          </span>
+          <span className="block text-[11px] text-black/35">
+            {peso(riderEarn(order))} · opens up once #1 is answered
+          </span>
+        </span>
+        <span className="shrink-0 text-black/25">🔒</span>
+      </div>
+    );
+  }
+
   return (
     <div className={`overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ${order.isTransfer ? 'ring-2 ring-brand-yellow' : 'ring-black/5'}`}>
       {order.isTransfer && (
@@ -464,8 +679,13 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
         </div>
       )}
       <div className="flex items-center justify-between px-4 pt-4">
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${serviceTint[order.service_type] ?? 'bg-black/5'}`}>
-          {order.service_type}
+        <span className="flex items-center gap-2">
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${serviceTint[order.service_type] ?? 'bg-black/5'}`}>
+            {order.service_type}
+          </span>
+          <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-[11px] font-bold text-green-800">
+            #{queuePos} · yours to answer
+          </span>
         </span>
         <span className="rounded-full bg-brand-ink px-2.5 py-1 text-xs font-bold text-white">{peso(riderEarn(order))}</span>
       </div>
@@ -476,9 +696,10 @@ function RequestCard({ order, onAccept, onDecline, declineLabel = 'Decline' }: {
         <p className="text-sm font-semibold">
           {order.item_description ?? (order.service_type === 'food' ? 'Food order' : 'Delivery')}
         </p>
-        <a href={`tel:${order.customer_contact}`} className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-purple">
-          <PhoneIcon /> {order.customer_contact}
-        </a>
+        <CustomerLine name={order.customerName} contact={order.customer_contact} />
+        {stops.length > 0 && (
+          <StoreRoute order={order} stops={stops} away={away} open={mapOpen} onToggle={() => setMapOpen((v) => !v)} />
+        )}
         <StoreGroups order={order} />
         {order.notes && (
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
@@ -728,8 +949,10 @@ function AddressLine({ label, address, icon }: { label: string; address: string;
   );
 }
 
-function DeliveryCard({ order, data, onChange, payoutNumber }:
-  { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null }) {
+function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
+  { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null; riderPos?: LatLng | null }) {
+  const stops = pickupStops(order);
+  const storeAway = riderPos && stops[0] ? haversineMeters(riderPos, stops[0]) : null;
   const [note, setNote] = useState<string | null>(null);
   const [arriving, setArriving] = useState(false);
   const [releasing, setReleasing] = useState(false);
@@ -785,23 +1008,19 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
         </p>
 
         {/* Live tracking map + navigation */}
-        {(order.deliveryLat != null || order.pickupLat != null || order.stores.some((s) => s.lat != null)) && (
+        {(order.deliveryLat != null || stops.length > 0) && (
           <div className="mt-3">
             <DeliveryMap
               dropoff={order.deliveryLat != null && order.deliveryLng != null ? { lat: order.deliveryLat, lng: order.deliveryLng } : null}
-              stores={
-                order.stores.some((s) => s.lat != null) || order.pickupLat == null || order.pickupLng == null
-                  ? order.stores
-                  // Pabili/Padala have no store row — show the customer's pickup pin instead.
-                  : [{ id: null, name: order.service_type === 'padala' ? 'Pickup' : 'Buy here',
-                       contact: null, lat: order.pickupLat, lng: order.pickupLng }]
-              } />
+              stores={stops.map((s) => ({ name: s.name, lat: s.lat, lng: s.lng }))} />
             <div className="mt-2 flex gap-2">
-              {order.pickupLat != null && order.pickupLng != null && (
-                <a href={`https://www.google.com/maps/dir/?api=1&destination=${order.pickupLat},${order.pickupLng}`}
-                  target="_blank" rel="noreferrer"
+              {/* Food orders carry no pickup pin — the route starts at the store's
+                  own pin, which is why this reads the stops rather than pickup_lat. */}
+              {stops[0] && (
+                <a href={directionsTo(stops[0])} target="_blank" rel="noreferrer"
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white">
                   🧭 {order.service_type === 'padala' ? 'To pickup' : 'To store'}
+                  {storeAway != null && <span className="font-medium opacity-80">· {formatDistance(storeAway)}</span>}
                 </a>
               )}
               {order.deliveryLat != null && order.deliveryLng != null && (
@@ -993,8 +1212,138 @@ function DeliveryCard({ order, data, onChange, payoutNumber }:
 // Earnings / settlement
 // ---------------------------------------------------------------------------
 
-function EarningsView({ live, ledger, owed, overdue, onSettle }:
-  { live: boolean; ledger: LedgerEntry[]; owed: number; overdue: number; onSettle: (extra?: { reference?: string; receiptUrl?: string }) => Promise<void> }) {
+const RANGE_CHIPS: RangePreset[] = ['today', 'week', 'month', 'all'];
+
+/**
+ * What the rider actually made, over whatever span they pick.
+ *
+ * The commission ledger below answers "what do I owe?"; this answers the
+ * question riders ask first — "how much did I make?" — and the calendar is
+ * there because "this week" and "the 15th to the 30th" are both real questions
+ * when you're working out whether the week paid for itself.
+ */
+function EarningsBoard({ data }: { data: RiderData }) {
+  const [preset, setPreset] = useState<RangePreset>('week');
+  const [customOpen, setCustomOpen] = useState(false);
+  const [from, setFrom] = useState(() => shiftDay(today, -6));
+  const [to, setTo] = useState(today);
+  const [records, setRecords] = useState<EarningRecord[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const range = customOpen ? normalizeRange({ from, to }) : presetRange(preset, today);
+
+  useEffect(() => {
+    let alive = true;
+    setRecords(null); setErr(null);
+    data.getEarnings(range.from, range.to)
+      .then((r) => { if (alive) setRecords(r); })
+      .catch((e) => { if (alive) { setErr(errMessage(e)); setRecords([]); } });
+    return () => { alive = false; };
+  }, [data, range.from, range.to]);
+
+  const summary = useMemo(() => summarizeEarnings(records ?? []), [records]);
+  const loading = records === null;
+  const heading = customOpen
+    ? `${dayLabel(range.from, today)} – ${dayLabel(range.to, today)}`
+    : RANGE_LABELS[preset];
+
+  const chipCls = (on: boolean) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+      on ? 'bg-brand-ink text-white' : 'bg-white text-black/55 ring-1 ring-black/10'}`;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {RANGE_CHIPS.map((p) => (
+          <button key={p} onClick={() => { setPreset(p); setCustomOpen(false); }}
+            className={chipCls(!customOpen && preset === p)}>
+            {RANGE_LABELS[p]}
+          </button>
+        ))}
+        <button onClick={() => setCustomOpen((v) => !v)} className={chipCls(customOpen)}>
+          📅 Pick dates
+        </button>
+      </div>
+
+      {customOpen && (
+        <div className="flex items-end gap-2 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+          <label className="flex-1 text-[11px] font-medium text-black/45">
+            From
+            <input type="date" value={from} max={today} onChange={(e) => setFrom(e.target.value || from)}
+              className="mt-0.5 w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm text-brand-ink" />
+          </label>
+          <label className="flex-1 text-[11px] font-medium text-black/45">
+            To
+            <input type="date" value={to} max={today} onChange={(e) => setTo(e.target.value || to)}
+              className="mt-0.5 w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm text-brand-ink" />
+          </label>
+        </div>
+      )}
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+        <p className="text-xs text-black/45">You earned · {heading}</p>
+        <p className="mt-1 text-4xl font-black text-brand-ink">
+          {loading ? <span className="text-black/20">…</span> : peso(summary.earned)}
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-black/[0.03] py-2">
+            <p className="text-sm font-bold text-brand-ink">{loading ? '—' : summary.deliveries}</p>
+            <p className="text-[11px] text-black/45">Deliveries</p>
+          </div>
+          <div className="rounded-xl bg-black/[0.03] py-2">
+            <p className="text-sm font-bold text-brand-ink">{loading ? '—' : peso(summary.perDelivery)}</p>
+            <p className="text-[11px] text-black/45">Per delivery</p>
+          </div>
+          <div className="rounded-xl bg-black/[0.03] py-2">
+            <p className="text-sm font-bold text-brand-ink">{loading ? '—' : peso(summary.commission)}</p>
+            <p className="text-[11px] text-black/45">Commission</p>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-black/40">
+          Take-home after commission. Goods money you front is repaid on top and isn't counted here.
+        </p>
+      </div>
+
+      {err && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <p className="mb-2 text-sm font-semibold">Day by day</p>
+        {loading ? (
+          <p className="py-4 text-center text-sm text-black/35">Loading…</p>
+        ) : summary.byDay.length === 0 ? (
+          <p className="py-4 text-center text-sm text-black/40">No completed deliveries in this range.</p>
+        ) : (
+          <ul className="divide-y divide-black/5">
+            {summary.byDay.map((d) => (
+              <li key={d.day} className="flex items-center justify-between py-2.5">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-brand-ink">{dayLabel(d.day, today)}</span>
+                  <span className="block text-[11px] text-black/40">
+                    {d.deliveries} {d.deliveries === 1 ? 'delivery' : 'deliveries'} · {peso(d.commission)} commission
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm font-bold text-green-700">{peso(d.earned)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "Today" / "Yesterday" / "Tue, 4 Aug" — how a rider reads a day. */
+function dayLabel(day: string, todayDay: string): string {
+  if (day === todayDay) return 'Today';
+  if (day === shiftDay(todayDay, -1)) return 'Yesterday';
+  return new Date(`${day}T00:00:00`).toLocaleDateString('en-PH', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  });
+}
+
+function EarningsView({ live, data, ledger, owed, overdue, onSettle }:
+  { live: boolean; data: RiderData; ledger: LedgerEntry[]; owed: number; overdue: number;
+    onSettle: (extra?: { reference?: string; receiptUrl?: string }) => Promise<void> }) {
   const history = useMemo(() => [...ledger].sort((a, b) => b.businessDay.localeCompare(a.businessDay)), [ledger]);
   const [payOpen, setPayOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -1003,6 +1352,9 @@ function EarningsView({ live, ledger, owed, overdue, onSettle }:
   return (
     <div className="space-y-4">
       <SectionTitle>Earnings &amp; settlement</SectionTitle>
+
+      <EarningsBoard data={data} />
+
       <div className="rounded-2xl bg-gradient-to-br from-brand-green to-brand-purple p-5 text-white shadow-md">
         <p className="text-xs uppercase tracking-wide text-white/80">Commission owed to operator</p>
         <p className="mt-1 text-3xl font-black">{peso(owed)}</p>

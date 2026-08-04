@@ -13,6 +13,7 @@ test('buildSettlementRow starts pending with optional method/reference', () => {
     amount_due: 42.5,
     method: 'gcash',
     reference: 'ABC123',
+    receipt_url: null,
     status: 'pending',
   });
 });

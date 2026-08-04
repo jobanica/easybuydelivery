@@ -1,4 +1,4 @@
-import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod } from '@ebd/shared';
+import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod, EarningRecord } from '@ebd/shared';
 import type { OrderItemStatus, OrderAddon } from '@ebd/supabase';
 
 export type { OrderAddon };
@@ -8,6 +8,8 @@ export interface RiderOrder {
   id: string;
   service_type: ServiceType;
   status: OrderStatus;
+  /** When the customer placed it — decides its place in the request queue. */
+  createdAt: string;
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
   customerName: string | null;
@@ -65,6 +67,8 @@ export interface RiderData {
   getOpenOrders(): Promise<RiderOrder[]>;
   getActiveOrders(): Promise<RiderOrder[]>;
   getLedger(): Promise<LedgerEntry[]>;
+  /** Completed deliveries between two business days (inclusive), for earnings. */
+  getEarnings(fromDay: string, toDay: string): Promise<EarningRecord[]>;
   accept(orderId: string): Promise<void>;
   releaseOrder(orderId: string, reason?: string): Promise<void>;
   /** Tell the customer you're outside. Alerts their phone.  */

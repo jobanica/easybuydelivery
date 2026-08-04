@@ -1,8 +1,9 @@
-import type { LedgerEntry, OrderStatus } from '@ebd/shared';
+import { manilaDay, type EarningRecord, type LedgerEntry, type OrderStatus } from '@ebd/shared';
 import {
   listOpenOrders,
   listRiderActiveOrders,
   listRiderLedger,
+  listRiderEarnings,
   acceptOrder,
   releaseOrder,
   advanceOrderStatus,
@@ -26,6 +27,7 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
     id: row.id as string,
     service_type: row.service_type as RiderOrder['service_type'],
     status: row.status as OrderStatus,
+    createdAt: (row.created_at as string) ?? '',
     payment_method: (row.payment_method as RiderOrder['payment_method']) ?? 'cod',
     payment_status: (row.payment_status as RiderOrder['payment_status']) ?? 'unpaid',
     customerName: (row.customer_name as string) ?? null,
@@ -104,6 +106,19 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
           settled: Boolean(row.settled),
         };
       });
+    },
+    async getEarnings(fromDay, toDay) {
+      const rows = await listRiderEarnings(db, riderId, fromDay, toDay);
+      return (rows as Record<string, unknown>[]).map((row): EarningRecord => ({
+        orderId: row.id as string,
+        // The business day the ledger books against: the delivery moment in Manila.
+        businessDay: manilaDay(new Date(row.delivered_at as string)),
+        serviceType: row.service_type as EarningRecord['serviceType'],
+        deliveryFee: Number(row.delivery_fee ?? 0),
+        storeFeeTotal: Number(row.store_fee_total ?? 0),
+        convenienceFee: Number(row.convenience_fee ?? 0),
+        commission: Number(row.commission_amount ?? 0),
+      }));
     },
     async accept(orderId) {
       await acceptOrder(db, orderId, riderId);
