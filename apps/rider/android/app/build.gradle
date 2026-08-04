@@ -50,5 +50,17 @@ try {
         apply plugin: 'com.google.gms.google-services'
     }
 } catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+    // Without this file there is no FCM, and a rider whose app is closed never
+    // hears about a new order — the app looks fine and quietly does nothing.
+    // Tolerable while developing; never something to ship.
+    logger.warn("\n  ⚠  google-services.json is missing — push notifications are DISABLED in this build.\n" +
+                "     Download it from the Firebase console (Project settings → your Android app)\n" +
+                "     into apps/rider/android/app/. See DEPLOYMENT.md.\n")
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks.any { it.name ==~ /(?i).*(assemble|bundle)Release.*/ }) {
+            throw new GradleException(
+                "google-services.json is required for a release build: without it riders get no " +
+                "order notifications when the app is closed. See DEPLOYMENT.md → Incoming-order notifications.")
+        }
+    }
 }

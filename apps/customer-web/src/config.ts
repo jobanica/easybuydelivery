@@ -10,7 +10,8 @@
 export const REQUIRE_ACCOUNT = true;
 
 /** Operator hotline shown in the customer Account → Help section. */
-export const SUPPORT_CONTACT = '0917 123 4567';
+// Support contact lives in @ebd/shared/legal — one source for both apps and
+// the published policy pages.
 
 /** App version shown in Account → About. */
 export const APP_VERSION = '1.0.0';

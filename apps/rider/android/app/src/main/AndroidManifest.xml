@@ -51,4 +51,12 @@
 
     <!-- Push notifications for incoming orders. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- The order chat takes photos (proof of delivery, a receipt at the
+         counter). The web build gets this from the browser; inside the
+         WebView the app itself must hold the permission, or the camera
+         chooser opens to nothing. Declared optional so a device without a
+         camera can still install and use everything else. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

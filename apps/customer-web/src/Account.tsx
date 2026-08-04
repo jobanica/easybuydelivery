@@ -11,7 +11,9 @@ import { AreaPicker } from './AreaPicker.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { PayRider } from './PayRider.tsx';
 import { peso } from './ui.tsx';
-import { REQUIRE_ACCOUNT, SUPPORT_CONTACT, APP_VERSION } from './config.ts';
+import { REQUIRE_ACCOUNT, APP_VERSION } from './config.ts';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, PRIVACY_URL, TERMS_URL } from '@ebd/shared';
+import { DeleteAccount } from './DeleteAccount.tsx';
 import { errMessage } from '@ebd/shared';
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -141,14 +143,25 @@ export function Account() {
       <Card title="Help & support">
         <p className="mb-3 text-sm text-black/55">Questions about an order? Reach the operator.</p>
         <div className="flex gap-2">
-          <a href={`tel:${SUPPORT_CONTACT.replace(/\s/g, '')}`} className="flex-1 rounded-xl bg-brand-green py-2.5 text-center text-sm font-bold text-white">Call</a>
-          <a href={`sms:${SUPPORT_CONTACT.replace(/\s/g, '')}`} className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Message</a>
+          {SUPPORT_PHONE && (
+            <>
+              <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`} className="flex-1 rounded-xl bg-brand-green py-2.5 text-center text-sm font-bold text-white">Call</a>
+              <a href={`sms:${SUPPORT_PHONE.replace(/\s/g, '')}`} className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Message</a>
+            </>
+          )}
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Email us</a>
         </div>
       </Card>
 
       <Card title="About">
         <div className="flex justify-between text-sm"><span className="text-black/55">App version</span><span className="font-medium">{APP_VERSION}</span></div>
+        <div className="mt-2 flex gap-3 text-sm">
+          <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className="text-brand-purple">Privacy Policy</a>
+          <a href={TERMS_URL} target="_blank" rel="noreferrer" className="text-brand-purple">Terms</a>
+        </div>
       </Card>
+
+      {live && REQUIRE_ACCOUNT && <DeleteAccount />}
 
       {live && REQUIRE_ACCOUNT && (
         <button onClick={() => void signOut()} className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-red-600 shadow-sm ring-1 ring-black/5">

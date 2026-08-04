@@ -7,6 +7,10 @@ import {
   pabiliCollectible,
   riderEarnings,
   sortRequestQueue,
+  SUPPORT_EMAIL,
+  SUPPORT_PHONE,
+  PRIVACY_URL,
+  TERMS_URL,
   haversineMeters,
   summarizeEarnings,
   presetRange,
@@ -35,7 +39,8 @@ import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
 import { usePushRegistration } from './usePushRegistration.ts';
 import { supabase } from './lib/supabase.ts';
-import { SUPPORT_CONTACT, APP_VERSION, TERMS_URL } from './config.ts';
+import { APP_VERSION } from './config.ts';
+import { DeleteAccount } from './DeleteAccount.tsx';
 
 const SERVICES: { key: string; label: string }[] = [
   { key: 'food', label: 'Food' }, { key: 'pabili', label: 'Pabili' }, { key: 'padala', label: 'Padala' },
@@ -1554,10 +1559,16 @@ function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSa
       <SettingsCard title="Help & support">
         <p className="mb-3 text-sm text-black/55">Reach the operator if you have an issue with an order or your account.</p>
         <div className="flex gap-2">
-          <a href={`tel:${SUPPORT_CONTACT.replace(/\s/g, '')}`}
-            className="flex-1 rounded-xl bg-brand-green py-2.5 text-center text-sm font-bold text-white">Call operator</a>
-          <a href={`sms:${SUPPORT_CONTACT.replace(/\s/g, '')}`}
-            className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Message</a>
+          {SUPPORT_PHONE && (
+            <>
+              <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`}
+                className="flex-1 rounded-xl bg-brand-green py-2.5 text-center text-sm font-bold text-white">Call operator</a>
+              <a href={`sms:${SUPPORT_PHONE.replace(/\s/g, '')}`}
+                className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Message</a>
+            </>
+          )}
+          <a href={`mailto:${SUPPORT_EMAIL}`}
+            className="flex-1 rounded-xl bg-brand-purple py-2.5 text-center text-sm font-bold text-white">Email operator</a>
         </div>
       </SettingsCard>
 
@@ -1568,9 +1579,14 @@ function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSa
             <span className="text-black/55">Connection</span>
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${live ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>{live ? 'Live' : 'Preview mode'}</span>
           </div>
-          <a href={TERMS_URL} target="_blank" rel="noreferrer" className="block pt-1 text-brand-purple">Terms &amp; Privacy →</a>
+          <div className="flex gap-3 pt-1">
+            <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className="text-brand-purple">Privacy Policy</a>
+            <a href={TERMS_URL} target="_blank" rel="noreferrer" className="text-brand-purple">Terms</a>
+          </div>
         </div>
       </SettingsCard>
+
+      {live && supabase && <DeleteAccount />}
 
       {live && supabase && (
         <button onClick={() => void signOut(supabase!)}

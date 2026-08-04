@@ -4,7 +4,8 @@
 
 | App | URL | Backend |
 |---|---|---|
-| Customer web | https://ebd-customer-web.vercel.app | Supabase project `difvleyqqixettmbkkno` |
+| Customer web | https://ebd-customer.vercel.app | Supabase project `difvleyqqixettmbkkno` |
+| Rider app | https://ebd-rider.vercel.app | same |
 | Admin dashboard | https://ebd-admin.vercel.app | same |
 
 Both are static Vite SPAs on Vercel, talking to the hosted Supabase project over
@@ -61,7 +62,7 @@ The customer app is a full PWA (manifest + service worker + icons). Wrap it with
 
 ```bash
 npm i -g @bubblewrap/cli
-bubblewrap init --manifest https://ebd-customer-web.vercel.app/manifest.webmanifest
+bubblewrap init --manifest https://ebd-customer.vercel.app/manifest.webmanifest
 bubblewrap build          # produces app-release-signed.aab
 ```
 
@@ -69,6 +70,11 @@ Then publish `/.well-known/assetlinks.json` on the domain with the **SHA-256
 fingerprint** of your signing key (template committed at
 `apps/customer-web/public/.well-known/assetlinks.json` — replace the placeholder,
 package `com.easybuydelivery.customer`). This removes the browser URL bar.
+
+Get the fingerprint from **Play Console → your app → Test and release → Setup →
+App signing → App signing key certificate → SHA-256**. Use the *app signing*
+key, not the upload key — Play re-signs the bundle, so the upload key's
+fingerprint will not match and the TWA will keep showing the URL bar.
 
 ### Rider app → Capacitor (native, background GPS)
 
@@ -95,6 +101,35 @@ plugin on native and the browser API on web.
   when the app is backgrounded or closed; the web build polls in the foreground.
   The watcher auto-starts on pickup and stops on delivery, so location is never
   shared while idle.
+
+### Play Console forms
+
+Both apps need these, and the content is already prepared:
+
+| Form | Value |
+|---|---|
+| Privacy policy URL | `https://ebd-customer.vercel.app/privacy.html` |
+| Terms | `https://ebd-customer.vercel.app/terms.html` |
+| Account deletion URL | `https://ebd-customer.vercel.app/account-deletion.html` |
+
+Those three pages are generated at build time from
+`packages/shared/src/legal.ts` — edit the constants there, never the HTML in
+`apps/customer-web/public/`. The build fails if `SUPPORT_EMAIL` is empty, so a
+policy can't ship without a working contact address.
+
+**Data safety declarations** (both apps collect it, none of it is shared with
+third parties, all of it is deletable):
+
+- *Personal info* — name, email, phone number.
+- *Location* — approximate and precise. Rider app only: **collected in the
+  background**, while a delivery is in progress.
+- *Photos* — order chat images, payment receipts, rider verification documents.
+- *App activity* — orders placed.
+
+**Account deletion** is implemented in-app (customer: Account → Delete account;
+rider: Settings → Delete account) via the `delete_my_account` RPC. It refuses
+while a delivery is in flight or a rider owes commission, and otherwise strips
+every identifying column from past orders while keeping the financial record.
 
 ### Upload
 

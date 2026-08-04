@@ -79,21 +79,25 @@ export async function countAvailableRiders(
   return Number(data ?? 0);
 }
 
+export interface DeleteAccountResult {
+  deleted: boolean;
+  reason?: 'active_orders' | 'unsettled_balance';
+  message?: string;
+}
+
 /**
- * Resume an existing rider account by mobile number (stop-gap login). Re-links
- * the matched rider to the current session via the resume_rider RPC and returns
- * it, or null if no rider matches. Phone-number match only — no OTP yet.
+ * Delete the signed-in user's own account.
+ *
+ * Personal details and the login go; the orders themselves stay, stripped of
+ * everything identifying — the operator needs them for tax and settlement, and
+ * the other side of a delivery isn't one party's to erase. Refuses while a
+ * delivery is in flight or a rider still owes commission, with a message to
+ * show the user.
  */
-export async function resumeRiderByMobile(
-  db: SupabaseClient,
-  mobile: string,
-): Promise<{ id: string; application_status: string; name: string | null } | null> {
-  const { data, error } = await db.rpc('resume_rider', { p_mobile: mobile });
+export async function deleteMyAccount(db: SupabaseClient): Promise<DeleteAccountResult> {
+  const { data, error } = await db.rpc('delete_my_account');
   if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) return null;
-  const r = row as { id: string; application_status: string; name: string | null };
-  return { id: r.id, application_status: r.application_status, name: r.name ?? null };
+  return (data ?? { deleted: false }) as DeleteAccountResult;
 }
 
 export interface RiderProfile {
