@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getAnalytics, type Analytics as Data } from '@ebd/supabase';
-import type { ServiceType } from '@ebd/shared';
-import { errMessage } from '@ebd/shared';
+import { getAnalytics, analyticsRange, type Analytics as Data } from '@ebd/supabase';
+import type { DayRange, ServiceType } from '@ebd/shared';
+import { errMessage, manilaDay, shiftDay } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, ErrorNote, peso } from './ui.tsx';
 
@@ -12,14 +12,28 @@ const SERVICE_COLOR: Record<ServiceType, string> = {
 const TREND = '#4A9415';
 
 const RANGES = [7, 14, 30];
+const today = manilaDay();
 
-function sample(days: number): Data {
+/** "1 Jul – 15 Jul 2026" — the span the figures cover, spelled out. */
+function rangeLabel(r: DayRange): string {
+  const fmt = (d: string, withYear: boolean) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', {
+    day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}),
+  });
+  if (r.from === r.to) return fmt(r.from, true);
+  const sameYear = r.from.slice(0, 4) === r.to.slice(0, 4);
+  return `${fmt(r.from, !sameYear)} – ${fmt(r.to, true)}`;
+}
+
+function sample(spec: number | DayRange): Data {
+  const range = analyticsRange(spec, today);
+  const days = Math.max(1, Math.round(
+    (new Date(`${range.to}T00:00:00Z`).getTime() - new Date(`${range.from}T00:00:00Z`).getTime()) / 86400000) + 1);
   const daily = Array.from({ length: days }, (_, i) => ({
-    day: new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10),
+    day: shiftDay(range.from, i),
     count: Math.round(4 + 5 * Math.abs(Math.sin(i / 2))),
   }));
   return {
-    rangeDays: days, totalOrders: 128, delivered: 112, cancelled: 6,
+    rangeDays: days, range, totalOrders: 128, delivered: 112, cancelled: 6,
     gmv: 41850, commissionRevenue: 1284, convenienceRevenue: 560,
     byService: { food: 74, pabili: 33, padala: 21 },
     daily,
@@ -34,29 +48,62 @@ function sample(days: number): Data {
 
 export function Analytics() {
   const [days, setDays] = useState(14);
+  const [custom, setCustom] = useState(false);
+  const [from, setFrom] = useState(() => shiftDay(today, -13));
+  const [to, setTo] = useState(today);
   const [d, setD] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const spec: number | DayRange = custom ? { from, to } : days;
+  const key = custom ? `${from}..${to}` : String(days);
+
   useEffect(() => {
     setD(null); setError(null);
-    if (!supabase) { setD(sample(days)); return; }
-    getAnalytics(supabase, days).then(setD).catch((e) => setError(errMessage(e)));
-  }, [days]);
+    if (!supabase) { setD(sample(spec)); return; }
+    getAnalytics(supabase, spec).then(setD).catch((e) => setError(errMessage(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
-  if (error) return <ErrorNote msg={error} />;
-  if (!d) return <Muted>Loading…</Muted>;
+  const chip = (on: boolean) =>
+    `rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
+      on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`;
+
+  const controls = (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-black/50">Last</span>
+        {RANGES.map((r) => (
+          <button key={r} onClick={() => { setDays(r); setCustom(false); }} className={chip(!custom && days === r)}>
+            {r} days
+          </button>
+        ))}
+        <button onClick={() => setCustom((v) => !v)} className={chip(custom)}>📅 Pick dates</button>
+        {d && <span className="text-xs text-black/40">{rangeLabel(d.range)}</span>}
+      </div>
+      {custom && (
+        <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+          <label className="text-[11px] font-medium text-black/45">
+            From
+            <input type="date" value={from} max={today} onChange={(e) => setFrom(e.target.value || from)}
+              className="mt-0.5 block rounded-lg border border-black/10 px-2 py-1.5 text-sm text-brand-ink" />
+          </label>
+          <label className="text-[11px] font-medium text-black/45">
+            To
+            <input type="date" value={to} max={today} onChange={(e) => setTo(e.target.value || to)}
+              className="mt-0.5 block rounded-lg border border-black/10 px-2 py-1.5 text-sm text-brand-ink" />
+          </label>
+          <span className="pb-1.5 text-xs text-black/40">Business days, Philippine time.</span>
+        </div>
+      )}
+    </div>
+  );
+
+  if (error) return <div className="space-y-5">{controls}<ErrorNote msg={error} /></div>;
+  if (!d) return <div className="space-y-5">{controls}<Muted>Loading…</Muted></div>;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-black/50">Last</span>
-        {RANGES.map((r) => (
-          <button key={r} onClick={() => setDays(r)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
-              days === r ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'
-            }`}>{r} days</button>
-        ))}
-      </div>
+      {controls}
 
       {/* Hero figures */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -70,7 +117,7 @@ export function Analytics() {
         <Card title="Orders by service">
           <ServiceBars byService={d.byService} />
         </Card>
-        <Card title={`Orders per day · last ${d.rangeDays} days`}>
+        <Card title={`Orders per day · ${d.rangeDays} day${d.rangeDays === 1 ? '' : 's'}`}>
           <DailyBars daily={d.daily} />
         </Card>
       </div>

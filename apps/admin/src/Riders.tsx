@@ -3,22 +3,21 @@ import { listActiveRiders, setRiderLocked, setRiderSuspended, deleteRider, type 
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
+import { SAMPLE_RIDERS, onDutyFor } from './OnDuty.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
-
-const SAMPLE: ActiveRider[] = [
-  { id: 'a', name: 'Ben Cruz', mobile_number: '0918 555 2000', vehicle: 'Motorcycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 9, overdue: 0, activity: 'on_delivery', activeOrder: { id: 'o1', service_type: 'food', status: 'on_the_way' } },
-  { id: 'b', name: 'Cy Ramos', mobile_number: '0917 555 1000', vehicle: 'Motorcycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 19.5, overdue: 13.5, activity: 'locked', activeOrder: null },
-  { id: 'c', name: 'Dina Lim', mobile_number: '0919 555 3000', vehicle: 'Bicycle', is_locked: false, is_suspended: false, suspend_reason: null, owed: 0, overdue: 0, activity: 'available', activeOrder: null },
-];
 
 const activityChip: Record<string, string> = {
   on_delivery: 'bg-brand-purple/15 text-brand-purple',
   available: 'bg-brand-green/15 text-green-800',
+  offline: 'bg-black/[0.06] text-black/50',
   locked: 'bg-red-100 text-red-700',
   suspended: 'bg-black/70 text-white',
 };
-const activityLabel: Record<string, string> = { on_delivery: 'On delivery', available: 'Available', locked: 'Locked', suspended: 'Suspended' };
+const activityLabel: Record<string, string> = {
+  on_delivery: 'On delivery', available: 'Online — waiting', offline: 'Offline',
+  locked: 'Locked', suspended: 'Suspended',
+};
 
 export function Riders() {
   const [rows, setRows] = useState<ActiveRider[]>([]);
@@ -26,7 +25,7 @@ export function Riders() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    if (!supabase) { setRows(SAMPLE); setLoading(false); return; }
+    if (!supabase) { setRows(SAMPLE_RIDERS); setLoading(false); return; }
     setLoading(true);
     try { setRows(await listActiveRiders(supabase, today)); setError(null); }
     catch (e) { setError(errMessage(e)); }
@@ -72,13 +71,15 @@ export function Riders() {
 
   const onDelivery = rows.filter((r) => r.activity === 'on_delivery').length;
   const available = rows.filter((r) => r.activity === 'available').length;
+  const offline = rows.filter((r) => r.activity === 'offline').length;
   const locked = rows.filter((r) => r.activity === 'locked').length;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Mini label="On delivery" value={onDelivery} tint="bg-brand-purple/15 text-brand-purple" />
-        <Mini label="Available" value={available} tint="bg-brand-green/15 text-green-800" />
+        <Mini label="Online — waiting" value={available} tint="bg-brand-green/15 text-green-800" />
+        <Mini label="Offline" value={offline} tint="bg-black/[0.06] text-black/50" />
         <Mini label="Locked" value={locked} tint="bg-red-100 text-red-700" />
       </div>
 
@@ -97,7 +98,12 @@ export function Riders() {
                     <span className="block font-medium">{r.name}</span>
                     <span className="block text-xs text-black/40">{r.mobile_number} · {r.vehicle ?? '—'}</span>
                   </Td>
-                  <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${activityChip[r.activity]}`}>{activityLabel[r.activity]}</span></Td>
+                  <Td>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${activityChip[r.activity]}`}>{activityLabel[r.activity]}</span>
+                    {r.is_online && onDutyFor(r.online_since) && (
+                      <span className="mt-0.5 block text-xs text-black/40">on duty {onDutyFor(r.online_since)}</span>
+                    )}
+                  </Td>
                   <Td>
                     {r.activeOrder
                       ? <span className="capitalize">{r.activeOrder.service_type} · {r.activeOrder.status.replaceAll('_', ' ')}</span>

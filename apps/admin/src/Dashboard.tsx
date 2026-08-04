@@ -3,7 +3,8 @@ import { listAllStores, listRiders, listOpenOrders, listRiderBalances } from '@e
 import { supabase } from './lib/supabase.ts';
 import { Card, peso } from './ui.tsx';
 import { LiveOrders } from './LiveOrders.tsx';
-import { IconStore, IconRiders, IconOrders, IconWallet } from './icons.tsx';
+import { OnDuty } from './OnDuty.tsx';
+import { IconStore, IconRiders, IconOrders, IconWallet, IconScooter } from './icons.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -12,6 +13,8 @@ const SAMPLE: Stats = { stores: 3, pendingRiders: 2, openOrders: 3, owed: 28.5, 
 
 export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const [s, setS] = useState<Stats | null>(null);
+  // Kept by the roster below, which polls; the tile is the same number.
+  const [online, setOnline] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -48,16 +51,22 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
       </div>
 
       {/* Stat tiles */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <Stat label="Riders online" value={online == null ? '—' : String(online)}
+          sub={online === 0 ? 'nobody on duty' : undefined}
+          icon={<IconScooter />} tint={online === 0 ? 'yellow' : 'green'} onClick={() => onNavigate('riders')} />
         <Stat label="Stores" value={s ? String(s.stores) : '—'} icon={<IconStore />} tint="green" onClick={() => onNavigate('stores')} />
         <Stat label="Pending riders" value={s ? String(s.pendingRiders) : '—'} icon={<IconRiders />} tint="purple" onClick={() => onNavigate('riders')} />
         <Stat label="Open orders" value={s ? String(s.openOrders) : '—'} icon={<IconOrders />} tint="yellow" onClick={() => onNavigate('orders')} />
         <Stat label="Owed by riders" value={s ? peso(s.owed) : '—'} sub={s && s.locked > 0 ? `${s.locked} locked` : undefined} icon={<IconWallet />} tint="green" onClick={() => onNavigate('settlements')} />
       </div>
 
-      <Card title="Live orders" action={<button onClick={() => onNavigate('orders')} className="text-sm font-medium text-brand-purple">View all →</button>}>
-        <LiveOrders embedded />
-      </Card>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <OnDuty onNavigate={onNavigate} onCount={setOnline} />
+        <Card title="Live orders" action={<button onClick={() => onNavigate('orders')} className="text-sm font-medium text-brand-purple">View all →</button>}>
+          <LiveOrders embedded />
+        </Card>
+      </div>
     </div>
   );
 }

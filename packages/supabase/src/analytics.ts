@@ -3,7 +3,7 @@
  * aggregation is done in JS over a capped fetch (admin reads all orders).
  */
 
-import type { ServiceType } from '@ebd/shared';
+import { manilaDay, normalizeRange, shiftDay, type DayRange, type ServiceType } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface DayCount { day: string; count: number }
@@ -11,6 +11,8 @@ export interface RiderRank { riderId: string; name: string; delivered: number; c
 
 export interface Analytics {
   rangeDays: number;
+  /** The business days actually covered (inclusive), for labelling. */
+  range: DayRange;
   totalOrders: number;
   delivered: number;
   cancelled: number;
@@ -22,15 +24,42 @@ export interface Analytics {
   riders: RiderRank[];
 }
 
-const dayKey = (iso: string) => iso.slice(0, 10);
+/** Manila is UTC+8 year-round, so a business day is a fixed offset. */
+const MANILA_OFFSET = '+08:00';
 
-export async function getAnalytics(db: SupabaseClient, days = 14): Promise<Analytics> {
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+/** Which business day an order belongs to — Manila, matching the ledger. */
+const dayKey = (iso: string) => manilaDay(new Date(iso));
+
+/** Whole days spanned by an inclusive range. */
+function daysBetween(range: DayRange): number {
+  const ms = new Date(`${range.to}T00:00:00Z`).getTime() - new Date(`${range.from}T00:00:00Z`).getTime();
+  return Math.round(ms / 86_400_000) + 1;
+}
+
+/** A day-count preset or an explicit span, resolved to inclusive business days. */
+export function analyticsRange(spec: number | DayRange, today = manilaDay()): DayRange {
+  return typeof spec === 'number'
+    ? { from: shiftDay(today, -(Math.max(1, Math.round(spec)) - 1)), to: today }
+    : normalizeRange(spec);
+}
+
+/**
+ * Aggregate orders over a span of business days. Pass a number for "the last N
+ * days" or an explicit {from, to} for a picked range — both inclusive of today's
+ * partial day, and both bucketed by Philippine business day so the totals agree
+ * with the commission ledger and the riders' own earnings screens.
+ */
+export async function getAnalytics(db: SupabaseClient, spec: number | DayRange = 14): Promise<Analytics> {
+  const range = analyticsRange(spec);
+  const days = daysBetween(range);
+  // Half-open upper bound: everything before 00:00 Manila the day after `to`.
+  const until = `${shiftDay(range.to, 1)}T00:00:00${MANILA_OFFSET}`;
 
   const { data, error } = await db
     .from('orders')
     .select('created_at, service_type, status, goods_cost, delivery_fee, store_fee_total, convenience_fee, commission_amount, rider_id')
-    .gte('created_at', since)
+    .gte('created_at', `${range.from}T00:00:00${MANILA_OFFSET}`)
+    .lt('created_at', until)
     .order('created_at', { ascending: true })
     .limit(5000);
   if (error) throw error;
@@ -42,9 +71,7 @@ export async function getAnalytics(db: SupabaseClient, days = 14): Promise<Analy
   let delivered = 0, cancelled = 0, gmv = 0, commissionRevenue = 0, convenienceRevenue = 0;
 
   // Seed every day in range so the trend has no gaps.
-  for (let i = days - 1; i >= 0; i--) {
-    dailyMap.set(dayKey(new Date(Date.now() - i * 86_400_000).toISOString()), 0);
-  }
+  for (let i = 0; i < days; i++) dailyMap.set(shiftDay(range.from, i), 0);
 
   for (const o of orders) {
     const service = o.service_type as ServiceType;
@@ -83,6 +110,7 @@ export async function getAnalytics(db: SupabaseClient, days = 14): Promise<Analy
 
   return {
     rangeDays: days,
+    range,
     totalOrders: orders.length,
     delivered, cancelled,
     gmv: round(gmv),

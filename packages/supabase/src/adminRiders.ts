@@ -6,7 +6,7 @@
 import { owedBalance, overdueBalance, isLockedOut, type LedgerEntry } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type RiderActivity = 'suspended' | 'locked' | 'on_delivery' | 'available';
+export type RiderActivity = 'suspended' | 'locked' | 'on_delivery' | 'available' | 'offline';
 
 export interface ActiveRider {
   id: string;
@@ -16,6 +16,10 @@ export interface ActiveRider {
   is_locked: boolean;
   is_suspended: boolean;
   suspend_reason: string | null;
+  /** The rider's own on-duty toggle. */
+  is_online: boolean;
+  /** When they went on duty (null when off duty). */
+  online_since: string | null;
   owed: number;
   overdue: number;
   activity: RiderActivity;
@@ -28,7 +32,7 @@ const IN_PROGRESS = ['accepted', 'preparing', 'picked_up', 'on_the_way'];
 export async function listActiveRiders(db: SupabaseClient, today: string): Promise<ActiveRider[]> {
   const riders = await db
     .from('riders')
-    .select('id, name, mobile_number, vehicle, is_locked, is_suspended, suspend_reason')
+    .select('id, name, mobile_number, vehicle, is_locked, is_suspended, suspend_reason, is_online, online_since')
     .eq('application_status', 'approved')
     .order('name');
   if (riders.error) throw riders.error;
@@ -66,8 +70,15 @@ export async function listActiveRiders(db: SupabaseClient, today: string): Promi
     const locked = (r.is_locked as boolean) || isLockedOut(entries, today);
     const suspended = Boolean(r.is_suspended);
     const activeOrder = orderByRider.get(id) ?? null;
+    const online = Boolean(r.is_online);
+    // "Available" used to mean "approved and not locked", which said nothing
+    // about whether anyone was actually working. It now means on duty and free.
     const activity: RiderActivity =
-      suspended ? 'suspended' : locked ? 'locked' : activeOrder ? 'on_delivery' : 'available';
+      suspended ? 'suspended'
+      : locked ? 'locked'
+      : activeOrder ? 'on_delivery'
+      : online ? 'available'
+      : 'offline';
     return {
       id,
       name: r.name as string,
@@ -76,12 +87,34 @@ export async function listActiveRiders(db: SupabaseClient, today: string): Promi
       is_locked: r.is_locked as boolean,
       is_suspended: suspended,
       suspend_reason: (r.suspend_reason as string) ?? null,
+      is_online: online,
+      online_since: (r.online_since as string) ?? null,
       owed: owedBalance(entries),
       overdue: overdueBalance(entries, today),
       activity,
       activeOrder,
     };
   });
+}
+
+/**
+ * Who is on duty right now, for the dashboard roster.
+ *
+ * On duty means the rider's own toggle is on — plus anyone mid-delivery, since
+ * a rider carrying an order is working whatever the toggle says (they may have
+ * flipped it off to stop new requests while they finish). Suspended accounts
+ * are never on duty; suspension forces them offline.
+ *
+ * Ordered the way an operator scans the list: who's out on a job first, then
+ * whoever has been waiting longest for one.
+ */
+export function onDutyRiders(riders: readonly ActiveRider[]): ActiveRider[] {
+  return riders
+    .filter((r) => !r.is_suspended && (r.is_online || r.activity === 'on_delivery'))
+    .sort((a, b) =>
+      Number(b.activity === 'on_delivery') - Number(a.activity === 'on_delivery') ||
+      (a.online_since ?? '').localeCompare(b.online_since ?? '') ||
+      a.name.localeCompare(b.name));
 }
 
 /** Manually lock or unlock a rider (overrides the settlement gate). */
