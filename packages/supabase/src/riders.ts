@@ -63,6 +63,23 @@ export async function setRiderOnline(db: SupabaseClient, online: boolean): Promi
 }
 
 /**
+ * How many riders could take an order for this service right now — on duty,
+ * approved, not suspended, and not held by the settlement gate.
+ *
+ * Zero means nobody would see the request: the customer should be told before
+ * they place it, not left waiting on a pool nobody is watching. Callable by
+ * customers (they can't read the riders table itself).
+ */
+export async function countAvailableRiders(
+  db: SupabaseClient,
+  service?: 'food' | 'pabili' | 'padala',
+): Promise<number> {
+  const { data, error } = await db.rpc('riders_available', { p_service: service ?? null });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+/**
  * Resume an existing rider account by mobile number (stop-gap login). Re-links
  * the matched rider to the current session via the resume_rider RPC and returns
  * it, or null if no rider matches. Phone-number match only — no OTP yet.

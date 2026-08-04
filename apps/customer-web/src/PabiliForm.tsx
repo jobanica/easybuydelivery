@@ -13,6 +13,7 @@ import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
+import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 
 interface FormState {
   items: PabiliItemInput[];
@@ -31,6 +32,7 @@ const initial: FormState = {
 
 export function PabiliForm() {
   const { ensureContact } = useAuth();
+  const riders = useRiderAvailability('pabili');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -166,6 +168,8 @@ export function PabiliForm() {
     }
     setSubmitting(true);
     try {
+      // Riders come and go while a form is being filled in — ask again now.
+      if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(form.customerContact);
         setCreatedId(await createPabiliOrder(supabase, toInput(customerId), { ...DEFAULT_FEE_CONFIG, perStoreFee }));
@@ -201,6 +205,7 @@ export function PabiliForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
+      <NoRidersNotice availability={riders} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">What should we buy?</span>
         <div className="space-y-2">

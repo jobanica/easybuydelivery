@@ -10,6 +10,7 @@ import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
+import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 
@@ -37,6 +38,7 @@ const initial: FormState = {
 
 export function PadalaForm() {
   const { ensureContact } = useAuth();
+  const riders = useRiderAvailability('padala');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [pickup, setPickup] = useState<LatLngValue | null>(null);   // where to get it
@@ -120,6 +122,8 @@ export function PadalaForm() {
     }
     setSubmitting(true);
     try {
+      // Riders come and go while a form is being filled in — ask again now.
+      if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(form.customerContact);
         setCreatedId(await createPadalaOrder(supabase, toInput(customerId)));
@@ -155,6 +159,7 @@ export function PadalaForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
+      <NoRidersNotice availability={riders} />
       <Field label="What are we sending?">
         <input className={inputCls} value={form.itemDescription}
           onChange={(e) => set('itemDescription', e.target.value)}

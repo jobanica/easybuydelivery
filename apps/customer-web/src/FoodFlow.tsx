@@ -19,6 +19,7 @@ import {
   errMessage,
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
+import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -85,6 +86,7 @@ const DEFAULT_FEE_SETTINGS: FeeSettings = {
 
 export function FoodFlow() {
   const { ensureContact, mobile } = useAuth();
+  const riders = useRiderAvailability('food');
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
@@ -297,6 +299,8 @@ export function FoodFlow() {
     const fullNote = [cutlery ? '🍴 Include cutlery' : '', note.trim()].filter(Boolean).join(' — ') || undefined;
     setPlacing(true);
     try {
+      // Riders come and go while a basket is being filled — ask again now.
+      if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(contact.trim(), custName.trim() || undefined);
         setCreatedId(await createFoodOrder(supabase, {
@@ -630,6 +634,7 @@ export function FoodFlow() {
           </div>
 
           <div className="border-t border-black/10 bg-white p-4">
+            <NoRidersNotice availability={riders} />
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim() || !pay || (areaRequired && !area)}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
