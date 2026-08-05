@@ -67,7 +67,7 @@ export function OnDuty({ onNavigate, onCount }:
   return (
     <Card
       title={`On duty now${rows ? ` · ${duty.length}` : ''}`}
-      action={<button onClick={() => onNavigate('riders')} className="text-sm font-medium text-brand-purple">All riders →</button>}
+      action={<button onClick={() => onNavigate('ridersActive')} className="text-sm font-medium text-brand-purple">All riders →</button>}
     >
       {error && <ErrorNote msg={error} />}
       {!rows ? (

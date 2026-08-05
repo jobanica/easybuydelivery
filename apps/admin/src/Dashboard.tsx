@@ -55,7 +55,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Stat label="Riders online" value={online == null ? '—' : String(online)}
           sub={online === 0 ? 'nobody on duty' : undefined}
-          icon={<IconScooter />} tint={online === 0 ? 'yellow' : 'green'} onClick={() => onNavigate('riders')} />
+          icon={<IconScooter />} tint={online === 0 ? 'yellow' : 'green'} onClick={() => onNavigate('ridersActive')} />
         <Stat label="Stores" value={s ? String(s.stores) : '—'} icon={<IconStore />} tint="green" onClick={() => onNavigate('stores')} />
         <Stat label="Pending riders" value={s ? String(s.pendingRiders) : '—'} icon={<IconRiders />} tint="purple" onClick={() => onNavigate('riders')} />
         <Stat label="Open orders" value={s ? String(s.openOrders) : '—'} icon={<IconOrders />} tint="yellow" onClick={() => onNavigate('orders')} />
