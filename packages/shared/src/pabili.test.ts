@@ -35,9 +35,24 @@ test('overCapAmount is the excess above the cap', () => {
 });
 
 test('collectible = actual goods + delivery fee', () => {
-  assert.equal(pabiliCollectible(550, 60), 610);
+  assert.equal(pabiliCollectible({ actualGoods: 550, deliveryFee: 60 }), 610);
 });
 
 test('commission is 15% of the delivery fee only', () => {
   assert.equal(pabiliCommission(60), 9); // 60 * 0.15, goods excluded
+});
+
+test('every fee the customer was quoted is collected, store fees included', () => {
+  // The bug this guards: a 3-store run quoted ₱943.75 was collected as ₱893.75.
+  assert.equal(
+    pabiliCollectible({ actualGoods: 808.75, deliveryFee: 50, storeFeeTotal: 50, convenienceFee: 35 }),
+    943.75,
+  );
+});
+
+test('a single-store run has no store fee to add', () => {
+  assert.equal(
+    pabiliCollectible({ actualGoods: 200, deliveryFee: 50, storeFeeTotal: 0, convenienceFee: 15 }),
+    265,
+  );
 });

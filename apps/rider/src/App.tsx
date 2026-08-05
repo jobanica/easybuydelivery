@@ -492,6 +492,19 @@ function StoreGroups({ order, data, onChange }: {
 
   if (order.stores.length === 0 && noStore.length === 0) return null;
 
+  // A pabili run names its stores on the order itself, so its items point at
+  // that list by index rather than at a registered store. Group them the way a
+  // food order groups by restaurant: a rider standing in one shop should see
+  // that shop's lines, not the whole errand.
+  const byBuyStore = new Map<number, RiderOrder['items']>();
+  const anyStore: RiderOrder['items'] = [];
+  for (const it of noStore) {
+    const idx = it.buyStoreIndex;
+    if (idx != null && order.buyStores[idx]) byBuyStore.set(idx, [...(byBuyStore.get(idx) ?? []), it]);
+    else anyStore.push(it);
+  }
+  const splitByBuyStore = byBuyStore.size > 0;
+
   return (
     <div className="mt-3 space-y-2">
       {order.stores.map((s, i) => {
@@ -518,10 +531,35 @@ function StoreGroups({ order, data, onChange }: {
           </div>
         );
       })}
-      {noStore.length > 0 && (
+      {/* Pabili: one block per named store, in visiting order. */}
+      {splitByBuyStore && order.buyStores.map((st, i) => {
+        const items = byBuyStore.get(i) ?? [];
+        if (items.length === 0) return null;
+        return (
+          <div key={`buy-${i}`} className="rounded-xl bg-brand-purple/[0.06] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-sm font-bold">
+                <span className="mr-1.5 text-black/40">{i + 1}.</span>🛒 {st.name}
+              </p>
+              {st.lat != null && st.lng != null && (
+                <a href={directionsTo({ lat: st.lat, lng: st.lng })} target="_blank" rel="noreferrer"
+                  aria-label={`Navigate to ${st.name}`}
+                  className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
+                  🧭 Go
+                </a>
+              )}
+            </div>
+            <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>
+          </div>
+        );
+      })}
+
+      {anyStore.length > 0 && (
         <div className="rounded-xl bg-black/[0.03] p-3">
-          <p className="mb-1.5 text-xs font-semibold text-black/60">Order</p>
-          <ul className="space-y-1 text-sm">{noStore.map(ItemRow)}</ul>
+          <p className="mb-1.5 text-xs font-semibold text-black/60">
+            {splitByBuyStore ? '🛒 Any store — buy wherever you can' : 'Order'}
+          </p>
+          <ul className="space-y-1 text-sm">{anyStore.map(ItemRow)}</ul>
         </div>
       )}
     </div>
@@ -759,7 +797,12 @@ function fullCollectible(o: RiderOrder): number | null {
   if (o.service_type === 'padala') return o.delivery_fee;
   if (o.service_type === 'pabili') {
     if (o.actual_amount == null) return null;
-    return pabiliCollectible(o.actual_amount, o.delivery_fee, o.convenience_fee);
+    return pabiliCollectible({
+      actualGoods: o.actual_amount,
+      deliveryFee: o.delivery_fee,
+      storeFeeTotal: o.store_fee_total,
+      convenienceFee: o.convenience_fee,
+    });
   }
   // Food: goods + delivery + store + convenience.
   return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
@@ -1896,6 +1939,9 @@ function ChatIcon() { return <svg {...ic} width="14" height="14"><path d="M21 11
  * total becomes the order's goods amount (what the customer repays). Stays
  * editable after saving so extra items the customer adds can be tacked on.
  */
+/** A line in the pabili price sheet. `store` groups it under a heading. */
+interface PriceRow { label: string; amount: string; store?: string | null }
+
 function PabiliCalculator({ order, data, onChange, onNote }: {
   order: RiderOrder; data: RiderData; onChange: () => Promise<void>;
   onNote: (n: string | null) => void;
@@ -1904,11 +1950,20 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
   const [open, setOpen] = useState(saved == null);
   // Start from the customer's shopping list so the rider just fills in prices
   // next to each item instead of retyping the whole thing.
-  const [rows, setRows] = useState<{ label: string; amount: string }[]>(() => {
+  const [rows, setRows] = useState<PriceRow[]>(() => {
     const wanted = order.items.filter((i) => i.status !== 'removed' && i.status !== 'replaced');
-    return wanted.length > 0
-      ? wanted.map((i) => ({ label: i.qty > 1 ? `${i.qty}x ${i.name}` : i.name, amount: '' }))
-      : [{ label: '', amount: '' }];
+    if (wanted.length === 0) return [{ label: '', amount: '' }];
+    // Seeded in visiting order and tagged with the store, so the rider fills in
+    // one shop's prices at a time instead of hunting up and down the list.
+    const storeOf = (i: RiderOrder['items'][number]) =>
+      i.buyStoreIndex != null ? order.buyStores[i.buyStoreIndex]?.name ?? null : null;
+    const ordered = [...wanted].sort((a, b) =>
+      (a.buyStoreIndex ?? Number.MAX_SAFE_INTEGER) - (b.buyStoreIndex ?? Number.MAX_SAFE_INTEGER));
+    return ordered.map((i) => ({
+      label: i.qty > 1 ? `${i.qty}x ${i.name}` : i.name,
+      amount: '',
+      store: storeOf(i),
+    }));
   });
   const [busy, setBusy] = useState(false);
   // The customer pays this total, so it has to be backed by the store receipt.
@@ -1924,7 +1979,7 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
   const counted = rows.filter((r) => Number(r.amount) > 0).length;
   const overCap = cap > 0 && total > cap;
 
-  function setRow(i: number, patch: Partial<{ label: string; amount: string }>) {
+  function setRow(i: number, patch: Partial<PriceRow>) {
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
   function addRow() { setRows((rs) => [...rs, { label: '', amount: '' }]); }
@@ -1982,7 +2037,12 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
       </p>
       <div className="space-y-2">
         {rows.map((r, i) => (
-          <div key={i} className="flex gap-2">
+          <div key={i}>
+            {/* One heading per store, where the list moves on to the next shop. */}
+            {r.store && r.store !== rows[i - 1]?.store && (
+              <p className="mb-1 mt-2 text-[11px] font-bold text-brand-purple">🛒 {r.store}</p>
+            )}
+            <div className="flex gap-2">
             <input value={r.label} onChange={(e) => setRow(i, { label: e.target.value })}
               placeholder={`Item ${i + 1}`}
               className="min-w-0 flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm" />
@@ -1992,6 +2052,7 @@ function PabiliCalculator({ order, data, onChange, onNote }: {
               className="w-24 shrink-0 rounded-lg border border-black/10 px-3 py-2 text-sm" />
             <button onClick={() => removeRow(i)} aria-label="Remove item"
               className="shrink-0 rounded-lg border border-black/10 px-2 text-sm text-black/40">✕</button>
+            </div>
           </div>
         ))}
       </div>

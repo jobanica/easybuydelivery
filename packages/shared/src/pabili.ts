@@ -49,12 +49,29 @@ export function overCapAmount(actual: number, budget: PabiliBudget): number {
   return roundPeso(Math.max(0, actual - budget.cap));
 }
 
+export interface PabiliCollectibleInput {
+  /** What the receipt actually came to. */
+  actualGoods: number;
+  deliveryFee: number;
+  /** Per-store fees — one for each store past the first on a multi-stop run. */
+  storeFeeTotal?: number;
+  /** Operator-set convenience fee. */
+  convenienceFee?: number;
+}
+
 /**
- * Final amount to collect from the customer for a Pabili order:
- * actual goods cost + delivery fee + convenience fee (operator-set).
+ * Final amount to collect from the customer for a Pabili order.
+ *
+ * Every fee the customer was quoted, plus the real cost of the goods. Named
+ * fields rather than positional arguments because this went out for a while
+ * silently missing the per-store fee: the customer's checkout added it, the
+ * order stored it, commission was charged on it, and the rider was told to
+ * collect a total without it — so the operator ate ₱25 a stop.
  */
-export function pabiliCollectible(actualGoods: number, deliveryFee: number, convenienceFee = 0): number {
-  return roundPeso(actualGoods + deliveryFee + convenienceFee);
+export function pabiliCollectible(input: PabiliCollectibleInput): number {
+  return roundPeso(
+    input.actualGoods + input.deliveryFee + (input.storeFeeTotal ?? 0) + (input.convenienceFee ?? 0),
+  );
 }
 
 /** Operator commission for a Pabili order — 15% of the delivery fee. */

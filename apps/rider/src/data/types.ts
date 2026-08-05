@@ -33,7 +33,13 @@ export interface RiderOrder {
   /** Pabili: ad-hoc stores to visit. Each past the first billed a store fee. */
   buyStores: { name: string; lat: number | null; lng: number | null }[];
   /** What the customer ordered (store_id links each item to its store). */
-  items: { id: string | null; store_id: string | null; name: string; qty: number; unitPrice: number; notes: string | null; status: OrderItemStatus; replacesItemId: string | null }[];
+  items: {
+    id: string | null; store_id: string | null;
+    /** Pabili: index into `buyStores` for where this item comes from. */
+    buyStoreIndex: number | null;
+    name: string; qty: number; unitPrice: number; notes: string | null;
+    status: OrderItemStatus; replacesItemId: string | null;
+  }[];
   /** Where the rider buys/collects (pabili & padala pin the source). */
   pickupLat: number | null;
   pickupLng: number | null;

@@ -26,7 +26,7 @@ interface FormState {
 }
 
 const initial: FormState = {
-  items: [{ qty: 1, name: '' }], where: '', estimate: 300, cap: 400,
+  items: [{ qty: 1, name: '', storeIndex: null }], where: '', estimate: 300, cap: 400,
   customerContact: '', notes: '', pay: null,
 };
 
@@ -109,12 +109,12 @@ export function PabiliForm() {
     setForm((f) => ({ ...f, items: f.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
   }
   function addItem() {
-    setForm((f) => ({ ...f, items: [...f.items, { qty: 1, name: '' }] }));
+    setForm((f) => ({ ...f, items: [...f.items, { qty: 1, name: '', storeIndex: null }] }));
   }
   function removeItem(i: number) {
     setForm((f) => ({
       ...f,
-      items: f.items.length === 1 ? [{ qty: 1, name: '' }] : f.items.filter((_, j) => j !== i),
+      items: f.items.length === 1 ? [{ qty: 1, name: '', storeIndex: null }] : f.items.filter((_, j) => j !== i),
     }));
   }
 
@@ -125,7 +125,14 @@ export function PabiliForm() {
       deliveryFee,
       convenienceFee,
       itemsDescription: pabiliItemsSummary(form.items),
-      items: form.items,
+      // The picker indexes the rows on screen, blanks included; the order only
+      // stores the named ones, so translate before sending.
+      items: form.items.map((it) => ({
+        ...it,
+        storeIndex: it.storeIndex == null ? null
+          : namedStores.indexOf(stores[it.storeIndex]!) === -1 ? null
+          : namedStores.indexOf(stores[it.storeIndex]!),
+      })),
       estimate: form.estimate,
       cap: form.cap,
       where: namedStores[0]?.name ?? form.where,
@@ -217,17 +224,29 @@ export function PabiliForm() {
         <span className="mb-1 block text-sm font-medium text-black/70">What should we buy?</span>
         <div className="space-y-2">
           {form.items.map((it, i) => (
-            <div key={i} className="flex gap-2">
-              <input type="number" min={1} value={it.qty} aria-label={`Quantity for item ${i + 1}`}
-                onChange={(e) => setItem(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
-                className="w-16 shrink-0 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30 text-center" />
-              <input value={it.name} aria-label={`Item ${i + 1}`}
-                onChange={(e) => setItem(i, { name: e.target.value })}
-                placeholder={i === 0 ? 'e.g. paracetamol 500mg' : 'Another item'}
-                className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30" />
-              <button type="button" onClick={() => removeItem(i)} aria-label={`Remove item ${i + 1}`}
-                disabled={form.items.length === 1}
-                className="shrink-0 rounded-lg border border-black/10 px-3 text-sm text-black/40 disabled:opacity-30">✕</button>
+            <div key={i} className="space-y-1">
+              <div className="flex gap-2">
+                <input type="number" min={1} value={it.qty} aria-label={`Quantity for item ${i + 1}`}
+                  onChange={(e) => setItem(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-16 shrink-0 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30 text-center" />
+                <input value={it.name} aria-label={`Item ${i + 1}`}
+                  onChange={(e) => setItem(i, { name: e.target.value })}
+                  placeholder={i === 0 ? 'e.g. paracetamol 500mg' : 'Another item'}
+                  className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30" />
+                <button type="button" onClick={() => removeItem(i)} aria-label={`Remove item ${i + 1}`}
+                  disabled={form.items.length === 1}
+                  className="shrink-0 rounded-lg border border-black/10 px-3 text-sm text-black/40 disabled:opacity-30">✕</button>
+              </div>
+              {/* Only worth asking once there's more than one store to pick from. */}
+              {namedStores.length > 1 && (
+                <select aria-label={`Store for item ${i + 1}`}
+                  value={it.storeIndex ?? ''}
+                  onChange={(e) => setItem(i, { storeIndex: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="ml-[4.5rem] rounded-lg border border-brand-purple/30 bg-brand-purple/[0.04] px-2 py-1 text-xs text-brand-purple outline-none">
+                  <option value="">🛒 Any store</option>
+                  {stores.map((st, si) => (st.name.trim() ? <option key={si} value={si}>🛒 {st.name.trim()}</option> : null))}
+                </select>
+              )}
             </div>
           ))}
         </div>

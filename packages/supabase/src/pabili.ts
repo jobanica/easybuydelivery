@@ -28,6 +28,8 @@ export interface PabiliItemInput {
   qty: number;
   name: string;
   notes?: string;
+  /** Index into `stores` for where to buy this. Undefined/null = any store. */
+  storeIndex?: number | null;
 }
 
 /** Render a shopping list as the one-line summary older screens still show. */
@@ -164,6 +166,7 @@ export async function createPabiliOrder(
       items.map((i) => ({
         order_id: id,
         store_id: null,
+        buy_store_index: i.storeIndex ?? null,
         name: i.name.trim(),
         qty: Math.max(1, Math.round(i.qty || 1)),
         unit_price: 0,

@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export async function listRiderActiveOrders(db: SupabaseClient, riderId: string) {
   const { data, error } = await db
     .from('orders')
-    .select('*, order_stores(store:stores(id, name, contact_number, lat, lng)), order_items(id, store_id, name, qty, unit_price, notes, status, replaces_item_id)')
+    .select('*, order_stores(store:stores(id, name, contact_number, lat, lng)), order_items(id, store_id, buy_store_index, name, qty, unit_price, notes, status, replaces_item_id)')
     .eq('rider_id', riderId)
     .not('status', 'in', '(delivered,cancelled)')
     .order('created_at', { ascending: true });
