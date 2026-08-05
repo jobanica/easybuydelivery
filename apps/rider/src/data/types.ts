@@ -80,6 +80,8 @@ export interface RiderData {
   confirmPayment(orderId: string, note?: string): Promise<void>;
   /** Store ran out: drop the item from the bill (no customer approval needed). */
   markSoldOut(itemId: string): Promise<void>;
+  /** The shelf price differs from ours: record what the store actually charges. */
+  correctItemPrice(itemId: string, unitPrice: number): Promise<void>;
   /** Offer something else instead — stays off the bill until the customer agrees. */
   proposeReplacement(itemId: string, name: string, qty: number, unitPrice: number): Promise<void>;
   /** Extra-stop requests the customer has made on this order. */

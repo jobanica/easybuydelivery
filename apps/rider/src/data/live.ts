@@ -14,6 +14,7 @@ import {
   riderMarkArrived,
   riderMarkItemSoldOut,
   riderProposeReplacement,
+  riderCorrectItemPrice,
   listOrderAddons,
   respondToAddon as respondToAddonRpc,
   declineOrder as declineOrderRpc,
@@ -142,6 +143,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async markSoldOut(itemId) {
       await riderMarkItemSoldOut(db, itemId);
+    },
+    async correctItemPrice(itemId, unitPrice) {
+      await riderCorrectItemPrice(db, itemId, unitPrice);
     },
     async proposeReplacement(itemId, name, qty, unitPrice) {
       await riderProposeReplacement(db, itemId, name, qty, unitPrice);

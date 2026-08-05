@@ -6,16 +6,21 @@ import 'leaflet/dist/leaflet.css';
 /** Fallback map center — Metro Manila / Rizal (matches the tracking test point). */
 const DEFAULT_CENTER: L.LatLngTuple = [14.6, 121.0];
 
-/** Brand-green teardrop pin (divIcon — no external image assets to bundle). */
-const pinIcon = L.divIcon({
-  className: 'ebd-drop-pin',
+/** Teardrop pin (divIcon — no external image assets to bundle). */
+const teardrop = (fill: string, cls: string) => L.divIcon({
+  className: cls,
   html:
     '<svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">' +
-    '<path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0z" fill="#6DBE22"/>' +
+    `<path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0z" fill="${fill}"/>` +
     '<circle cx="15" cy="15" r="6" fill="#fff"/></svg>',
   iconSize: [30, 42],
   iconAnchor: [15, 42],
 });
+
+/** Where the rider buys — purple, matching the store pins on the tracking map. */
+const storePin = teardrop('#5E2D91', 'ebd-store-pin');
+/** Where it lands — brand green. */
+const dropPin = teardrop('#6DBE22', 'ebd-drop-pin');
 
 export interface LatLngValue { lat: number; lng: number }
 
@@ -60,8 +65,19 @@ export function InAppBrowserNotice() {
  * drives the distance-based delivery fee (store pin → drop-off).
  */
 export function LocationPicker({
-  value, onChange, height = 220,
-}: { value: LatLngValue | null; onChange: (v: LatLngValue) => void; height?: number }) {
+  value, onChange, height = 220, kind = 'dropoff', label,
+}: {
+  value: LatLngValue | null;
+  onChange: (v: LatLngValue) => void;
+  height?: number;
+  /** Which end of the trip this pin is — drives its colour and its wording. */
+  kind?: 'dropoff' | 'store';
+  /** Overrides the default heading above the map. */
+  label?: string;
+}) {
+  const isStore = kind === 'store';
+  const pinIcon = isStore ? storePin : dropPin;
+  const heading = label ?? (isStore ? 'Where to buy' : 'Delivery location');
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -134,19 +150,30 @@ export function LocationPicker({
     <div>
       <InAppBrowserNotice />
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-medium">Delivery location</span>
+        <span className={`text-sm font-medium ${isStore ? 'text-brand-purple' : ''}`}>{heading}</span>
         <button type="button" onClick={useMyLocation}
           className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
           disabled={locating}>
           {locating ? 'Locating…' : '📍 Use my location'}
         </button>
       </div>
-      <div ref={elRef} style={{ height }} className="w-full overflow-hidden rounded-lg ring-1 ring-black/10" />
-      <p className="mt-1.5 text-xs text-black/50">
-        {value
-          ? 'Tap or drag the pin to set your exact drop-off.'
-          : 'Tap the map (or use your location) to set your drop-off point.'}
-      </p>
+      <div ref={elRef} style={{ height }}
+        className={`w-full overflow-hidden rounded-lg ring-1 ${isStore ? 'ring-2 ring-brand-purple/40' : 'ring-black/10'}`} />
+      <div className="mt-1.5 flex items-start justify-between gap-2">
+        <p className="text-xs text-black/50">
+          {value
+            ? `Wrong spot? Tap the map or drag the pin to move ${isStore ? 'the store' : 'your drop-off'}.`
+            : isStore
+              ? 'Tap the map to mark the store you want us to buy from.'
+              : 'Tap the map (or use your location) to set your drop-off point.'}
+        </p>
+        {value && (
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            isStore ? 'bg-brand-purple/10 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
+            📍 pin set
+          </span>
+        )}
+      </div>
     </div>
   );
 }

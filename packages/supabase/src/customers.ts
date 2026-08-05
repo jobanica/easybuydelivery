@@ -99,6 +99,48 @@ export async function riderMarkItemSoldOut(db: SupabaseClient, itemId: string): 
 }
 
 /** The customer accepts or declines a suggested replacement. */
+/**
+ * The rider corrects a line item's price to what the store is actually
+ * charging. Recomputes the bill and tells the customer in the order chat —
+ * a silent change to what someone owes is how you lose them.
+ */
+export async function riderCorrectItemPrice(
+  db: SupabaseClient, itemId: string, unitPrice: number,
+): Promise<void> {
+  const { error } = await db.rpc('rider_correct_item_price', {
+    p_item_id: itemId, p_unit_price: unitPrice,
+  });
+  if (error) throw error;
+}
+
+export interface PinCorrectionResult {
+  updated: boolean;
+  reason?: 'too_late' | 'too_far' | 'nothing_to_do';
+  message?: string;
+}
+
+/**
+ * The customer fixes a map pin they got wrong, before anyone has collected the
+ * order. Refuses once the goods are with the rider, or if the new pin is far
+ * enough away to be a different delivery — the message says which.
+ */
+export async function correctOrderPins(
+  db: SupabaseClient,
+  orderId: string,
+  pins: { pickup?: { lat: number; lng: number }; dropoff?: { lat: number; lng: number }; address?: string },
+): Promise<PinCorrectionResult> {
+  const { data, error } = await db.rpc('customer_correct_order_pins', {
+    p_order_id: orderId,
+    p_pickup_lat: pins.pickup?.lat ?? null,
+    p_pickup_lng: pins.pickup?.lng ?? null,
+    p_delivery_lat: pins.dropoff?.lat ?? null,
+    p_delivery_lng: pins.dropoff?.lng ?? null,
+    p_delivery_address: pins.address ?? null,
+  });
+  if (error) throw error;
+  return (data ?? { updated: false }) as PinCorrectionResult;
+}
+
 export async function respondToItemChange(db: SupabaseClient, itemId: string, accept: boolean): Promise<void> {
   const { error } = await db.rpc('customer_respond_item_change', { p_item_id: itemId, p_accept: accept });
   if (error) throw error;

@@ -260,15 +260,17 @@ export function PabiliForm() {
         </p>
       </div>
       <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
-      <div>
-        <span className="mb-1 block text-sm font-medium text-black/70">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-black/40"> (optional)</span>}</span>
-        <LocationPicker value={buyAt} onChange={setBuyAt} />
-        <p className="mt-1 text-xs text-black/40">{feeCfg.model === 'per_km' ? 'Needed to compute the delivery fee by distance.' : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
+      {/* Two maps in a row look identical at a glance, so the buy pin is
+          purple and framed while the drop-off stays green. */}
+      <div className="rounded-xl bg-brand-purple/[0.05] p-3 ring-1 ring-brand-purple/20">
+        <span className="mb-1 block text-sm font-bold text-brand-purple">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-brand-purple/60"> (optional)</span>}</span>
+        <LocationPicker value={buyAt} onChange={setBuyAt} kind="store" label="Pin the store" />
+        <p className="mt-1 text-xs text-black/45">{feeCfg.model === 'per_km' ? 'Needed to compute the delivery fee by distance.' : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
       </div>
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
-        <LocationPicker value={dropoff} onChange={setDropoff} />
-        <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the rider should deliver.</p>
+        <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
+        <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the rider should deliver. You can still fix it after ordering, from Account → your order.</p>
       </div>
       <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
       <div className="grid grid-cols-2 gap-4">

@@ -165,6 +165,12 @@ export function createPreviewData(): RiderData {
         items: o.items.map((i) => (i.id === itemId ? { ...i, status: 'sold_out' as const } : i)),
       }));
     },
+    async correctItemPrice(itemId, unitPrice) {
+      active = active.map((o) => rebill({
+        ...o,
+        items: o.items.map((i) => (i.id === itemId ? { ...i, unitPrice } : i)),
+      }));
+    },
     async proposeReplacement(itemId, name, qty, unitPrice) {
       active = active.map((o) => (o.items.some((i) => i.id === itemId)
         ? {

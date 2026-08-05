@@ -51,23 +51,6 @@ const SERVICES: { key: string; label: string }[] = [
 const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 type Tab = 'dashboard' | 'requests' | 'deliveries' | 'earnings' | 'settings';
 
-// Requests the rider has passed on. Persisted, because the queue only means
-// something if a skip sticks: without this, every pool refresh would put the
-// request they just declined back at the head and block them all over again.
-const PASSED_KEY = 'ebd.rider.passedRequests';
-
-function loadPassed(): string[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(PASSED_KEY) ?? '[]');
-    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
-  } catch { return []; }
-}
-
-function savePassed(ids: readonly string[]): void {
-  // Keep the tail only — old ids are for orders long since delivered.
-  try { localStorage.setItem(PASSED_KEY, JSON.stringify(ids.slice(-100))); } catch { /* private mode */ }
-}
-
 export function App({ riderId, riderName }: { riderId?: string; riderName?: string } = {}) {
   // Which account this session belongs to — shown in the header so a leftover
   // login (e.g. a demo account) is obvious at a glance.
@@ -81,7 +64,6 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
   const [onlineBusy, setOnlineBusy] = useState(false);
-  const [declined, setDeclined] = useState<Set<string>>(() => new Set(loadPassed()));
   const [profile, setProfile] = useState<RiderProfile | null>(null);
   const riderPos = useRiderPosition();
 
@@ -98,11 +80,6 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
     } catch (e) {
       setError(errMessage(e));
     }
-    // Passes recorded from any device, so a skip doesn't come back on a new one.
-    try {
-      const ids = await data.getDeclinedOrderIds();
-      if (ids.length) setDeclined((d) => new Set([...d, ...ids]));
-    } catch { /* the local list still holds */ }
   }, [data]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -120,28 +97,13 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const accepts = (t: string) => !profile?.services_accepted || profile.services_accepted.includes(t);
   // The pool is a queue, not a menu: transfers first (a released delivery may
   // already have paid-for goods waiting), then oldest request first. Only the
-  // head is acceptable — see the queue lock on RequestCard.
-  const pool = sortRequestQueue(open.filter((o) => !declined.has(o.id) && accepts(o.service_type)));
+  // head is acceptable — see the queue lock on RequestCard. There is no way to
+  // pass: a rider takes the request in front of them or leaves it for someone
+  // else, and it stays at the head until somebody does.
+  const pool = sortRequestQueue(open.filter((o) => accepts(o.service_type)));
   const head = pool[0] ?? null;
   const transfers = pool.filter((o) => o.isTransfer);
   const newRequests = pool.filter((o) => !o.isTransfer);
-
-  /**
-   * Pass on the request at the head of the queue; the next one opens up.
-   *
-   * Hidden locally straight away so the queue moves on a tap, and recorded in
-   * the background — the record is what carries the skip to the rider's other
-   * devices, and what the operator's decline history is built from. A failed
-   * write must never leave the rider stuck on a request they've turned down.
-   */
-  function passRequest(orderId: string) {
-    setDeclined((d) => {
-      const next = new Set(d).add(orderId);
-      savePassed([...next]);
-      return next;
-    });
-    void data.declineOrder(orderId).catch(() => { /* local skip already applied */ });
-  }
 
   async function toggleOnline() {
     setOnlineBusy(true);
@@ -208,7 +170,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
           <Dashboard
             online={online} onlineBusy={onlineBusy} onToggleOnline={toggleOnline}
             pool={pool} active={active} owed={owed} locked={locked} riderPos={riderPos}
-            onGo={setTab} onAccept={accept} onDecline={passRequest} data={data} onChange={refresh} />
+            onGo={setTab} onAccept={accept} data={data} onChange={refresh} />
         )}
 
         {tab === 'requests' && (
@@ -228,7 +190,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
                     {transfers.map((o) => (
                       <RequestCard key={o.id} order={o} riderPos={riderPos}
                         queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
-                        onAccept={() => accept(o.id)} onDecline={() => passRequest(o.id)} />
+                        onAccept={() => accept(o.id)} />
                     ))}
                   </div>
                 )}
@@ -238,7 +200,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
                     {newRequests.map((o) => (
                       <RequestCard key={o.id} order={o} riderPos={riderPos}
                         queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
-                        onAccept={() => accept(o.id)} onDecline={() => passRequest(o.id)} />
+                        onAccept={() => accept(o.id)} />
                     ))}
                   </div>
                 )}
@@ -273,10 +235,10 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 // Dashboard
 // ---------------------------------------------------------------------------
 
-function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, locked, riderPos, onGo, onAccept, onDecline, data, onChange }: {
+function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, locked, riderPos, onGo, onAccept, data, onChange }: {
   online: boolean; onlineBusy: boolean; onToggleOnline: () => void;
   pool: RiderOrder[]; active: RiderOrder[]; owed: number; locked: boolean; riderPos: LatLng | null;
-  onGo: (t: Tab) => void; onAccept: (id: string) => void; onDecline: (id: string) => void;
+  onGo: (t: Tab) => void; onAccept: (id: string) => void;
   data: RiderData; onChange: () => Promise<void>;
 }) {
   const todaysPotential = active.reduce((s, o) => s + riderEarn(o), 0);
@@ -334,7 +296,7 @@ function Dashboard({ online, onlineBusy, onToggleOnline, pool, active, owed, loc
         <div>
           <SectionTitle>{pool[0]!.isTransfer ? 'Transfer delivery' : 'Next in the queue'}</SectionTitle>
           <RequestCard order={pool[0]!} riderPos={riderPos} queuePos={1}
-            onAccept={() => onAccept(pool[0]!.id)} onDecline={() => onDecline(pool[0]!.id)} />
+            onAccept={() => onAccept(pool[0]!.id)} />
           {pool.length > 1 && (
             <button onClick={() => onGo('requests')} className="mt-2 w-full text-center text-xs font-semibold text-brand-purple">
               {pool.length - 1} more waiting behind this one →
@@ -388,17 +350,21 @@ const serviceTint: Record<string, string> = {
  * items listed underneath — so a multi-store order is clear at a glance.
  */
 /**
- * One line item on an active delivery, with the sold-out controls.
+ * One line item on an active delivery, with the controls for what the counter
+ * actually says.
  *
  * Taking an item off the bill is unilateral — the customer only ever pays less,
- * so waiting for a reply at the counter would help nobody. Offering a
- * replacement is a suggestion: it stays off the bill until the customer accepts,
- * because nobody should be charged for something they didn't pick.
+ * so waiting for a reply at the counter would help nobody. Correcting a price is
+ * the same kind of act: our menu copy went stale, the rider is the one looking
+ * at the real number, and the bill should say what the store charges. Both post
+ * to the order chat, so the customer sees the change as it happens. Offering a
+ * replacement is different — it stays off the bill until they accept, because
+ * nobody should be charged for something they didn't pick.
  */
 function ItemActions({ item, data, onChange }: {
   item: RiderOrder['items'][number]; data: RiderData; onChange: () => Promise<void>;
 }) {
-  const [mode, setMode] = useState<'idle' | 'suggest'>('idle');
+  const [mode, setMode] = useState<'idle' | 'suggest' | 'price'>('idle');
   const [name, setName] = useState('');
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
@@ -411,6 +377,37 @@ function ItemActions({ item, data, onChange }: {
     try { await fn(); await onChange(); setMode('idle'); }
     catch (e) { setErr(errMessage(e)); }
     finally { setBusy(false); }
+  }
+
+  if (mode === 'price') {
+    const next = Number(price);
+    const valid = price.trim() !== '' && Number.isFinite(next) && next >= 0;
+    return (
+      <div className="mt-1.5 rounded-lg bg-white p-2 ring-1 ring-black/10">
+        <p className="mb-1.5 text-[11px] font-medium text-black/60">
+          Price at the store for {item.name} — ours says {peso(item.unitPrice)}
+        </p>
+        <div className="flex gap-1.5">
+          <input type="number" inputMode="decimal" min={0} step="0.01" autoFocus
+            value={price} onChange={(e) => setPrice(e.target.value)} placeholder="₱"
+            className="w-24 shrink-0 rounded-lg border border-black/10 px-2 py-1.5 text-sm" />
+          <button disabled={busy || !valid}
+            onClick={() => void run(() => data.correctItemPrice(item.id!, next))}
+            className="flex-1 rounded-lg bg-brand-green py-1.5 text-xs font-bold text-white disabled:opacity-50">
+            {busy ? 'Saving…' : 'Correct the bill'}
+          </button>
+          <button onClick={() => setMode('idle')} className="rounded-lg border border-black/15 px-2 text-xs text-black/60">Cancel</button>
+        </div>
+        {valid && next !== item.unitPrice && (
+          <p className="mt-1 text-[11px] text-black/50">
+            {item.qty} × {peso(next)} = <span className="font-semibold">{peso(next * item.qty)}</span>
+            {' · '}{next > item.unitPrice ? 'customer pays' : 'customer saves'}{' '}
+            {peso(Math.abs(next - item.unitPrice) * item.qty)}
+          </p>
+        )}
+        {err && <p className="mt-1 text-[11px] text-red-600">{err}</p>}
+      </div>
+    );
   }
 
   if (mode === 'suggest') {
@@ -443,6 +440,10 @@ function ItemActions({ item, data, onChange }: {
       <button disabled={busy} onClick={() => void run(() => data.markSoldOut(item.id!))}
         className="rounded-lg border border-red-300 px-2 py-1 text-[11px] font-medium text-red-600 disabled:opacity-50">
         Sold out
+      </button>
+      <button disabled={busy} onClick={() => { setPrice(String(item.unitPrice)); setMode('price'); }}
+        className="rounded-lg border border-brand-green/50 px-2 py-1 text-[11px] font-medium text-green-700 disabled:opacity-50">
+        💲 Price differs
       </button>
       <button disabled={busy} onClick={() => { setName(''); setPrice(''); setQty(String(item.qty)); setMode('suggest'); }}
         className="rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple disabled:opacity-50">
@@ -647,15 +648,15 @@ function StoreRoute({ order, stops, away, open, onToggle }: {
 function QueueNote({ waiting }: { waiting: number }) {
   return (
     <p className="rounded-2xl bg-brand-purple/[0.07] px-4 py-3 text-xs text-brand-purple">
-      <span className="font-bold">First come, first served.</span> Take or pass the request at the
-      top and the next one opens up — {waiting} waiting right now.
+      <span className="font-bold">First come, first served.</span> The request at the top is the one
+      to take — {waiting} waiting right now. Leave it and it stays there for whoever takes it first.
     </p>
   );
 }
 
-function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept, onDecline, declineLabel = 'Pass' }: {
+function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept }: {
   order: RiderOrder; riderPos?: LatLng | null; queuePos?: number; locked?: boolean;
-  onAccept: () => void; onDecline: () => void; declineLabel?: string;
+  onAccept: () => void;
 }) {
   const [mapOpen, setMapOpen] = useState(false);
   const stops = pickupStops(order);
@@ -727,13 +728,9 @@ function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept, 
           <span className="text-black/35"> · after {peso(order.commission_amount)} commission</span>
         </p>
       </div>
-      <div className="flex gap-2 border-t border-black/5 p-3">
-        <button onClick={onDecline}
-          className="flex-1 rounded-xl border border-black/10 py-2.5 text-sm font-semibold text-black/60 hover:bg-black/[0.03]">
-          {declineLabel}
-        </button>
+      <div className="border-t border-black/5 p-3">
         <button onClick={onAccept}
-          className="flex-1 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:brightness-95">
+          className="w-full rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:brightness-95">
           Accept
         </button>
       </div>
