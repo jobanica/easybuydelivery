@@ -31,7 +31,10 @@ const initial: FormState = {
 };
 
 export function PabiliForm() {
-  const { ensureContact } = useAuth();
+  const { ensureContact, name: savedName } = useAuth();
+  const [custName, setCustName] = useState('');
+  // Prefill from the saved profile so returning customers don't retype it.
+  useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
   const riders = useRiderAvailability('pabili');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -166,12 +169,16 @@ export function PabiliForm() {
       setError(errMessage(err));
       return;
     }
+    if (custName.trim().length < 2) {
+      setError('Please enter your name so the rider knows who to hand it to.');
+      return;
+    }
     setSubmitting(true);
     try {
       // Riders come and go while a form is being filled in — ask again now.
       if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
-        const customerId = await ensureContact(form.customerContact);
+        const customerId = await ensureContact(form.customerContact, custName.trim());
         setCreatedId(await createPabiliOrder(supabase, toInput(customerId), { ...DEFAULT_FEE_CONFIG, perStoreFee }));
       } else {
         buildPabiliOrderRow(toInput('preview-customer'));
@@ -291,7 +298,12 @@ export function PabiliForm() {
             <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
           </div>
         </Field>
-        <Field label="Your mobile number">
+        <Field label="Your name *">
+        <input className={inputCls} value={custName} onChange={(e) => setCustName(e.target.value)}
+          placeholder="Juan Dela Cruz" required />
+        <p className="mt-1 text-xs text-black/40">So the rider knows who to hand it to.</p>
+      </Field>
+      <Field label="Your mobile number">
           <input className={inputCls} value={form.customerContact}
             onChange={(e) => set('customerContact', e.target.value)}
             placeholder="09xx xxx xxxx" required />

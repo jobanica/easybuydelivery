@@ -234,6 +234,9 @@ function PhoneSetup() {
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
+    // The rider has to ask for someone at the door; "no name given" is not an
+    // answer, so this is required rather than a nicety.
+    if (name.trim().length < 2) { setError('Please enter your name — your rider needs to know who to hand the order to.'); return; }
     if (phone.trim().length < 7) { setError('Enter a valid mobile number.'); return; }
     setBusy(true); setError(null);
     try { await ensureContact(phone.trim(), name.trim() || undefined); }
@@ -243,12 +246,12 @@ function PhoneSetup() {
   return (
     <Shell title="One more step">
       <h2 className="text-lg font-bold">Add your phone number</h2>
-      <p className="mt-1 text-sm text-black/60">Signed in as {email}. We need a number so your rider can reach you.</p>
-      <label className="mb-1 mt-4 block text-sm font-medium text-black/70">Your name</label>
-      <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Juan Dela Cruz" />
-      <label className="mb-1 mt-3 block text-sm font-medium text-black/70">Mobile number</label>
+      <p className="mt-1 text-sm text-black/60">Signed in as {email}. Your rider needs a name to ask for and a number to reach you on.</p>
+      <label className="mb-1 mt-4 block text-sm font-medium text-black/70">Your name <span className="text-red-500">*</span></label>
+      <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Juan Dela Cruz" required />
+      <label className="mb-1 mt-3 block text-sm font-medium text-black/70">Mobile number <span className="text-red-500">*</span></label>
       <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0917 123 4567" inputMode="tel" />
-      <button onClick={save} disabled={busy}
+      <button onClick={save} disabled={busy || name.trim().length < 2 || phone.trim().length < 7}
         className="mt-4 w-full rounded-lg bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Saving…' : 'Save & continue'}
       </button>

@@ -18,14 +18,16 @@ interface AuthValue {
   customerId: string | null;
   /** The customer's saved mobile number. */
   mobile: string;
-  /** Save the customer's phone (and optional name); returns the customer id. */
+  /** The customer's saved name. Required before an order can be placed. */
+  name: string;
+  /** Save the customer's phone and name; returns the customer id. */
   ensureContact: (mobile: string, name?: string) => Promise<string>;
   signOut: () => Promise<void>;
 }
 
 const PREVIEW: AuthValue = {
   live: false, loading: false, authed: true, needsPhone: false, email: '',
-  customerId: 'preview-customer', mobile: '',
+  customerId: 'preview-customer', mobile: '', name: '',
   ensureContact: async () => 'preview-customer', signOut: async () => {},
 };
 
@@ -47,12 +49,13 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [mobile, setMobile] = useState('');
+  const [name, setName] = useState('');
   const inflight = useRef<Promise<string> | null>(null);
 
   useEffect(() => onAuthChange(supabase!, (u) => {
     setUserId(u?.id ?? null);
     setEmail(u?.email ?? '');
-    if (!u) { setCustomerId(null); setMobile(''); setLoading(false); }
+    if (!u) { setCustomerId(null); setMobile(''); setName(''); setLoading(false); }
   }), []);
 
   // Load the customer row (to know if a phone number is on file).
@@ -60,17 +63,22 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     setLoading(true);
     getMyCustomer(supabase!)
-      .then((c) => { setCustomerId(c?.id ?? null); setMobile(c?.mobile_number && c.mobile_number !== 'unknown' ? c.mobile_number : ''); })
+      .then((c) => {
+        setCustomerId(c?.id ?? null);
+        setMobile(c?.mobile_number && c.mobile_number !== 'unknown' ? c.mobile_number : '');
+        setName(c?.name?.trim() ?? '');
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [userId]);
 
-  async function ensureContact(m: string, name?: string): Promise<string> {
+  async function ensureContact(m: string, n?: string): Promise<string> {
     if (inflight.current) return inflight.current;
     const run = (async () => {
-      const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name });
+      const id = await ensureCustomer(supabase!, { mobile: m || mobile || 'unknown', name: n });
       setCustomerId(id);
       if (hasRealPhone(m)) setMobile(m);
+      if (n?.trim()) setName(n.trim());
       return id;
     })();
     inflight.current = run;
@@ -82,7 +90,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthValue = {
     live: true, loading: REQUIRE_ACCOUNT ? loading : false,
-    authed, needsPhone, email, customerId, mobile,
+    authed, needsPhone, email, customerId, mobile, name,
     ensureContact,
     signOut: async () => { await sbSignOut(supabase!); },
   };

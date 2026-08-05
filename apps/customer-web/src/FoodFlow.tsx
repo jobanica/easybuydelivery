@@ -85,7 +85,7 @@ const DEFAULT_FEE_SETTINGS: FeeSettings = {
 };
 
 export function FoodFlow() {
-  const { ensureContact, mobile } = useAuth();
+  const { ensureContact, mobile, name: savedName } = useAuth();
   const riders = useRiderAvailability('food');
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +104,8 @@ export function FoodFlow() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null);
   const [contact, setContact] = useState('');
   const [custName, setCustName] = useState('');
+  // Prefill from the profile once it loads, so returning customers don't retype it.
+  useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
   const [note, setNote] = useState('');
   const [gift, setGift] = useState(false);
   const [recipientName, setRecipientName] = useState('');
@@ -284,6 +286,7 @@ export function FoodFlow() {
     if (placing) return; // guard against double/triple taps creating duplicate orders
     setError(null);
     if (needsDropoff) { setError('Please set your delivery location first.'); return; }
+    if (custName.trim().length < 2) { setError('Please enter your name so the rider knows who to hand the order to.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     if (!pay) { setError('Please choose a payment method.'); return; }
     if (areaRequired && !area) { setError('Please choose your delivery area (province, city, barangay).'); return; }
@@ -536,7 +539,7 @@ export function FoodFlow() {
               {fees.model === 'per_km' && (
                 <div>
                   {gift && <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>}
-                  <LocationPicker value={dropoff} onChange={setDropoff} />
+                  <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
                   <div className="mt-2">
                     <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
                   </div>
@@ -544,14 +547,14 @@ export function FoodFlow() {
               )}
               <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
               <div>
-                <label className="mb-1 block text-sm font-medium">Your name</label>
+                <label className="mb-1 block text-sm font-medium">Your name <span className="text-red-500">*</span></label>
                 <input value={custName} onChange={(e) => setCustName(e.target.value)}
                   placeholder="Juan Dela Cruz"
                   className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
                 <p className="mt-1 text-xs text-black/40">So the rider knows who to hand the order to.</p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Your mobile number</label>
+                <label className="mb-1 block text-sm font-medium">Your mobile number <span className="text-red-500">*</span></label>
                 <input value={contact} onChange={(e) => setContact(e.target.value)}
                   inputMode="tel" placeholder="0917 123 4567"
                   className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green" />
@@ -585,7 +588,7 @@ export function FoodFlow() {
                   {fees.model !== 'per_km' && (
                     <div>
                       <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>
-                      <LocationPicker value={dropoff} onChange={setDropoff} />
+                      <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
                       <div className="mt-2">
                         <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
                       </div>
@@ -636,11 +639,12 @@ export function FoodFlow() {
           <div className="border-t border-black/10 bg-white p-4">
             <NoRidersNotice availability={riders} />
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <button onClick={checkout} disabled={placing || needsDropoff || !contact.trim() || !pay || (areaRequired && !area)}
+            <button onClick={checkout} disabled={placing || needsDropoff || custName.trim().length < 2 || !contact.trim() || !pay || (areaRequired && !area)}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {placing ? 'Placing your order…'
                 : areaRequired && !area ? 'Choose your delivery area'
                 : needsDropoff ? 'Set delivery location to continue'
+                : custName.trim().length < 2 ? 'Enter your name'
                 : !contact.trim() ? 'Enter your mobile number'
                 : !pay ? 'Choose a payment method'
                 : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}`

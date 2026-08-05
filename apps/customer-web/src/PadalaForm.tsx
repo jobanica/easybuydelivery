@@ -37,7 +37,10 @@ const initial: FormState = {
 };
 
 export function PadalaForm() {
-  const { ensureContact } = useAuth();
+  const { ensureContact, name: savedName } = useAuth();
+  const [custName, setCustName] = useState('');
+  // Prefill from the saved profile so returning customers don't retype it.
+  useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
   const riders = useRiderAvailability('padala');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -120,12 +123,16 @@ export function PadalaForm() {
         return;
       }
     }
+    if (custName.trim().length < 2) {
+      setError('Please enter your name so the rider knows who to hand it to.');
+      return;
+    }
     setSubmitting(true);
     try {
       // Riders come and go while a form is being filled in — ask again now.
       if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
-        const customerId = await ensureContact(form.customerContact);
+        const customerId = await ensureContact(form.customerContact, custName.trim());
         setCreatedId(await createPadalaOrder(supabase, toInput(customerId)));
       } else {
         buildPadalaOrderRow(toInput('preview-customer'));
@@ -168,12 +175,12 @@ export function PadalaForm() {
       <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">📦 Pick up from</span>
-        <LocationPicker value={pickup} onChange={setPickup} />
+        <LocationPicker value={pickup} onChange={setPickup} kind="store" label="Pin the pickup" />
         <p className="mt-1 text-xs text-black/40">Where the rider collects the item (e.g. your place).</p>
       </div>
       <div>
         <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
-        <LocationPicker value={dropoff} onChange={setDropoff} />
+        <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
         <p className="mt-1 text-xs text-black/40">Where the item should be dropped off.</p>
       </div>
       <DeliveryAddressField value={form.dropoffAddress} onChange={(v) => set('dropoffAddress', v)}
@@ -193,6 +200,11 @@ export function PadalaForm() {
             onChange={(e) => set('dropoffContact', e.target.value)} required />
         </Field>
       </div>
+      <Field label="Your name *">
+        <input className={inputCls} value={custName} onChange={(e) => setCustName(e.target.value)}
+          placeholder="Juan Dela Cruz" required />
+        <p className="mt-1 text-xs text-black/40">So the rider knows who to hand it to.</p>
+      </Field>
       <Field label="Your mobile number">
         <input className={inputCls} value={form.customerContact}
           onChange={(e) => set('customerContact', e.target.value)}
