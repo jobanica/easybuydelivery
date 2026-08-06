@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getAppSettings, updateAppSettings, uploadSettlementQr, type AppSettings } from '@ebd/supabase';
+import { getAppSettings, updateAppSettings, uploadSettlementQr, getPlatformStatus,
+  type AppSettings, type PlatformStatus } from '@ebd/supabase';
 import { commission, distanceDeliveryFee,
   errMessage,
 } from '@ebd/shared';
@@ -7,7 +8,7 @@ import { supabase } from './lib/supabase.ts';
 import { Card, Muted, peso } from './ui.tsx';
 
 const SAMPLE: AppSettings = {
-  is_open: true, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
+  is_open: true, closed_message: null, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
   convenience_fee: 0, convenience_fee_food: 0, convenience_fee_pabili: 0, convenience_fee_padala: 0,
   commission_rate: 0.15, delivery_fee_model: 'flat',
   settlement_cutoff: '00:00', sms_notify_stores: false,
@@ -74,10 +75,29 @@ export function Settings() {
         <label className="flex items-center justify-between">
           <span>
             <span className="block text-sm font-medium">Platform is {s.is_open ? 'open' : 'closed'}</span>
-            <span className="block text-xs text-black/50">When closed, customers can browse but not check out.</span>
+            <span className="block text-xs text-black/50">
+              Closing stops new orders immediately. Orders already placed are unaffected — riders
+              keep accepting from the pool and delivering until the queue is empty.
+            </span>
           </span>
           <Toggle on={s.is_open} onChange={(v) => set('is_open', v)} />
         </label>
+
+        {!s.is_open && (
+          <div className="mt-3 rounded-xl bg-brand-yellow/15 p-3">
+            <QueueDrain />
+            <label className="mt-3 block">
+              <span className="block text-sm font-medium">What customers and riders see</span>
+              <textarea rows={2} value={s.closed_message ?? ''}
+                onChange={(e) => set('closed_message', e.target.value)}
+                placeholder="Closed for the day — we reopen at 8am. Thank you!"
+                className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2 text-sm" />
+              <span className="mt-1 block text-xs text-black/50">
+                Leave blank for the default wording.
+              </span>
+            </label>
+          </div>
+        )}
       </Card>
 
       {/* Services */}
@@ -316,5 +336,40 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       className={`relative h-6 w-11 rounded-full transition ${on ? 'bg-brand-green' : 'bg-black/20'}`}>
       <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${on ? 'left-[22px]' : 'left-0.5'}`} />
     </button>
+  );
+}
+
+/**
+ * How much work is left before closing is really closed.
+ *
+ * The toggle stops new orders instantly, but the queue behind it still has to
+ * drain — this is the operator's view of that, so they know when the last rider
+ * can go home rather than guessing.
+ */
+function QueueDrain() {
+  const [status, setStatus] = useState<PlatformStatus | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const load = () => { void getPlatformStatus(supabase!).then(setStatus).catch(() => {}); };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!status) return <p className="text-sm text-black/50">Checking the queue…</p>;
+  if (status.outstanding === 0) {
+    return (
+      <p className="text-sm font-medium text-green-800">
+        ✓ The queue is empty — nothing left to deliver.
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm text-yellow-900">
+      <span className="font-bold">{status.outstanding} order{status.outstanding === 1 ? '' : 's'} still to finish</span>
+      {status.unassigned > 0 && `, ${status.unassigned} of them not yet taken by a rider`}.
+      Riders keep working these until they're done.
+    </p>
   );
 }

@@ -38,6 +38,7 @@ import { useLocationPublisher } from './useLocationPublisher.ts';
 import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
 import { usePushRegistration } from './usePushRegistration.ts';
+import { usePlatformStatus, ClosedBanner } from './PlatformStatus.tsx';
 import { supabase } from './lib/supabase.ts';
 import { APP_VERSION } from './config.ts';
 import { DeleteAccount } from './DeleteAccount.tsx';
@@ -66,6 +67,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   const [onlineBusy, setOnlineBusy] = useState(false);
   const [profile, setProfile] = useState<RiderProfile | null>(null);
   const riderPos = useRiderPosition();
+  const platform = usePlatformStatus();
 
   const loadProfile = useCallback(async () => {
     if (!supabase || !riderId) return;
@@ -164,6 +166,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
       </header>
 
       <main className="mx-auto max-w-lg px-5 py-4">
+        <ClosedBanner status={platform} workLeft={pool.length + active.length} />
         {error && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         {tab === 'dashboard' && (

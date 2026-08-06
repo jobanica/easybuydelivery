@@ -7,6 +7,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface AppSettings {
   is_open: boolean;
+  /** Shown to customers and riders while closed. Null uses the default wording. */
+  closed_message: string | null;
   schedule: unknown;
   default_delivery_fee: number;
   per_store_fee: number;
@@ -38,6 +40,40 @@ export interface AppSettings {
   service_center_lat: number | null;
   service_center_lng: number | null;
   service_radius_km: number;
+}
+
+export interface PlatformStatus {
+  open: boolean;
+  /** The operator's own wording, when they set one. */
+  message: string | null;
+  /** Orders neither delivered nor cancelled — the queue that must drain. */
+  outstanding: number;
+  /** Pending orders nobody has taken yet. */
+  unassigned: number;
+}
+
+/** The default announcement, used when the operator hasn't written their own. */
+export const CLOSED_MESSAGE =
+  "Easy Buy Delivery is closed at the moment. We're not taking new orders right now — please try again later.";
+
+/**
+ * Are we open, and how much work is still out there?
+ *
+ * Asked by both apps on launch. The outstanding count is what keeps the rider
+ * app usable while the queue drains: closing stops new orders, it doesn't
+ * abandon the ones already placed.
+ */
+export async function getPlatformStatus(db: SupabaseClient): Promise<PlatformStatus> {
+  const { data, error } = await db.rpc('platform_status');
+  if (error) throw error;
+  const s = (data ?? {}) as Partial<PlatformStatus>;
+  return {
+    // Unknown means open: a failed lookup must never shutter a working service.
+    open: s.open !== false,
+    message: s.message ?? null,
+    outstanding: Number(s.outstanding ?? 0),
+    unassigned: Number(s.unassigned ?? 0),
+  };
 }
 
 export async function getAppSettings(db: SupabaseClient): Promise<AppSettings> {

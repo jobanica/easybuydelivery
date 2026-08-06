@@ -9,6 +9,7 @@ import { useAuth } from './auth/AuthContext.tsx';
 import { REQUIRE_ACCOUNT } from './config.ts';
 import { Welcome } from './Welcome.tsx';
 import { Account } from './Account.tsx';
+import { usePlatformStatus, ClosedNotice } from './PlatformStatus.tsx';
 
 type Service = 'food' | 'pabili' | 'padala';
 type Tab = Service | 'track' | 'account';
@@ -18,6 +19,7 @@ const ALL_ON: ServiceAvailability = { food: true, pabili: true, padala: true };
 export function App() {
   const { live, mobile, email, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('food');
+  const platform = usePlatformStatus();
   // When the account gate is on, AuthGate is the branded entry — skip the
   // in-app welcome so we don't show two landing screens.
   const [entered, setEntered] = useState(REQUIRE_ACCOUNT);
@@ -85,6 +87,10 @@ export function App() {
           <Account />
         ) : tracking ? (
           <Track onClose={() => setTab('food')} />
+        ) : !platform.open ? (
+          // Closed: no new orders, but Account and Track stay reachable above
+          // so a delivery already on its way can still be followed.
+          <ClosedNotice status={platform} />
         ) : noneEnabled ? (
           <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/60 shadow-sm ring-1 ring-black/5">
             All services are temporarily unavailable. Please check back soon.
