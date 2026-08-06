@@ -19,15 +19,13 @@ import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './Rider
 interface FormState {
   items: PabiliItemInput[];
   where: string;
-  estimate: number;
-  cap: number;
   customerContact: string;
   notes: string;
   pay: PayChoice | null;
 }
 
 const initial: FormState = {
-  items: [{ qty: 1, name: '', storeIndex: null }], where: '', estimate: 300, cap: 400,
+  items: [{ qty: 1, name: '', storeIndex: null }], where: '',
   customerContact: '', notes: '', pay: null,
 };
 
@@ -104,11 +102,9 @@ export function PabiliForm() {
   const namedStores = stores.filter((st) => st.name.trim() !== '');
   const storeCount = Math.max(1, namedStores.length);
   const storeFee = storeFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, perStoreFee });
-  // What the customer actually pays: goods (estimate for now) + fees. The final
-  // amount follows the rider's real receipt, capped by their spending cap.
-  const estimatedTotal = form.estimate + deliveryFee + storeFee + convenienceFee;
-  const maxTotal = form.cap + deliveryFee + storeFee + convenienceFee;
-  const capValid = form.cap >= form.estimate;
+  // Fees are all we can quote up front. Nobody knows what the goods cost until
+  // the rider is at the counter, and a made-up estimate only ever misleads.
+  const feesTotal = deliveryFee + storeFee + convenienceFee;
   const hasItems = form.items.some((i) => i.name.trim() !== '');
 
   function setStore(i: number, patch: Partial<PabiliStoreInput>) {
@@ -150,8 +146,6 @@ export function PabiliForm() {
           : namedStores.indexOf(stores[it.storeIndex]!) === -1 ? null
           : namedStores.indexOf(stores[it.storeIndex]!),
       })),
-      estimate: form.estimate,
-      cap: form.cap,
       where: namedStores[0]?.name ?? form.where,
       stores: namedStores,
       areaProvince: area?.province,
@@ -186,12 +180,6 @@ export function PabiliForm() {
         setError(`That drop-off is about ${km.toFixed(1)} km away, outside our ${serviceArea.radiusKm} km delivery area. Please pin a location we serve.`);
         return;
       }
-    }
-    try {
-      validateBudget({ estimate: form.estimate, cap: form.cap });
-    } catch (err) {
-      setError(errMessage(err));
-      return;
     }
     if (custName.trim().length < 2) {
       setError('Please enter your name so the rider knows who to hand it to.');
@@ -323,17 +311,6 @@ export function PabiliForm() {
           </div>
         } />
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Estimated cost (₱)">
-          <input type="number" min={0} className={inputCls} value={form.estimate}
-            onChange={(e) => set('estimate', Number(e.target.value))} required />
-        </Field>
-        <Field label="Spending cap (₱)">
-          <input type="number" min={0} className={inputCls} value={form.cap}
-            onChange={(e) => set('cap', Number(e.target.value))} required />
-        </Field>
-      </div>
-      {!capValid && <p className="text-xs text-red-600">Cap must be at least the estimate.</p>}
-      <div className="grid grid-cols-2 gap-4">
         <Field label="Delivery fee (₱)">
           <div className={`${inputCls} flex items-center justify-between bg-black/[0.03]`}>
             <span className="font-semibold">{needsPinsForFee ? '—' : peso(deliveryFee)}</span>
@@ -358,24 +335,21 @@ export function PabiliForm() {
       <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
 
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <Row label="Estimated goods" value={peso(form.estimate)} />
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
         {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
-          <span>Estimated total to pay</span>
-          <span>{needsPinsForFee ? '—' : peso(estimatedTotal)}</span>
+          <span>Fees to pay</span>
+          <span>{needsPinsForFee ? '—' : peso(feesTotal)}</span>
         </div>
-        <Row label={`Most you'd pay (at your ${peso(form.cap)} cap)`} value={needsPinsForFee ? '—' : peso(maxTotal)} muted />
         <p className="mt-2 text-xs text-black/50">
-          The goods amount is an estimate — you pay the <b>actual receipt total</b> plus the
-          delivery fee{convenienceFee > 0 ? ' and convenience fee' : ''}. The rider won't go over
-          your cap without checking with you first.
+          Plus the <b>cost of the goods</b>. Your rider sends you the store receipt total once
+          they've bought everything, and that's what you pay on top of the fees above.
         </p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting || !hasItems || !addressText.trim() || !capValid || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
+      <button type="submit" disabled={submitting || !hasItems || !addressText.trim() || !form.pay || !dropoff || needsPinsForFee || (areaRequired && !area)}
         className="w-full rounded-lg bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-60">
         {submitting ? 'Sending…'
           : !hasItems ? 'Add what to buy'
@@ -383,7 +357,7 @@ export function PabiliForm() {
           : areaRequired && !area ? 'Choose your delivery area'
           : needsPinsForFee || !dropoff ? 'Pin both locations'
           : !form.pay ? 'Choose a payment method'
-          : `Request Pabili · about ${peso(estimatedTotal)}`}
+          : `Request Pabili · ${peso(feesTotal)} in fees + goods`}
       </button>
     </form>
   );

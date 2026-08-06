@@ -15,6 +15,7 @@ import {
   riderMarkItemSoldOut,
   riderProposeReplacement,
   riderCorrectItemPrice,
+  riderSetBuyStoreLocation,
   listOrderAddons,
   respondToAddon as respondToAddonRpc,
   declineOrder as declineOrderRpc,
@@ -146,6 +147,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     async markSoldOut(itemId) {
       await riderMarkItemSoldOut(db, itemId);
     },
+    async setBuyStoreLocation(orderId, index, at) {
+      await riderSetBuyStoreLocation(db, orderId, index, at);
+    },
     async correctItemPrice(itemId, unitPrice) {
       await riderCorrectItemPrice(db, itemId, unitPrice);
     },
@@ -164,7 +168,7 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     async setActual(order, amount, receiptUrl) {
       return updatePabiliActualAmount(
         db,
-        { id: order.id, estimated_amount: order.estimated_amount ?? 0, budget_cap: order.budget_cap ?? amount },
+        { id: order.id, estimated_amount: order.estimated_amount, budget_cap: order.budget_cap },
         amount,
         receiptUrl,
       );

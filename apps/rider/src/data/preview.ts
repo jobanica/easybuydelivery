@@ -99,9 +99,9 @@ export function createPreviewData(): RiderData {
       payment_method: 'cod', payment_status: 'unpaid', customerName: 'Ben Cruz', recipientName: null, recipientContact: null,
       delivery_fee: 60, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 9,
       customer_contact: '0917 333 4444',
-      item_description: '2x paracetamol, 1L milk', estimated_amount: 500,
+      item_description: '2x paracetamol, 1L milk', estimated_amount: null,
       buyStores: [{ name: 'Botica Central', lat: null, lng: null }, { name: 'Aling Nena Store', lat: null, lng: null }],
-      budget_cap: 600, actual_amount: null, goodsReceiptUrl: null, store_contact: null, stores: [],
+      budget_cap: null, actual_amount: null, goodsReceiptUrl: null, store_contact: null, stores: [],
       items: [{ id: 'it-6', store_id: null, buyStoreIndex: 0, status: 'ok' as const, replacesItemId: null, name: '2x paracetamol', qty: 1, unitPrice: 0, notes: null }, { id: 'it-7', store_id: null, buyStoreIndex: 1, status: 'ok' as const, replacesItemId: null, name: '1L milk', qty: 1, unitPrice: 0, notes: null }],
       pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: null, arrivedAt: null, deliveryLat: 14.19, deliveryLng: 121.25, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
@@ -165,6 +165,11 @@ export function createPreviewData(): RiderData {
         items: o.items.map((i) => (i.id === itemId ? { ...i, status: 'sold_out' as const } : i)),
       }));
     },
+    async setBuyStoreLocation(orderId, index, at) {
+      active = active.map((o) => (o.id === orderId
+        ? { ...o, buyStores: o.buyStores.map((st, i) => (i === index ? { ...st, ...at } : st)) }
+        : o));
+    },
     async correctItemPrice(itemId, unitPrice) {
       active = active.map((o) => rebill({
         ...o,
@@ -226,9 +231,9 @@ export function createPreviewData(): RiderData {
           ? { ...x, actual_amount: amount, goods_cost: amount, goodsReceiptUrl: receiptUrl ?? x.goodsReceiptUrl }
           : x);
       return {
-        overCap: needsOverBudgetConfirmation(amount, {
+        overCap: order.budget_cap == null ? false : needsOverBudgetConfirmation(amount, {
           estimate: order.estimated_amount ?? 0,
-          cap: order.budget_cap ?? amount,
+          cap: order.budget_cap,
         }),
       };
     },

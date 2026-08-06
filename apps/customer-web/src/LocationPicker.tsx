@@ -112,7 +112,8 @@ export function LocationPicker({
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0);
 
-    // On first mount with no value, offer to centre on the device location.
+    // Centre on the device only for a drop-off. A store is somewhere else by
+    // definition — but starting near the customer beats starting on Manila.
     if (!value && navigator.geolocation) {
       setLocating(true);
       navigator.geolocation.getCurrentPosition(
@@ -151,20 +152,24 @@ export function LocationPicker({
       <InAppBrowserNotice />
       <div className="mb-2 flex items-center justify-between">
         <span className={`text-sm font-medium ${isStore ? 'text-brand-purple' : ''}`}>{heading}</span>
-        <button type="button" onClick={useMyLocation}
-          className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
-          disabled={locating}>
-          {locating ? 'Locating…' : '📍 Use my location'}
-        </button>
+        {!isStore && (
+          <button type="button" onClick={useMyLocation}
+            className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+            disabled={locating}>
+            {locating ? 'Locating…' : '📍 Use my location'}
+          </button>
+        )}
       </div>
       <div ref={elRef} style={{ height }}
         className={`w-full overflow-hidden rounded-lg ring-1 ${isStore ? 'ring-2 ring-brand-purple/40' : 'ring-black/10'}`} />
       <div className="mt-1.5 flex items-start justify-between gap-2">
         <p className="text-xs text-black/50">
-          {value
-            ? `Wrong spot? Tap the map or drag the pin to move ${isStore ? 'the store' : 'your drop-off'}.`
-            : isStore
-              ? 'Tap the map to mark the store you want us to buy from.'
+          {isStore
+            ? value
+              ? 'Wrong spot? Drag the map or tap again to move the store pin.'
+              : 'Drag the map and tap to drop a pin on the store you want us to buy from.'
+            : value
+              ? 'Wrong spot? Tap the map or drag the pin to move your drop-off.'
               : 'Tap the map (or use your location) to set your drop-off point.'}
         </p>
         {value && (

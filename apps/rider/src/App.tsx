@@ -962,29 +962,74 @@ function AddonRequests({ order, data, onChange }:
  * registered merchants, so there's nothing to call — but the rider needs the
  * route, and every stop past the first is one the customer paid a fee for.
  */
-function BuyStores({ order }: { order: RiderOrder }) {
+/**
+ * The pabili shopping route, and the one control that fixes a bad pin.
+ *
+ * Customers pin these stores from home, off memory or a map, and land a street
+ * away — the rider is the one standing in the doorway. "I'm here" writes their
+ * own position onto the store, which is what the navigation button and any
+ * later transfer will use.
+ */
+function BuyStores({ order, data, onChange }: {
+  order: RiderOrder; data?: RiderData; onChange?: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [fixed, setFixed] = useState<number | null>(null);
   if (order.buyStores.length === 0) return null;
+
+  const canFix = Boolean(data && onChange && 'geolocation' in navigator);
+
+  function fixPin(i: number) {
+    if (!data || !onChange) return;
+    setBusy(i); setErr(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await data.setBuyStoreLocation(order.id, i, { lat: pos.coords.latitude, lng: pos.coords.longitude });
+          await onChange();
+          setFixed(i);
+        } catch (e) { setErr(errMessage(e)); }
+        finally { setBusy(null); }
+      },
+      () => { setErr("Couldn't read your location — check the app's location permission."); setBusy(null); },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
   return (
     <div className="mt-3 rounded-xl bg-brand-purple/[0.06] p-3">
       <p className="mb-1.5 text-xs font-semibold text-black/60">
         🛒 Buy from {order.buyStores.length} store{order.buyStores.length === 1 ? '' : 's'}
       </p>
-      <ol className="space-y-1 text-sm">
+      <ol className="space-y-2 text-sm">
         {order.buyStores.map((st, i) => (
-          <li key={i} className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate">
-              <span className="mr-1.5 text-black/40">{i + 1}.</span>{st.name}
-            </span>
-            <a href={st.lat != null && st.lng != null
-                  ? `https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}`
-                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(st.name)}`}
-              target="_blank" rel="noreferrer"
-              className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
-              🧭 Go
-            </a>
+          <li key={i}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate">
+                <span className="mr-1.5 text-black/40">{i + 1}.</span>{st.name}
+                {st.lat == null && <span className="ml-1.5 text-[11px] text-black/40">no pin</span>}
+              </span>
+              <a href={st.lat != null && st.lng != null
+                    ? directionsTo({ lat: st.lat, lng: st.lng })
+                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(st.name)}`}
+                target="_blank" rel="noreferrer"
+                className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
+                🧭 Go
+              </a>
+            </div>
+            {canFix && (
+              <button type="button" disabled={busy != null} onClick={() => fixPin(i)}
+                className="mt-1 rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple disabled:opacity-50">
+                {busy === i ? 'Reading your location…'
+                  : fixed === i ? '✓ Pin updated'
+                  : st.lat == null ? '📍 I\'m here — set the pin' : '📍 Wrong spot? Set pin to my location'}
+              </button>
+            )}
           </li>
         ))}
       </ol>
+      {err && <p className="mt-1.5 text-[11px] text-red-600">{err}</p>}
       {order.store_fee_total > 0 && (
         <p className="mt-1.5 text-[11px] text-black/45">
           Extra stops · {peso(order.store_fee_total)} store fee on this order.
@@ -1170,7 +1215,7 @@ function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
           </div>
         )}
 
-        <BuyStores order={order} />
+        <BuyStores order={order} data={data} onChange={onChange} />
 
         {/* Restaurant / store with its items grouped underneath. */}
         <StoreGroups order={order} data={data} onChange={onChange} />

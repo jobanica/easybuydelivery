@@ -50,8 +50,13 @@ export interface PabiliRequestInput {
   itemsDescription: string;
   /** Structured shopping list — one row per item, so the rider can tick them off. */
   items?: PabiliItemInput[];
-  estimate: number;
-  cap: number;
+  /**
+   * Optional budget. The app stopped asking — nobody knows what a shopping run
+   * costs until the rider is at the counter, and a guessed ceiling only ever
+   * blocked the wrong purchase. Left in place for orders that do set one.
+   */
+  estimate?: number | null;
+  cap?: number | null;
   /** Where to buy (specific store or "any nearest"). */
   where?: string;
   /** Every store the rider must visit. Each one past the first bills a store fee. */
@@ -84,8 +89,8 @@ export interface PabiliOrderRow {
   buy_stores: PabiliStoreInput[];
   goods_cost: 0;
   commission_amount: number;
-  estimated_amount: number;
-  budget_cap: number;
+  estimated_amount: number | null;
+  budget_cap: number | null;
   item_description: string;
   pickup_lat: number | null;
   pickup_lng: number | null;
@@ -107,8 +112,11 @@ export function buildPabiliOrderRow(
   if (!input.itemsDescription.trim()) {
     throw new Error('itemsDescription is required for a Pabili order');
   }
-  const budget: PabiliBudget = { estimate: input.estimate, cap: input.cap };
-  validateBudget(budget);
+  // Only validate a budget when one was given; the app no longer asks for one.
+  if (input.estimate != null || input.cap != null) {
+    const budget: PabiliBudget = { estimate: input.estimate ?? 0, cap: input.cap ?? 0 };
+    validateBudget(budget);
+  }
 
   const stores = (input.stores ?? [])
     .filter((st) => st.name.trim() !== '')
@@ -132,8 +140,8 @@ export function buildPabiliOrderRow(
     buy_stores: stores,
     goods_cost: 0, // unknown until the rider buys
     commission_amount: commission({ deliveryFee: input.deliveryFee, storeCount }, config),
-    estimated_amount: input.estimate,
-    budget_cap: input.cap,
+    estimated_amount: input.estimate ?? null,
+    budget_cap: input.cap ?? null,
     item_description: input.itemsDescription.trim(),
     pickup_lat: input.pickupLat ?? null,
     pickup_lng: input.pickupLng ?? null,
@@ -204,7 +212,7 @@ export async function uploadPabiliReceipt(db: SupabaseClient, orderId: string, f
  */
 export async function updatePabiliActualAmount(
   db: SupabaseClient,
-  order: { id: string; estimated_amount: number; budget_cap: number },
+  order: { id: string; estimated_amount: number | null; budget_cap: number | null },
   actualAmount: number,
   receiptUrl?: string,
 ): Promise<ActualAmountResult> {
@@ -214,9 +222,29 @@ export async function updatePabiliActualAmount(
   const { error } = await db.from('orders').update(patch).eq('id', order.id);
   if (error) throw error;
   return {
-    overCap: needsOverBudgetConfirmation(actualAmount, {
-      estimate: order.estimated_amount,
+    // No cap set means nothing to go over.
+    overCap: order.budget_cap == null ? false : needsOverBudgetConfirmation(actualAmount, {
+      estimate: order.estimated_amount ?? 0,
       cap: order.budget_cap,
     }),
   };
+}
+
+/**
+ * The rider corrects where a pabili store actually is, from their own position.
+ *
+ * The customer pinned it from home, off memory or a map, and landed a street
+ * away. The rider is standing in the doorway — one tap puts the pin where the
+ * shop is, for the navigation button and for whoever takes a transfer.
+ */
+export async function riderSetBuyStoreLocation(
+  db: SupabaseClient,
+  orderId: string,
+  index: number,
+  at: { lat: number; lng: number },
+): Promise<void> {
+  const { error } = await db.rpc('rider_set_buy_store_location', {
+    p_order_id: orderId, p_index: index, p_lat: at.lat, p_lng: at.lng,
+  });
+  if (error) throw error;
 }
