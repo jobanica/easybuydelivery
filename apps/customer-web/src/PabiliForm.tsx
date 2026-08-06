@@ -11,6 +11,7 @@ import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
+import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
@@ -50,6 +51,22 @@ export function PabiliForm() {
   // Operator's per-store fee; each store past the first bills one.
   const [perStoreFee, setPerStoreFee] = useState(DEFAULT_FEE_CONFIG.perStoreFee);
   const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
+  const saved = useSavedAddresses();
+  // Which saved address this order goes to; null means "pinning manually".
+  const [chosenAddressId, setChosenAddressId] = useState<string | null>(null);
+  function chooseAddress(a: (typeof saved.addresses)[number]) {
+    setChosenAddressId(a.id);
+    if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
+    setAddressText(a.address);
+    if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+  }
+  function pinManually() { setChosenAddressId(null); }
+  // Default to the customer's default address as soon as it loads.
+  useEffect(() => {
+    if (!saved.loaded || chosenAddressId || saved.addresses.length === 0) return;
+    chooseAddress(saved.addresses[0]!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved.loaded]);
   useAddressPrefill({
     address: savedAddress, loaded: addressLoaded, dropoff, text: addressText,
     setDropoff, setText: setAddressText, setArea,
@@ -293,12 +310,18 @@ export function PabiliForm() {
         <LocationPicker value={buyAt} onChange={setBuyAt} kind="store" label="Pin the store" />
         <p className="mt-1 text-xs text-black/45">{feeCfg.model === 'per_km' ? 'Needed to compute the delivery fee by distance.' : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
       </div>
-      <div>
-        <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
-        <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
-        <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the rider should deliver. You can still fix it after ordering, from Account → your order.</p>
-      </div>
-      <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+      <AddressChooser
+        addresses={saved.addresses} loaded={saved.loaded}
+        value={chosenAddressId} onChoose={chooseAddress} onCustom={pinManually}
+        custom={
+          <div className="space-y-3">
+            <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
+            <p className="text-xs text-black/40">
+              Tap or drag the pin to where the rider should deliver. After it arrives we'll offer to save this address.
+            </p>
+            <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+          </div>
+        } />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Estimated cost (₱)">
           <input type="number" min={0} className={inputCls} value={form.estimate}

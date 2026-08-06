@@ -4,6 +4,7 @@ export * from './cart.ts';
 export * from './pabili.ts';
 export * from './payments.ts';
 export * from './tracking.ts';
+export * from './addresses.ts';
 export * from './sms.ts';
 export * from './csv.ts';
 export * from './roles.ts';

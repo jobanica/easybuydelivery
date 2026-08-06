@@ -15,6 +15,7 @@ import { REQUIRE_ACCOUNT, APP_VERSION } from './config.ts';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, PRIVACY_URL, TERMS_URL } from '@ebd/shared';
 import { DeleteAccount } from './DeleteAccount.tsx';
 import { FixPin } from './FixPin.tsx';
+import { SaveDeliveredAddress } from './SaveDeliveredAddress.tsx';
 import { errMessage } from '@ebd/shared';
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -145,6 +146,8 @@ export function Account() {
           )}
         </Card>
       )}
+
+      <SaveDeliveredAddress orders={orders} onSaved={load} />
 
       <Card title="Help & support">
         <p className="mb-3 text-sm text-black/55">Questions about an order? Reach the operator.</p>

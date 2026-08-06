@@ -10,6 +10,7 @@ import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
+import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -48,6 +49,21 @@ export function PadalaForm() {
   const [dropoff, setDropoff] = useState<LatLngValue | null>(null); // deliver to
   const [area, setArea] = useState<AreaSelection | null>(null);
   const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
+  const saved = useSavedAddresses();
+  // Which saved address this order goes to; null means "pinning manually".
+  const [chosenAddressId, setChosenAddressId] = useState<string | null>(null);
+  function chooseAddress(a: (typeof saved.addresses)[number]) {
+    setChosenAddressId(a.id);
+    if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
+    set('dropoffAddress', a.address);
+    if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+  }
+  function pinManually() { setChosenAddressId(null); }
+  useEffect(() => {
+    if (!saved.loaded || chosenAddressId || saved.addresses.length === 0) return;
+    chooseAddress(saved.addresses[0]!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved.loaded]);
   useAddressPrefill({
     address: savedAddress, loaded: addressLoaded, dropoff: pickup, text: form.pickupAddress,
     setDropoff: setPickup, setText: (v) => set('pickupAddress', v),
@@ -178,13 +194,19 @@ export function PadalaForm() {
         <LocationPicker value={pickup} onChange={setPickup} kind="store" label="Pin the pickup" />
         <p className="mt-1 text-xs text-black/40">Where the rider collects the item (e.g. your place).</p>
       </div>
-      <div>
-        <span className="mb-1 block text-sm font-medium text-black/70">📍 Deliver to</span>
-        <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
-        <p className="mt-1 text-xs text-black/40">Where the item should be dropped off.</p>
-      </div>
-      <DeliveryAddressField value={form.dropoffAddress} onChange={(v) => set('dropoffAddress', v)}
-        label="Complete drop-off address" />
+      <AddressChooser
+        addresses={saved.addresses} loaded={saved.loaded}
+        value={chosenAddressId} onChoose={chooseAddress} onCustom={pinManually}
+        custom={
+          <div className="space-y-3">
+            <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
+            <p className="text-xs text-black/40">
+              Where the item should be dropped off. After it arrives we'll offer to save this address.
+            </p>
+            <DeliveryAddressField value={form.dropoffAddress} onChange={(v) => set('dropoffAddress', v)}
+              label="Complete drop-off address" />
+          </div>
+        } />
       <Field label="Receiver's complete name *">
         <input className={inputCls} value={form.receiverName}
           onChange={(e) => set('receiverName', e.target.value)}

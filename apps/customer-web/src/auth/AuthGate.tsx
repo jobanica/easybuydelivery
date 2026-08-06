@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, updatePassword, onPasswordRecovery } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
+import { FirstAddressForm } from '../AddressChooser.tsx';
 import { useAuth } from './AuthContext.tsx';
 import { inputCls } from '../ui.tsx';
 import { REQUIRE_ACCOUNT } from '../config.ts';
@@ -12,7 +13,7 @@ import { errMessage } from '@ebd/shared';
  * (`live` false) renders children directly.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { live, loading, authed, needsPhone } = useAuth();
+  const { live, loading, authed, needsPhone, needsAddress } = useAuth();
   const [recovery, setRecovery] = useState(false);
   useEffect(() => { if (!supabase) return; return onPasswordRecovery(supabase, () => setRecovery(true)); }, []);
   if (!REQUIRE_ACCOUNT || !live) return <>{children}</>;
@@ -20,6 +21,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (loading) return <Splash sub="Loading…" />;
   if (!authed) return <EmailSignIn />;
   if (needsPhone) return <PhoneSetup />;
+  // The address is the last thing onboarding asks for, and the reason ordering
+  // never has to open a map again.
+  if (needsAddress) return <AddressSetup />;
   return <>{children}</>;
 }
 
@@ -222,6 +226,22 @@ function EmailSignIn() {
         className="mt-4 w-full text-sm text-black/55">
         {mode === 'signup' ? 'Already have an account? Sign in' : "New here? Create an account"}
       </button>
+    </Shell>
+  );
+}
+
+/** Step two of onboarding: where deliveries go by default. */
+function AddressSetup() {
+  const { customerId, refresh, signOut } = useAuth();
+  if (!customerId) return <Splash sub="Loading…" />;
+  return (
+    <Shell title="Where do we deliver?">
+      <h2 className="text-lg font-bold">Set your delivery address</h2>
+      <p className="mb-3 mt-1 text-sm text-black/60">
+        Pin it once and every order goes here by default — no map to fiddle with at checkout.
+      </p>
+      <FirstAddressForm customerId={customerId} onSaved={refresh} />
+      <button onClick={() => void signOut()} className="mt-3 w-full text-sm text-black/50">Sign out</button>
     </Shell>
   );
 }

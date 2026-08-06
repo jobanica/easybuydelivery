@@ -42,6 +42,13 @@ export interface CustomerOrder {
   actual_amount: number | null;
   /** Pabili: the rider's photo of the store receipt. */
   goods_receipt_url: string | null;
+  /** Where it went — used to offer saving a one-off address after it lands. */
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  delivery_address: string | null;
+  area_province: string | null;
+  area_city: string | null;
+  area_barangay: string | null;
   order_stores: { store: { name: string | null } | null }[];
 }
 
@@ -385,7 +392,7 @@ export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
     .from('orders')
-    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, order_stores(store:stores(name))')
+    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, delivery_lat, delivery_lng, delivery_address, area_province, area_city, area_barangay, order_stores(store:stores(name))')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(30);

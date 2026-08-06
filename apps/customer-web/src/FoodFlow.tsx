@@ -20,6 +20,7 @@ import {
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
+import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -108,6 +109,21 @@ export function FoodFlow() {
   useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
   const [note, setNote] = useState('');
   const [gift, setGift] = useState(false);
+  const saved = useSavedAddresses();
+  // Which saved address this order goes to; null means "pinning manually".
+  const [chosenAddressId, setChosenAddressId] = useState<string | null>(null);
+  function chooseAddress(a: (typeof saved.addresses)[number]) {
+    setChosenAddressId(a.id);
+    if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
+    setAddressText(a.address);
+    if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+  }
+  function pinManually() { setChosenAddressId(null); }
+  useEffect(() => {
+    if (!saved.loaded || chosenAddressId || saved.addresses.length === 0 || gift) return;
+    chooseAddress(saved.addresses[0]!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved.loaded, gift]);
   const [recipientName, setRecipientName] = useState('');
   const [addressText, setAddressText] = useState('');
   const { address: savedAddress, loaded: addressLoaded } = useDefaultAddress();
@@ -536,14 +552,30 @@ export function FoodFlow() {
             </div>
 
             <div className="mb-3 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-              {fees.model === 'per_km' && (
+              {/* A gift goes to the recipient's place, which is nobody's saved
+                  address — that branch keeps its own pin further down. */}
+              {fees.model === 'per_km' && gift && (
                 <div>
-                  {gift && <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>}
+                  <label className="mb-1 block text-sm font-medium">📍 Recipient's delivery location</label>
                   <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
                   <div className="mt-2">
                     <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
                   </div>
                 </div>
+              )}
+              {!gift && (
+                <AddressChooser
+                  addresses={saved.addresses} loaded={saved.loaded}
+                  value={chosenAddressId} onChoose={chooseAddress} onCustom={pinManually}
+                  custom={
+                    <div className="space-y-3">
+                      <LocationPicker value={dropoff} onChange={setDropoff} label="Pin the drop-off" />
+                      <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
+                      <p className="text-xs text-black/40">
+                        After it arrives we'll offer to save this address for next time.
+                      </p>
+                    </div>
+                  } />
               )}
               <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
               <div>
@@ -592,9 +624,6 @@ export function FoodFlow() {
                       <div className="mt-2">
                         <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
                       </div>
-                  <div className="mt-2">
-                    <DeliveryAddressField value={addressText} onChange={setAddressText} saved={savedAddress} />
-                  </div>
                       <p className="mt-1 text-xs text-black/40">Tap or drag the pin to where the order should be delivered.</p>
                     </div>
                   )}
