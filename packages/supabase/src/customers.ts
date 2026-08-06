@@ -384,6 +384,44 @@ export async function setOrderPaymentReference(db: SupabaseClient, orderId: stri
   if (error) throw error;
 }
 
+export interface AddableStore {
+  storeId: string;
+  storeName: string;
+}
+
+/**
+ * Add one more thing from a store already on a food order.
+ *
+ * Allowed while the rider is still at or heading to the shop; once they have
+ * the food and are on the way, the counter is behind them. The rider is told
+ * in the chat, and marks it sold out if the kitchen has run out — the same
+ * path as any other item.
+ */
+export async function addOrderItem(
+  db: SupabaseClient,
+  orderId: string,
+  menuItemId: string,
+  qty = 1,
+  notes?: string,
+): Promise<string> {
+  const { data, error } = await db.rpc('customer_add_order_item', {
+    p_order_id: orderId, p_menu_item_id: menuItemId, p_qty: qty, p_notes: notes ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** The stores on an order, so the customer can add from the right menu. */
+export async function listOrderStores(db: SupabaseClient, orderId: string): Promise<AddableStore[]> {
+  const { data, error } = await db
+    .from('order_stores')
+    .select('store_id, store:stores(name)')
+    .eq('order_id', orderId);
+  if (error) throw error;
+  return ((data ?? []) as unknown as { store_id: string; store: { name: string | null } | null }[])
+    .map((r) => ({ storeId: r.store_id, storeName: r.store?.name ?? 'Store' }));
+}
+
 /** Cancel a still-pending, unassigned order. Returns true if it was cancelled. */
 export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<boolean> {
   const { data, error } = await db.rpc('cancel_order', { p_order_id: orderId });

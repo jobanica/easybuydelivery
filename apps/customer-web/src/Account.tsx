@@ -16,6 +16,7 @@ import { SUPPORT_EMAIL, SUPPORT_PHONE, PRIVACY_URL, TERMS_URL } from '@ebd/share
 import { DeleteAccount } from './DeleteAccount.tsx';
 import { FixPin } from './FixPin.tsx';
 import { SaveDeliveredAddress } from './SaveDeliveredAddress.tsx';
+import { AddToOrder } from './AddToOrder.tsx';
 import { errMessage } from '@ebd/shared';
 
 const inp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
@@ -135,10 +136,15 @@ export function Account() {
                     <PayRider orderId={o.id} />
                   )}
                   {['pending', 'accepted', 'preparing'].includes(o.status) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {o.status === 'pending' && <CancelOrderButton orderId={o.id} onCancelled={load} />}
-                      <FixPin orderId={o.id} serviceType={o.service_type} onDone={load} />
-                    </div>
+                    <>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {o.status === 'pending' && <CancelOrderButton orderId={o.id} onCancelled={load} />}
+                        <FixPin orderId={o.id} serviceType={o.service_type} onDone={load} />
+                        {o.service_type === 'food' && (
+                          <AddToOrder orderId={o.id} status={o.status} onAdded={load} />
+                        )}
+                      </div>
+                    </>
                   )}
                 </li>
               ))}
