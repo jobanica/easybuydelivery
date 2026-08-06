@@ -42,6 +42,9 @@ export interface CustomerOrder {
   actual_amount: number | null;
   /** Pabili: the rider's photo of the store receipt. */
   goods_receipt_url: string | null;
+  /** Who it was for — kept with the address when the customer saves it. */
+  customer_name: string | null;
+  customer_contact: string | null;
   /** Where it went — used to offer saving a one-off address after it lands. */
   delivery_lat: number | null;
   delivery_lng: number | null;
@@ -392,7 +395,7 @@ export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
     .from('orders')
-    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, delivery_lat, delivery_lng, delivery_address, area_province, area_city, area_barangay, order_stores(store:stores(name))')
+    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, customer_name, customer_contact, delivery_lat, delivery_lng, delivery_address, area_province, area_city, area_barangay, order_stores(store:stores(name))')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(30);
@@ -407,6 +410,10 @@ export interface CustomerAddress {
   lat: number | null;
   lng: number | null;
   is_default: boolean;
+  /** Who the rider asks for here; null falls back to the customer's own name. */
+  contact_name: string | null;
+  /** Number to ring for this address; null falls back to the customer's own. */
+  contact_phone: string | null;
   /** Serviceable area saved with the address, so ordering can prefill it. */
   province: string | null;
   city: string | null;
@@ -427,6 +434,8 @@ export async function addAddress(db: SupabaseClient, input: {
   customerId: string; label?: string; address: string; lat?: number | null; lng?: number | null; isDefault?: boolean;
   /** Saved alongside so ordering can prefill the serviceable area too. */
   province?: string | null; city?: string | null; barangay?: string | null;
+  /** Who to ask for here and what number to ring — an address needs a person. */
+  contactName?: string | null; contactPhone?: string | null;
 }) {
   if (input.isDefault) {
     await db.from('customer_addresses').update({ is_default: false }).eq('customer_id', input.customerId);
@@ -441,6 +450,8 @@ export async function addAddress(db: SupabaseClient, input: {
     province: input.province ?? null,
     city: input.city ?? null,
     barangay: input.barangay ?? null,
+    contact_name: input.contactName?.trim() || null,
+    contact_phone: input.contactPhone?.trim() || null,
   });
   if (error) throw error;
 }

@@ -232,7 +232,7 @@ function EmailSignIn() {
 
 /** Step two of onboarding: where deliveries go by default. */
 function AddressSetup() {
-  const { customerId, refresh, signOut } = useAuth();
+  const { customerId, refresh, signOut, name, mobile } = useAuth();
   if (!customerId) return <Splash sub="Loading…" />;
   return (
     <Shell title="Where do we deliver?">
@@ -240,7 +240,8 @@ function AddressSetup() {
       <p className="mb-3 mt-1 text-sm text-black/60">
         Pin it once and every order goes here by default — no map to fiddle with at checkout.
       </p>
-      <FirstAddressForm customerId={customerId} onSaved={refresh} />
+      <FirstAddressForm customerId={customerId} onSaved={refresh}
+        defaultName={name} defaultPhone={mobile} />
       <button onClick={() => void signOut()} className="mt-3 w-full text-sm text-black/50">Sign out</button>
     </Shell>
   );

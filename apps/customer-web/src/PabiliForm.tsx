@@ -30,10 +30,12 @@ const initial: FormState = {
 };
 
 export function PabiliForm() {
-  const { ensureContact, name: savedName } = useAuth();
+  const { ensureContact, name: savedName, mobile } = useAuth();
   const [custName, setCustName] = useState('');
   // Prefill from the saved profile so returning customers don't retype it.
   useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // The number was never prefilled here, so customers retyped it every order.
+  useEffect(() => { if (mobile && !form.customerContact) set('customerContact', mobile); }, [mobile]);  // eslint-disable-line react-hooks/exhaustive-deps
   const riders = useRiderAvailability('pabili');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +59,9 @@ export function PabiliForm() {
     if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
     setAddressText(a.address);
     if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+    // An address carries its own doorbell: who to ask for, and what to ring.
+    if (a.contact_name?.trim()) setCustName(a.contact_name.trim());
+    if (a.contact_phone?.trim()) set('customerContact', a.contact_phone.trim());
   }
   function pinManually() { setChosenAddressId(null); }
   // Default to the customer's default address as soon as it loads.

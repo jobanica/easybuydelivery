@@ -117,6 +117,9 @@ export function FoodFlow() {
     if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
     setAddressText(a.address);
     if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+    // An address carries its own doorbell: who to ask for, and what to ring.
+    if (a.contact_name?.trim()) setCustName(a.contact_name.trim());
+    if (a.contact_phone?.trim()) setContact(a.contact_phone.trim());
   }
   function pinManually() { setChosenAddressId(null); }
   useEffect(() => {

@@ -38,10 +38,12 @@ const initial: FormState = {
 };
 
 export function PadalaForm() {
-  const { ensureContact, name: savedName } = useAuth();
+  const { ensureContact, name: savedName, mobile } = useAuth();
   const [custName, setCustName] = useState('');
   // Prefill from the saved profile so returning customers don't retype it.
   useEffect(() => { if (savedName && !custName) setCustName(savedName); }, [savedName]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // The number was never prefilled here, so customers retyped it every order.
+  useEffect(() => { if (mobile && !form.customerContact) set('customerContact', mobile); }, [mobile]);  // eslint-disable-line react-hooks/exhaustive-deps
   const riders = useRiderAvailability('padala');
   const [form, setForm] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +59,9 @@ export function PadalaForm() {
     if (a.lat != null && a.lng != null) setDropoff({ lat: a.lat, lng: a.lng });
     set('dropoffAddress', a.address);
     if (a.province && a.city && a.barangay) setArea({ province: a.province, city: a.city, barangay: a.barangay });
+    // A padala's drop-off contact is whoever receives it at that address.
+    if (a.contact_name?.trim()) set('receiverName', a.contact_name.trim());
+    if (a.contact_phone?.trim()) set('dropoffContact', a.contact_phone.trim());
   }
   function pinManually() { setChosenAddressId(null); }
   useEffect(() => {

@@ -57,6 +57,8 @@ export function SaveDeliveredAddress({ orders, onSaved }: {
       area={candidate.area_province && candidate.area_city && candidate.area_barangay
         ? { province: candidate.area_province, city: candidate.area_city, barangay: candidate.area_barangay }
         : null}
+      contactName={candidate.customer_name}
+      contactPhone={candidate.customer_contact}
       addresses={saved.addresses}
       customerId={saved.customerId}
       onSaved={async () => { dismiss(candidate.id); setSkipped(dismissed); await saved.reload(); await onSaved(); }}

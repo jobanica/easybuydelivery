@@ -115,10 +115,13 @@ export function AddressChooser({ addresses, loaded, value, onChoose, onCustom, c
  * Asking at checkout adds a decision to a form someone is trying to finish;
  * asking once it has arrived is the moment they know the pin was right.
  */
-export function SaveAddressPrompt({ pin, text, area, addresses, customerId, onSaved, onDismiss }: {
+export function SaveAddressPrompt({ pin, text, area, contactName, contactPhone, addresses, customerId, onSaved, onDismiss }: {
   pin: { lat: number; lng: number } | null;
   text: string;
   area: AreaSelection | null;
+  /** Who the order was for — kept with the address so the next one fills in. */
+  contactName?: string | null;
+  contactPhone?: string | null;
   addresses: CustomerAddress[];
   customerId: string | null;
   onSaved: () => void | Promise<void>;
@@ -144,6 +147,7 @@ export function SaveAddressPrompt({ pin, text, area, addresses, customerId, onSa
         province: area?.province ?? null,
         city: area?.city ?? null,
         barangay: area?.barangay ?? null,
+        contactName, contactPhone,
       });
       await onSaved();
     } catch (e) {
@@ -194,11 +198,16 @@ export function SaveAddressPrompt({ pin, text, area, addresses, customerId, onSa
  * The address a new customer sets when they make their account, which becomes
  * the one every order defaults to.
  */
-export function FirstAddressForm({ customerId, onSaved }: {
+export function FirstAddressForm({ customerId, onSaved, defaultName = '', defaultPhone = '' }: {
   customerId: string;
   onSaved: () => void | Promise<void>;
+  /** The customer's own details, which this address starts from. */
+  defaultName?: string;
+  defaultPhone?: string;
 }) {
   const [label, setLabel] = useState('Home');
+  const [contactName, setContactName] = useState(defaultName);
+  const [contactPhone, setContactPhone] = useState(defaultPhone);
   const [pin, setPin] = useState<LatLngValue | null>(null);
   const [text, setText] = useState('');
   const [area, setArea] = useState<AreaSelection | null>(null);
@@ -216,6 +225,7 @@ export function FirstAddressForm({ customerId, onSaved }: {
         customerId, label: label.trim() || 'Home', address: text.trim(),
         lat: pin?.lat ?? null, lng: pin?.lng ?? null, isDefault: true,
         province: area?.province ?? null, city: area?.city ?? null, barangay: area?.barangay ?? null,
+        contactName, contactPhone,
       });
       await onSaved();
     } catch (e) {
@@ -252,6 +262,23 @@ export function FirstAddressForm({ customerId, onSaved }: {
         <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
           placeholder="House/unit no., street, subdivision, landmark"
           className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm" />
+      </div>
+
+      {/* An address is a place; a delivery needs a person. Usually the customer
+          themselves, but "Mama's" wants a different name on the doorbell. */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-sm font-medium text-black/70">
+          Who to ask for
+          <input value={contactName} onChange={(e) => setContactName(e.target.value)}
+            placeholder="Juan Dela Cruz"
+            className="mt-1 w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm" />
+        </label>
+        <label className="text-sm font-medium text-black/70">
+          Contact number
+          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)}
+            inputMode="tel" placeholder="0917 123 4567"
+            className="mt-1 w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm" />
+        </label>
       </div>
 
       {err && <p className="text-xs text-red-600">{err}</p>}
