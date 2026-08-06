@@ -212,7 +212,9 @@ export function FoodFlow() {
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
   // A drop-off pin is required for distance pricing, and for gift orders so the
   // rider knows where to deliver to the recipient.
-  const needsDropoff = (fees.model === 'per_km' || gift) && !dropoff;
+  // Every order needs somewhere to go, whatever the fee model says.
+  const needsDropoff = !dropoff;
+  const needsAddress = addressText.trim().length < 5;
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
@@ -301,7 +303,11 @@ export function FoodFlow() {
   async function checkout() {
     if (placing) return; // guard against double/triple taps creating duplicate orders
     setError(null);
-    if (needsDropoff) { setError('Please set your delivery location first.'); return; }
+    if (needsDropoff) { setError('Please pin your delivery location first.'); return; }
+    if (needsAddress) {
+      setError('Please give your complete delivery address — the pin gets your rider to the street, the address gets them to your door.');
+      return;
+    }
     if (custName.trim().length < 2) { setError('Please enter your name so the rider knows who to hand the order to.'); return; }
     if (!contact.trim()) { setError('Please enter your mobile number so the rider can reach you.'); return; }
     if (!pay) { setError('Please choose a payment method.'); return; }
@@ -668,11 +674,12 @@ export function FoodFlow() {
           <div className="border-t border-black/10 bg-white p-4">
             <NoRidersNotice availability={riders} />
             {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <button onClick={checkout} disabled={placing || needsDropoff || custName.trim().length < 2 || !contact.trim() || !pay || (areaRequired && !area)}
+            <button onClick={checkout} disabled={placing || needsDropoff || needsAddress || custName.trim().length < 2 || !contact.trim() || !pay || (areaRequired && !area)}
               className="w-full rounded-xl bg-brand-green py-3 font-semibold text-white transition hover:brightness-95 disabled:opacity-50">
               {placing ? 'Placing your order…'
                 : areaRequired && !area ? 'Choose your delivery area'
-                : needsDropoff ? 'Set delivery location to continue'
+                : needsDropoff ? 'Pin your delivery location'
+                : needsAddress ? 'Add your complete delivery address'
                 : custName.trim().length < 2 ? 'Enter your name'
                 : !contact.trim() ? 'Enter your mobile number'
                 : !pay ? 'Choose a payment method'
