@@ -10,7 +10,7 @@ import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
-import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
+import { AddressChooser, useSavedAddresses, useAreaBackfill } from './AddressChooser.tsx';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -73,6 +73,7 @@ export function PadalaForm() {
     address: savedAddress, loaded: addressLoaded, dropoff: pickup, text: form.pickupAddress,
     setDropoff: setPickup, setText: (v) => set('pickupAddress', v),
   });
+  useAreaBackfill({ addresses: saved.addresses, chosenId: chosenAddressId, area, reload: saved.reload });
   const [areaRequired, setAreaRequired] = useState(false);
   const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   // Delivery pricing is operator-controlled: recalculated from the pinned
@@ -94,6 +95,12 @@ export function PadalaForm() {
     storeLocations: [pickup], dropoff,
   }), [feeCfg, pickup, dropoff]);
   const needsPinsForFee = feeCfg.model === 'per_km' && (!pickup || !dropoff);
+  // Naming the missing pin beats a bare "—", which reads as a broken quote.
+  const feeBlocker = !needsPinsForFee ? null
+    : !pickup ? '📍 Pin the pickup'
+    : '📍 Pin the drop-off';
+  // The half-width field beside it has room for three words, not four.
+  const feeBlockerShort = !needsPinsForFee ? null : !pickup ? 'Pin the pickup' : 'Pin the drop-off';
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,7 +247,9 @@ export function PadalaForm() {
       <div className="grid grid-cols-2 gap-4">
         <Field label="Delivery fee (₱)">
           <div className={`${inputCls} flex items-center justify-between bg-black/[0.03]`}>
-            <span className="font-semibold">{needsPinsForFee ? '—' : peso(deliveryFee)}</span>
+            <span className={feeBlockerShort ? 'text-xs font-medium text-yellow-800' : 'font-semibold'}>
+              {feeBlockerShort ?? peso(deliveryFee)}
+            </span>
             <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
           </div>
         </Field>
@@ -258,7 +267,8 @@ export function PadalaForm() {
       </Field>
       <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
+        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+          value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
         <Row label="Operator commission (15%)" value={peso(operatorCut)} muted />
         <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
       </div>

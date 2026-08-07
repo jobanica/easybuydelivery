@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  getMyCustomer, listAddresses, addAddress, setDefaultAddress,
+  getMyCustomer, listAddresses, addAddress, setDefaultAddress, setAddressArea,
   type CustomerAddress, type AreaSelection,
 } from '@ebd/supabase';
 import {
@@ -37,6 +37,40 @@ export function useSavedAddresses() {
 
   useEffect(() => { void reload(); }, [reload]);
   return { addresses, customerId, loaded, reload };
+}
+
+/** True when a saved address can't prefill the area picker. */
+export const hasArea = (a: Pick<CustomerAddress, 'province' | 'city' | 'barangay'>): boolean =>
+  Boolean(a.province && a.city && a.barangay);
+
+/**
+ * Teaches an old address its area, once.
+ *
+ * Addresses saved before the area picker existed have a pin and a written
+ * address but no province/city/barangay, so choosing one still left "Choose
+ * your delivery area" blocking checkout — every single order. The moment the
+ * customer picks the area, it's written back, and that address never asks
+ * again.
+ */
+export function useAreaBackfill(opts: {
+  addresses: CustomerAddress[];
+  /** The saved address this order is going to, or null when pinning manually. */
+  chosenId: string | null;
+  area: AreaSelection | null;
+  reload: () => void | Promise<void>;
+}) {
+  const { addresses, chosenId, area, reload } = opts;
+  const done = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!supabase || !chosenId || !area || done.current === chosenId) return;
+    const target = addresses.find((a) => a.id === chosenId);
+    if (!target || hasArea(target)) return;
+    done.current = chosenId;
+    setAddressArea(supabase, chosenId, area)
+      .then(() => reload())
+      .catch(() => { done.current = null; });  // the order itself still goes through
+  }, [chosenId, area, addresses, reload]);
 }
 
 export interface ChosenAddress {
@@ -86,6 +120,11 @@ export function AddressChooser({ addresses, loaded, value, onChoose, onCustom, c
                   )}
                   {a.lat == null && (
                     <span className="rounded-full bg-brand-yellow/30 px-2 py-0.5 text-[10px] font-semibold text-yellow-800">No pin</span>
+                  )}
+                  {/* Saved before we asked for the area — so the picker below
+                      still needs one answer, this once. */}
+                  {!hasArea(a) && (
+                    <span className="rounded-full bg-brand-yellow/30 px-2 py-0.5 text-[10px] font-semibold text-yellow-800">Area not set</span>
                   )}
                 </span>
                 <span className="mt-0.5 block text-xs text-black/50">{a.address}</span>

@@ -29,6 +29,16 @@ export function AreaPicker({ value, onChange, onRequired, onAreasLoaded }: {
   const [province, setProvince] = useState(value?.province ?? '');
   const [city, setCity] = useState(value?.city ?? '');
 
+  // A saved address arrives with its area already on it, after this picker has
+  // mounted. Without this the form knew the area but the three dropdowns sat
+  // blank, which reads as "you still have to choose" — and touching one to
+  // check would clear the area that was already right.
+  useEffect(() => {
+    if (!value) return;
+    setProvince(value.province);
+    setCity(value.city);
+  }, [value?.province, value?.city]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!supabase) { setAreas([]); onRequired(false); return; }
     listServiceAreas(supabase)

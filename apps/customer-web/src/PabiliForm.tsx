@@ -11,7 +11,7 @@ import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
 import { useDefaultAddress, useAddressPrefill, DeliveryAddressField } from './DeliveryAddress.tsx';
-import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
+import { AddressChooser, useSavedAddresses, useAreaBackfill } from './AddressChooser.tsx';
 import type { AreaSelection } from '@ebd/supabase';
 import { useAuth } from './auth/AuthContext.tsx';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
@@ -74,6 +74,7 @@ export function PabiliForm() {
     address: savedAddress, loaded: addressLoaded, dropoff, text: addressText,
     setDropoff, setText: setAddressText, setArea,
   });
+  useAreaBackfill({ addresses: saved.addresses, chosenId: chosenAddressId, area, reload: saved.reload });
   const [areaRequired, setAreaRequired] = useState(false);
   const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   // Delivery pricing comes from the operator's settings — recalculated from the
@@ -104,6 +105,13 @@ export function PabiliForm() {
   }), [feeCfg, buyAt, dropoff]);
   // Per-km pricing needs both pins to measure the leg.
   const needsPinsForFee = feeCfg.model === 'per_km' && (!buyAt || !dropoff);
+  // A bare "—" left customers who had picked their saved address wondering why
+  // the fee never appeared: the missing pin is the *store's*, not theirs.
+  const feeBlocker = !needsPinsForFee ? null
+    : !buyAt ? '📍 Pin where to buy'
+    : '📍 Pin the drop-off';
+  // The half-width field beside it has room for three words, not four.
+  const feeBlockerShort = !needsPinsForFee ? null : !buyAt ? 'Pin the store' : 'Pin the drop-off';
   const namedStores = stores.filter((st) => st.name.trim() !== '');
   const storeCount = Math.max(1, namedStores.length);
   const storeFee = storeFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, perStoreFee });
@@ -299,9 +307,23 @@ export function PabiliForm() {
       {/* Two maps in a row look identical at a glance, so the buy pin is
           purple and framed while the drop-off stays green. */}
       <div className="rounded-xl bg-brand-purple/[0.05] p-3 ring-1 ring-brand-purple/20">
-        <span className="mb-1 block text-sm font-bold text-brand-purple">🛒 Where to buy{feeCfg.model !== 'per_km' && <span className="font-normal text-brand-purple/60"> (optional)</span>}</span>
+        <span className="mb-1 block text-sm font-bold text-brand-purple">
+          🛒 Where to buy
+          {feeCfg.model === 'per_km'
+            ? <span className="text-red-600"> *</span>
+            : <span className="font-normal text-brand-purple/60"> (optional)</span>}
+        </span>
         <LocationPicker value={buyAt} onChange={setBuyAt} kind="store" label="Pin the store" />
-        <p className="mt-1 text-xs text-black/45">{feeCfg.model === 'per_km' ? 'Needed to compute the delivery fee by distance.' : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
+        {feeCfg.model === 'per_km' && !buyAt ? (
+          <p className="mt-1 rounded-lg bg-brand-yellow/25 px-3 py-2 text-xs font-medium text-yellow-900">
+            Drag the pin to the store. Your delivery fee is the distance from here to your address, so
+            we can't work it out until this is pinned.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-black/45">{feeCfg.model === 'per_km'
+            ? 'Your delivery fee is the distance from this store to your address.'
+            : 'Pin the store if you have one in mind — otherwise the rider picks the nearest.'}</p>
+        )}
       </div>
       <AddressChooser
         addresses={saved.addresses} loaded={saved.loaded}
@@ -318,7 +340,9 @@ export function PabiliForm() {
       <div className="grid grid-cols-2 gap-4">
         <Field label="Delivery fee (₱)">
           <div className={`${inputCls} flex items-center justify-between bg-black/[0.03]`}>
-            <span className="font-semibold">{needsPinsForFee ? '—' : peso(deliveryFee)}</span>
+            <span className={feeBlockerShort ? 'text-xs font-medium text-yellow-800' : 'font-semibold'}>
+              {feeBlockerShort ?? peso(deliveryFee)}
+            </span>
             <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
           </div>
         </Field>
@@ -340,13 +364,21 @@ export function PabiliForm() {
       <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
 
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'} value={needsPinsForFee ? '—' : peso(deliveryFee)} />
+        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+          value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
         {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
           <span>Fees to pay</span>
           <span>{needsPinsForFee ? '—' : peso(feesTotal)}</span>
         </div>
+        {feeBlocker && (
+          <p className="mt-2 rounded-lg bg-brand-yellow/25 px-3 py-2 text-xs font-medium text-yellow-900">
+            {!buyAt
+              ? 'Pin the store under “🛒 Where to buy” above and the delivery fee appears here.'
+              : 'Choose or pin your delivery address and the delivery fee appears here.'}
+          </p>
+        )}
         <p className="mt-2 text-xs text-black/50">
           Plus the <b>cost of the goods</b>. Your rider sends you the store receipt total once
           they've bought everything, and that's what you pay on top of the fees above.
@@ -360,7 +392,9 @@ export function PabiliForm() {
           : !hasItems ? 'Add what to buy'
           : !addressText.trim() ? 'Add your complete address'
           : areaRequired && !area ? 'Choose your delivery area'
-          : needsPinsForFee || !dropoff ? 'Pin both locations'
+          : !buyAt && feeCfg.model === 'per_km' ? 'Pin where to buy'
+          : !dropoff ? 'Pin your delivery address'
+          : needsPinsForFee ? 'Pin both locations'
           : !form.pay ? 'Choose a payment method'
           : `Request Pabili · ${peso(feesTotal)} in fees + goods`}
       </button>

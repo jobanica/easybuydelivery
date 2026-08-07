@@ -20,7 +20,7 @@ import {
 } from '@ebd/shared';
 import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
-import { AddressChooser, useSavedAddresses } from './AddressChooser.tsx';
+import { AddressChooser, useSavedAddresses, useAreaBackfill } from './AddressChooser.tsx';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -218,6 +218,7 @@ export function FoodFlow() {
   // Every order needs somewhere to go, whatever the fee model says.
   const needsDropoff = !dropoff;
   const needsAddress = addressText.trim().length < 5;
+  useAreaBackfill({ addresses: saved.addresses, chosenId: chosenAddressId, area, reload: saved.reload });
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);

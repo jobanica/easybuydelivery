@@ -494,6 +494,25 @@ export async function addAddress(db: SupabaseClient, input: {
   if (error) throw error;
 }
 
+/**
+ * Stamp the serviceable area onto a saved address that hasn't got one.
+ *
+ * Addresses saved before the area picker existed carry a pin and a written
+ * address but no province/city/barangay, so every order to them asked for the
+ * area again — the one thing choosing a saved address was supposed to spare
+ * the customer. The first time they pick it, it sticks.
+ */
+export async function setAddressArea(
+  db: SupabaseClient,
+  id: string,
+  area: { province: string; city: string; barangay: string },
+) {
+  const { error } = await db.from('customer_addresses')
+    .update({ province: area.province, city: area.city, barangay: area.barangay })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteAddress(db: SupabaseClient, id: string) {
   const { error } = await db.from('customer_addresses').delete().eq('id', id);
   if (error) throw error;
