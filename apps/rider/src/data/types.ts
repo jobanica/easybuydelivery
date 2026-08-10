@@ -1,5 +1,5 @@
 import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod, EarningRecord } from '@ebd/shared';
-import type { OrderItemStatus, OrderAddon } from '@ebd/supabase';
+import type { OrderItemStatus, OrderAddon, RiderPinCorrectionResult } from '@ebd/supabase';
 
 export type { OrderAddon };
 
@@ -90,6 +90,10 @@ export interface RiderData {
   setBuyStoreLocation(orderId: string, index: number, at: { lat: number; lng: number }): Promise<void>;
   /** The shelf price differs from ours: record what the store actually charges. */
   correctItemPrice(itemId: string, unitPrice: number): Promise<void>;
+  /** Put the drop-off pin where the customer really is; re-quotes the fee by distance. */
+  correctDeliveryPin(
+    orderId: string, at: { lat: number; lng: number }, address?: string,
+  ): Promise<RiderPinCorrectionResult>;
   /** Offer something else instead — stays off the bill until the customer agrees. */
   proposeReplacement(itemId: string, name: string, qty: number, unitPrice: number): Promise<void>;
   /** Extra-stop requests the customer has made on this order. */

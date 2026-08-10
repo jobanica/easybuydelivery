@@ -170,6 +170,11 @@ export function createPreviewData(): RiderData {
         ? { ...o, buyStores: o.buyStores.map((st, i) => (i === index ? { ...st, ...at } : st)) }
         : o));
     },
+    async correctDeliveryPin(orderId, at) {
+      active = active.map((o) => (o.id === orderId
+        ? { ...o, deliveryLat: at.lat, deliveryLng: at.lng } : o));
+      return { updated: true, moved_m: 0, old_fee: 50, new_fee: 50 };
+    },
     async correctItemPrice(itemId, unitPrice) {
       active = active.map((o) => rebill({
         ...o,

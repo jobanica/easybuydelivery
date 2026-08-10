@@ -132,3 +132,58 @@ export function summarizeRefusals(events: readonly RiderRequestEvent[]): RiderRe
       a.riderName.localeCompare(b.riderName),
   );
 }
+
+/** A drop-off pin a rider moved, and what it did to the delivery fee. */
+export interface PinCorrection {
+  id: string;
+  riderId: string | null;
+  riderName: string;
+  orderId: string;
+  /** How far the pin moved, in metres. */
+  movedM: number | null;
+  oldFee: number;
+  newFee: number;
+  createdAt: string;
+  order: { serviceType: string; status: string } | null;
+}
+
+/**
+ * Drop-off pins riders have corrected, newest first. Admin-only by RLS.
+ *
+ * Worth watching because a pin correction is the one rider action that raises
+ * what a customer owes without anyone approving it. Almost all of these are
+ * honest — the customer really did pin the wrong street — but a rider who
+ * quietly nudges every drop-off outward shows up here and nowhere else.
+ */
+export async function listPinCorrections(
+  db: SupabaseClient,
+  opts: { fromDay: string; toDay: string; limit?: number },
+): Promise<PinCorrection[]> {
+  const dayAfter = new Date(`${opts.toDay}T00:00:00Z`);
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+
+  const { data, error } = await db
+    .from('order_pin_corrections')
+    .select('id, rider_id, order_id, moved_m, old_fee, new_fee, created_at, rider:riders(name), order:orders(service_type, status)')
+    .gte('created_at', `${opts.fromDay}T00:00:00${MANILA_OFFSET}`)
+    .lt('created_at', `${dayAfter.toISOString().slice(0, 10)}T00:00:00${MANILA_OFFSET}`)
+    .order('created_at', { ascending: false })
+    .limit(opts.limit ?? 200);
+  if (error) throw error;
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row): PinCorrection => {
+    const rider = row.rider as { name?: string } | null;
+    const order = row.order as { service_type?: string; status?: string } | null;
+    return {
+      id: row.id as string,
+      riderId: (row.rider_id as string | null) ?? null,
+      riderName: rider?.name ?? 'Unknown rider',
+      orderId: row.order_id as string,
+      movedM: row.moved_m == null ? null : Number(row.moved_m),
+      oldFee: Number(row.old_fee ?? 0),
+      newFee: Number(row.new_fee ?? 0),
+      createdAt: row.created_at as string,
+      order: order ? { serviceType: order.service_type ?? '', status: order.status ?? '' } : null,
+    };
+  });
+}

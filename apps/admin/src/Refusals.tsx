@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  listRiderRequestEvents, summarizeRefusals,
-  type RiderRequestEvent, type RiderRefusalTally,
+  listRiderRequestEvents, summarizeRefusals, listPinCorrections,
+  type RiderRequestEvent, type RiderRefusalTally, type PinCorrection,
 } from '@ebd/supabase';
 import { errMessage, manilaDay, shiftDay } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
@@ -166,6 +166,91 @@ export function RefusalHistory() {
                     <Td className="text-black/60">{e.reason ?? <span className="text-black/25">—</span>}</Td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Riders page: drop-off pins riders have moved, and the fee that followed. */
+export function PinCorrectionLog() {
+  const [days, setDays] = useState(30);
+  const [rows, setRows] = useState<PinCorrection[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null); setError(null);
+    if (!supabase) { setRows([]); return; }
+    listPinCorrections(supabase, { fromDay: shiftDay(today, -(days - 1)), toDay: today })
+      .then((r) => { if (alive) setRows(r); })
+      .catch((e) => { if (alive) { setError(errMessage(e)); setRows([]); } });
+    return () => { alive = false; };
+  }, [days]);
+
+  // The number that matters: how much a wrong pin added to customers' bills.
+  const added = (rows ?? []).reduce((n, r) => n + Math.max(0, r.newFee - r.oldFee), 0);
+
+  const chip = (on: boolean) =>
+    `rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
+      on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`;
+
+  return (
+    <Card
+      title="Drop-off pins riders corrected"
+      action={
+        <span className="flex gap-2">
+          {RANGES.map((r) => (
+            <button key={r} onClick={() => setDays(r)} className={chip(days === r)}>{r} days</button>
+          ))}
+        </span>
+      }
+    >
+      {error && <ErrorNote msg={error} />}
+      {!rows ? (
+        <p className="text-sm text-black/40">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="py-2 text-sm text-black/50">No pins corrected in this period.</p>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-black/50">
+            {rows.length} correction{rows.length === 1 ? '' : 's'} · {peso(added)} added to delivery fees.
+            A rider whose corrections always push the fee up is worth a word.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-black/50">
+                <tr className="border-b border-black/5">
+                  <Th>When</Th><Th>Rider</Th><Th>Order</Th><Th>Moved</Th><Th>Delivery fee</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const diff = r.newFee - r.oldFee;
+                  return (
+                    <tr key={r.id} className="border-b border-black/[0.04]">
+                      <Td className="whitespace-nowrap text-black/60">{when(r.createdAt)}</Td>
+                      <Td><span className="font-medium">{r.riderName}</span></Td>
+                      <Td className="capitalize text-black/60">
+                        {r.order ? `${r.order.serviceType} · ${r.order.status.replaceAll('_', ' ')}` : '—'}
+                      </Td>
+                      <Td className="whitespace-nowrap text-black/60">
+                        {r.movedM == null ? '—'
+                          : r.movedM >= 1000 ? `${(r.movedM / 1000).toFixed(1)} km` : `${Math.round(r.movedM)} m`}
+                      </Td>
+                      <Td className="whitespace-nowrap">
+                        <span className="text-black/45">{peso(r.oldFee)}</span>
+                        <span className="mx-1 text-black/25">→</span>
+                        <span className={diff > 0 ? 'font-semibold text-yellow-700' : diff < 0 ? 'font-semibold text-green-700' : ''}>
+                          {peso(r.newFee)}
+                        </span>
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

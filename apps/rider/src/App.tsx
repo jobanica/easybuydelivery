@@ -34,6 +34,7 @@ import type { OrderAddon } from './data/types.ts';
 import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
+import { PinPicker } from './PinPicker.tsx';
 import { useLocationPublisher } from './useLocationPublisher.ts';
 import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
@@ -1055,6 +1056,92 @@ function AddressLine({ label, address, icon }: { label: string; address: string;
   );
 }
 
+/**
+ * "This is not where they live."
+ *
+ * The customer pinned the wrong place and nobody found out until the rider was
+ * standing in it. The customer's own fix stops working the moment the goods are
+ * collected, which is almost always before the mistake surfaces — so this is
+ * the rider's, and it works right up to delivery.
+ *
+ * The fee moves with the pin, because under per-km pricing the fee *is* the
+ * distance. The database re-quotes it and tells the customer in the chat; the
+ * rider never types a peso figure.
+ */
+function FixDropoffPin({ order, data, onChange }: {
+  order: RiderOrder; data: RiderData; onChange: () => Promise<void>;
+}) {
+  const current = order.deliveryLat != null && order.deliveryLng != null
+    ? { lat: order.deliveryLat, lng: order.deliveryLng } : null;
+  const [open, setOpen] = useState(false);
+  const [pin, setPin] = useState<LatLng | null>(current);
+  const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const moved = pin && current ? haversineMeters(pin, current) : null;
+
+  async function save() {
+    if (!pin) return;
+    setBusy(true); setErr(null);
+    try {
+      const res = await data.correctDeliveryPin(order.id, pin, address.trim() || undefined);
+      if (!res.updated) { setErr(res.message ?? 'That pin could not be used.'); return; }
+      const fee = res.old_fee != null && res.new_fee != null && res.old_fee !== res.new_fee
+        ? ` Delivery fee ${peso(res.old_fee)} → ${peso(res.new_fee)}.` : '';
+      setDone(`Pin moved.${fee} The customer has been told in the chat.`);
+      setOpen(false);
+      await onChange();
+    } catch (e) {
+      setErr(errMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done && !open) {
+    return <p className="mt-2 rounded-lg bg-brand-green/10 px-3 py-2 text-xs font-medium text-green-800">✓ {done}</p>;
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => { setPin(current); setOpen(true); }}
+        className="mt-2 w-full rounded-lg border border-brand-purple/40 py-2 text-xs font-semibold text-brand-purple">
+        📍 Wrong drop-off pin? Fix it
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl bg-brand-purple/[0.06] p-3 ring-1 ring-brand-purple/20">
+      <p className="text-sm font-bold text-brand-purple">Put the pin where they actually are</p>
+      <p className="mb-2 mt-0.5 text-[11px] text-black/55">
+        The delivery fee is worked out by distance, so moving the pin re-prices it. The customer sees
+        the change in the chat.
+      </p>
+      <PinPicker value={pin} onChange={setPin} />
+      <input value={address} onChange={(e) => setAddress(e.target.value)}
+        placeholder="Correct address (optional)"
+        className="mt-2 w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs" />
+      {moved != null && moved >= 20 && (
+        <p className="mt-1.5 text-[11px] text-black/50">Moving it {formatDistance(moved)} from the customer's pin.</p>
+      )}
+      {err && <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{err}</p>}
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={() => setOpen(false)} disabled={busy}
+          className="flex-1 rounded-lg border border-black/10 bg-white py-2 text-xs font-semibold text-black/60">
+          Cancel
+        </button>
+        <button type="button" onClick={() => void save()} disabled={busy || !pin}
+          className="flex-1 rounded-lg bg-brand-purple py-2 text-xs font-bold text-white disabled:opacity-50">
+          {busy ? 'Saving…' : 'Move the pin'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
   { order: RiderOrder; data: RiderData; onChange: () => Promise<void>; payoutNumber?: string | null; riderPos?: LatLng | null }) {
   const stops = pickupStops(order);
@@ -1142,6 +1229,9 @@ function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
 
         {order.pickupAddress && <AddressLine label="Pick up at" address={order.pickupAddress} icon="🛒" />}
         {order.deliveryAddress && <AddressLine label="Deliver to" address={order.deliveryAddress} icon="📍" />}
+        {order.status !== 'delivered' && order.status !== 'cancelled' && (
+          <FixDropoffPin order={order} data={data} onChange={onChange} />
+        )}
 
         {/* What the customer ordered */}
         {/* Fee breakdown — so the delivery fee is always visible */}

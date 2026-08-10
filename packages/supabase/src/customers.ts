@@ -151,6 +151,43 @@ export async function correctOrderPins(
   return (data ?? { updated: false }) as PinCorrectionResult;
 }
 
+export interface RiderPinCorrectionResult {
+  updated: boolean;
+  reason?: 'outside_area' | 'unchanged';
+  message?: string;
+  /** How far the pin moved, in metres. */
+  moved_m?: number | null;
+  old_fee?: number;
+  new_fee?: number;
+}
+
+/**
+ * The rider moves the drop-off pin to where the customer actually is, and the
+ * delivery fee is re-quoted from the real distance.
+ *
+ * The customer's own correction stops once the goods are collected — which is
+ * usually before anyone has noticed the pin is wrong. The rider finds out at
+ * the door, and under per-km pricing every kilometre of someone else's mistake
+ * comes out of their pocket. The new fee is computed in the database, not
+ * here: what a rider collects is not a number a rider types.
+ *
+ * Bounded by the service radius rather than by how far the pin moves — capping
+ * the move would block the one case that needs this most, a pin dropped in the
+ * wrong province. Every correction is recorded for the operator.
+ */
+export async function riderCorrectDeliveryPin(
+  db: SupabaseClient,
+  orderId: string,
+  at: { lat: number; lng: number },
+  address?: string,
+): Promise<RiderPinCorrectionResult> {
+  const { data, error } = await db.rpc('rider_correct_delivery_pin', {
+    p_order_id: orderId, p_lat: at.lat, p_lng: at.lng, p_address: address ?? null,
+  });
+  if (error) throw error;
+  return (data ?? { updated: false }) as RiderPinCorrectionResult;
+}
+
 export async function respondToItemChange(db: SupabaseClient, itemId: string, accept: boolean): Promise<void> {
   const { error } = await db.rpc('customer_respond_item_change', { p_item_id: itemId, p_accept: accept });
   if (error) throw error;

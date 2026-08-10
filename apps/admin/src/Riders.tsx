@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
 import { SAMPLE_RIDERS, onDutyFor } from './OnDuty.tsx';
-import { RefusalHistory } from './Refusals.tsx';
+import { RefusalHistory, PinCorrectionLog } from './Refusals.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -146,6 +146,7 @@ export function Riders() {
       </Card>
 
       <RefusalHistory />
+      <PinCorrectionLog />
     </div>
   );
 }
