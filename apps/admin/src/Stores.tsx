@@ -28,6 +28,7 @@ import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS,
 import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
+import { PriceReports } from './PriceReports.tsx';
 import { Toggle } from './ui.tsx';
 
 /** Time value normaliser: "" → null, otherwise the HH:MM string. */
@@ -152,6 +153,7 @@ export function Stores() {
 
   return (
     <div className="space-y-5">
+      <PriceReports />
       <div className="flex justify-end">
         <button onClick={() => setImporting((v) => !v)}
           className="rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ring-black/10 hover:bg-black/[0.03]">

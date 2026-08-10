@@ -35,6 +35,9 @@ export interface RiderOrder {
   /** What the customer ordered (store_id links each item to its store). */
   items: {
     id: string | null; store_id: string | null;
+    /** The menu entry behind this line, when there is one — pabili lines and
+        rider-suggested replacements have none, so nothing to keep in step. */
+    menuItemId: string | null;
     /** Pabili: index into `buyStores` for where this item comes from. */
     buyStoreIndex: number | null;
     name: string; qty: number; unitPrice: number; notes: string | null;

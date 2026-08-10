@@ -5,6 +5,7 @@ import { Card, peso } from './ui.tsx';
 import { LiveOrders } from './LiveOrders.tsx';
 import { OnDuty } from './OnDuty.tsx';
 import { RefusalSummary } from './Refusals.tsx';
+import { PriceReportsAlert } from './PriceReports.tsx';
 import { IconStore, IconRiders, IconOrders, IconWallet, IconScooter } from './icons.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -50,6 +51,8 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
         <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
         <div className="pointer-events-none absolute -bottom-10 right-16 h-28 w-28 rounded-full bg-brand-yellow/20" />
       </div>
+
+      <PriceReportsAlert onNavigate={onNavigate} />
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">

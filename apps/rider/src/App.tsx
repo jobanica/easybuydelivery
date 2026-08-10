@@ -409,6 +409,14 @@ function ItemActions({ item, data, onChange }: {
             {peso(Math.abs(next - item.unitPrice) * item.qty)}
           </p>
         )}
+        {/* The order is repriced the moment they tap; the menu only follows if
+            the office agrees. Saying so stops riders re-reporting the same item
+            every shift wondering why nothing changed. */}
+        {item.menuItemId && (
+          <p className="mt-1 text-[11px] text-black/40">
+            Also sent to the office — if they approve it, our menu is updated for everyone.
+          </p>
+        )}
         {err && <p className="mt-1 text-[11px] text-red-600">{err}</p>}
       </div>
     );

@@ -421,3 +421,64 @@ export async function copyStoreMenu(
   if (error) throw error;
   return (data ?? { categories: 0, items: 0 }) as CopyMenuResult;
 }
+
+/**
+ * A price a rider found different at the counter, waiting on the operator.
+ *
+ * The rider's correction always lands on the order they are holding — the
+ * customer's bill has to match the receipt. Whether it also becomes the price
+ * *every* future customer is quoted is the operator's call, and that is what
+ * these are.
+ */
+export interface MenuPriceProposal {
+  id: string;
+  menuItemId: string;
+  itemName: string;
+  storeId: string;
+  storeName: string;
+  /** What our menu says today. */
+  menuPrice: number;
+  /** What the store is actually charging, per the most recent report. */
+  actualPrice: number;
+  /** How many riders have reported it. Three is a repricing; one may be a typo. */
+  reports: number;
+  riderName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listMenuPriceProposals(db: SupabaseClient): Promise<MenuPriceProposal[]> {
+  const { data, error } = await db
+    .from('menu_price_proposals')
+    .select('id, menu_item_id, store_id, menu_price, actual_price, reports, created_at, updated_at, item:menu_items(name), store:stores(name), rider:riders(name)')
+    .eq('status', 'pending')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row): MenuPriceProposal => {
+    const item = row.item as { name?: string } | null;
+    const store = row.store as { name?: string } | null;
+    const rider = row.rider as { name?: string } | null;
+    return {
+      id: row.id as string,
+      menuItemId: row.menu_item_id as string,
+      itemName: item?.name ?? 'Menu item',
+      storeId: row.store_id as string,
+      storeName: store?.name ?? 'Store',
+      menuPrice: Number(row.menu_price ?? 0),
+      actualPrice: Number(row.actual_price ?? 0),
+      reports: Number(row.reports ?? 1),
+      riderName: rider?.name ?? null,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    };
+  });
+}
+
+/** Approve (writing the price onto the menu) or turn down a reported price. */
+export async function reviewMenuPriceProposal(
+  db: SupabaseClient, id: string, approve: boolean,
+): Promise<void> {
+  const { error } = await db.rpc('review_menu_price_proposal', { p_id: id, p_approve: approve });
+  if (error) throw error;
+}
