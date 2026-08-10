@@ -657,7 +657,10 @@ export function FoodFlow() {
               <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
                 value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
               {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
-              {summary.convenienceFee > 0 && <Row label="Convenience fee" value={peso(summary.convenienceFee)} />}
+              {summary.convenienceFee > 0 && (
+                <Row label={storeCount > 1 ? `Convenience fee (${storeCount} stores)` : 'Convenience fee'}
+                  value={peso(summary.convenienceFee)} />
+              )}
               <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
                 <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
               </div>

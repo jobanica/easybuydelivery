@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
-  DEFAULT_FEE_CONFIG, storeFeeTotal,
+  DEFAULT_FEE_CONFIG, storeFeeTotal, convenienceFeeTotal, MAX_STORES_PER_ORDER,
   type DeliveryFeeModel, type DistanceFeeConfig,
   errMessage,
 } from '@ebd/shared';
@@ -115,15 +115,17 @@ export function PabiliForm() {
   const namedStores = stores.filter((st) => st.name.trim() !== '');
   const storeCount = Math.max(1, namedStores.length);
   const storeFee = storeFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, perStoreFee });
+  // One convenience fee per shop: each is its own queue and its own wait.
+  const convenienceTotal = convenienceFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, convenienceFee });
   // Fees are all we can quote up front. Nobody knows what the goods cost until
   // the rider is at the counter, and a made-up estimate only ever misleads.
-  const feesTotal = deliveryFee + storeFee + convenienceFee;
+  const feesTotal = deliveryFee + storeFee + convenienceTotal;
   const hasItems = form.items.some((i) => i.name.trim() !== '');
 
   function setStore(i: number, patch: Partial<PabiliStoreInput>) {
     setStores((ss) => ss.map((st, j) => (j === i ? { ...st, ...patch } : st)));
   }
-  function addStore() { setStores((ss) => [...ss, { name: '' }]); }
+  function addStore() { setStores((ss) => (ss.length >= MAX_STORES_PER_ORDER ? ss : [...ss, { name: '' }])); }
   function removeStore(i: number) {
     setStores((ss) => (ss.length === 1 ? [{ name: '' }] : ss.filter((_, j) => j !== i)));
   }
@@ -149,7 +151,7 @@ export function PabiliForm() {
       customerId,
       customerContact: form.customerContact,
       deliveryFee,
-      convenienceFee,
+      convenienceFee: convenienceTotal,
       itemsDescription: pabiliItemsSummary(form.items),
       // The picker indexes the rows on screen, blanks included; the order only
       // stores the named ones, so translate before sending.
@@ -293,9 +295,9 @@ export function PabiliForm() {
             </div>
           ))}
         </div>
-        <button type="button" onClick={addStore}
-          className="mt-2 w-full rounded-lg border border-dashed border-brand-purple/40 py-2 text-sm font-semibold text-brand-purple">
-          ＋ Add another store
+        <button type="button" onClick={addStore} disabled={stores.length >= MAX_STORES_PER_ORDER}
+          className="mt-2 w-full rounded-lg border border-dashed border-brand-purple/40 py-2 text-sm font-semibold text-brand-purple disabled:opacity-40">
+          {stores.length >= MAX_STORES_PER_ORDER ? `${MAX_STORES_PER_ORDER} stores is the limit for one trip` : '＋ Add another store'}
         </button>
         <p className="mt-1 text-xs text-black/40">
           {namedStores.length > 1
@@ -367,7 +369,10 @@ export function PabiliForm() {
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
           value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
         {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
-        {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
+        {convenienceTotal > 0 && (
+          <Row label={storeCount > 1 ? `Convenience fee (${storeCount} stores)` : 'Convenience fee'}
+            value={peso(convenienceTotal)} />
+        )}
         <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
           <span>Fees to pay</span>
           <span>{needsPinsForFee ? '—' : peso(feesTotal)}</span>

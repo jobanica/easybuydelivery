@@ -203,6 +203,10 @@ export async function cancelEmptyOrder(db: SupabaseClient, orderId: string): Pro
 export interface OrderAddon {
   id: string;
   order_id: string;
+  /** Set when the request carries a real store and basket, not free text. */
+  store_id: string | null;
+  /** What to buy there — empty for the older free-text errand. */
+  items: { name: string; qty: number; unitPrice: number }[];
   description: string;
   store_name: string | null;
   est_amount: number;
@@ -215,7 +219,7 @@ export interface OrderAddon {
 export async function listOrderAddons(db: SupabaseClient, orderId: string): Promise<OrderAddon[]> {
   const { data, error } = await db
     .from('order_addons')
-    .select('id, order_id, description, store_name, est_amount, status, store_fee, created_at')
+    .select('id, order_id, store_id, description, store_name, est_amount, status, store_fee, created_at, items:order_addon_items(name, qty, unit_price)')
     .eq('order_id', orderId)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -224,6 +228,9 @@ export async function listOrderAddons(db: SupabaseClient, orderId: string): Prom
     return {
       id: o.id as string,
       order_id: o.order_id as string,
+      store_id: (o.store_id as string) ?? null,
+      items: ((o.items ?? []) as { name: string; qty: number; unit_price: number }[])
+        .map((i) => ({ name: i.name, qty: Number(i.qty), unitPrice: Number(i.unit_price) })),
       description: o.description as string,
       store_name: (o.store_name as string) ?? null,
       est_amount: Number(o.est_amount ?? 0),
@@ -424,6 +431,35 @@ export async function setOrderPaymentReference(db: SupabaseClient, orderId: stri
 export interface AddableStore {
   storeId: string;
   storeName: string;
+}
+
+export interface AddStoreResult {
+  /** True when it went straight onto the order — no rider had taken it yet. */
+  applied: boolean;
+  addon_id: string;
+}
+
+/**
+ * Ask for a whole extra store on an order already under way, with what to buy.
+ *
+ * A new store is a new stop — another queue, another counter, often a detour —
+ * so unlike adding to a shop the rider is already visiting, this one is put to
+ * them first. Nothing is charged and nothing is added until they accept; a stop
+ * they can't make should never reach the bill. Up to three stores in all.
+ */
+export async function addOrderStore(
+  db: SupabaseClient,
+  orderId: string,
+  storeId: string,
+  items: { menuItemId: string; qty: number }[],
+): Promise<AddStoreResult> {
+  const { data, error } = await db.rpc('customer_add_order_store', {
+    p_order_id: orderId,
+    p_store_id: storeId,
+    p_items: items.map((i) => ({ menu_item_id: i.menuItemId, qty: i.qty })),
+  });
+  if (error) throw error;
+  return data as AddStoreResult;
 }
 
 /**

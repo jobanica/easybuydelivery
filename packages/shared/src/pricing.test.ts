@@ -5,6 +5,7 @@ import {
   commission,
   riderEarnings,
   storeFeeTotal,
+  convenienceFeeTotal,
   orderCost,
   distanceDeliveryFee,
   resolveDeliveryFee,
@@ -143,4 +144,24 @@ test('resolveDeliveryFee: falls back to flat when no store is pinned', () => {
     storeLocations: [null, undefined], dropoff: dropoff3km,
   });
   assert.equal(fee, 55);
+});
+
+test('convenience fee is charged once per store, and never zero times', () => {
+  const cfg = { ...DEFAULT_FEE_CONFIG, convenienceFee: 35 };
+  assert.equal(convenienceFeeTotal(0, cfg), 35);  // padala — no store, still one fee
+  assert.equal(convenienceFeeTotal(1, cfg), 35);
+  assert.equal(convenienceFeeTotal(2, cfg), 70);
+  assert.equal(convenienceFeeTotal(3, cfg), 105);
+});
+
+test('a three-store order totals goods + delivery + 2 store fees + 3 convenience', () => {
+  const cost = orderCost(
+    { deliveryFee: 80, storeCount: 3, goodsCost: 600 },
+    { perStoreFee: 25, commissionRate: 0.15, convenienceFee: 35 },
+  );
+  assert.equal(cost.storeFeeTotal, 50);
+  assert.equal(cost.convenienceFee, 105);
+  assert.equal(cost.customerTotal, 835);
+  // Commission is on delivery + store fees only — the convenience fee is the rider's.
+  assert.equal(cost.commission, 19.5);
 });

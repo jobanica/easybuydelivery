@@ -936,10 +936,25 @@ function AddonRequests({ order, data, onChange }:
       {pending.map((a) => (
         <div key={a.id} className="mt-3 rounded-xl bg-brand-yellow/20 p-3 ring-1 ring-brand-yellow/50">
           <p className="text-sm font-bold text-brand-ink">➕ Customer wants another stop</p>
-          <p className="mt-1 text-sm">{a.description}</p>
-          <p className="text-[11px] text-black/50">
-            {a.store_name ? `At ${a.store_name}` : 'No store given'}
-            {a.est_amount > 0 ? ` · about ${peso(a.est_amount)} of goods` : ''}
+          <p className="mt-1 text-sm font-semibold">{a.store_name || 'No store given'}</p>
+          {/* A store-backed request carries the exact basket, so the rider can
+              judge the stop before agreeing to it. */}
+          {a.items.length > 0 ? (
+            <ul className="mt-1 space-y-0.5 text-[13px]">
+              {a.items.map((i, n) => (
+                <li key={n} className="flex justify-between gap-2">
+                  <span className="min-w-0 truncate">{i.qty}× {i.name}</span>
+                  <span className="shrink-0 text-black/50">{peso(i.qty * i.unitPrice)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-sm">{a.description}</p>
+          )}
+          <p className="mt-1 text-[11px] text-black/50">
+            {a.est_amount > 0 ? `About ${peso(a.est_amount)} of goods · ` : ''}
+            you earn the extra stop and convenience fees, and the delivery fee is worked out again
+            for the longer route.
           </p>
           <div className="mt-2 flex gap-2">
             <button onClick={() => void respond(a.id, true)} disabled={busy === a.id}
@@ -1326,9 +1341,10 @@ function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
           <p className="mt-2 rounded-lg bg-brand-yellow/20 px-2.5 py-1.5 text-xs text-yellow-900">📝 {order.notes}</p>
         )}
 
+        {/* Extra-stop requests reach food orders too now, not just pabili. */}
+        {order.status !== 'delivered' && <AddonRequests order={order} data={data} onChange={onChange} />}
         {order.service_type === 'pabili' && order.status !== 'delivered' && (
           <>
-            <AddonRequests order={order} data={data} onChange={onChange} />
             <PabiliCalculator order={order} data={data} onChange={onChange} onNote={setNote} />
           </>
         )}
