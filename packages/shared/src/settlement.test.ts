@@ -5,8 +5,7 @@ import {
   overdueBalance,
   isLockedOut,
   summarizeRiderBalances,
-  type LedgerEntry,
-} from './settlement.ts';
+  type LedgerEntry, owedByKind } from './settlement.ts';
 
 const entries: LedgerEntry[] = [
   { amount: 15, businessDay: '2026-07-14', settled: true },
@@ -60,4 +59,15 @@ test('summarizeRiderBalances lists only who owes, locked first', () => {
   assert.equal(out[0]!.overdue, 13.5);
   assert.equal(out[0]!.owed, 19.5);
   assert.equal(out[1]!.locked, false);
+});
+
+test('owedByKind separates a mark-up charge from commission, ignoring settled rows', () => {
+  const split = owedByKind([
+    { amount: 11.25, businessDay: '2026-08-10', settled: false, kind: 'commission' },
+    { amount: 42, businessDay: '2026-08-10', settled: false, kind: 'markup' },
+    { amount: 99, businessDay: '2026-08-09', settled: true, kind: 'markup' },
+    // Rows written before mark-ups existed carry no kind: they are commission.
+    { amount: 7.5, businessDay: '2026-08-10', settled: false },
+  ]);
+  assert.deepEqual(split, { commission: 18.75, markup: 42 });
 });

@@ -29,6 +29,7 @@ import { supabase } from './lib/supabase.ts';
 import { ImportMenu } from './ImportMenu.tsx';
 import { MapPicker, type MapValue } from './MapPicker.tsx';
 import { PriceReports } from './PriceReports.tsx';
+import { StoreMarkup, ItemMarkup } from './Markup.tsx';
 import { Toggle } from './ui.tsx';
 
 /** Time value normaliser: "" → null, otherwise the HH:MM string. */
@@ -72,8 +73,17 @@ interface StoreRow {
   opens_at: string | null;
   closes_at: string | null;
   open_days: number[] | null;
+  markup_enabled?: boolean | null;
+  markup_amount?: number | null;
 }
-interface ItemRow { id: string; name: string; price: number; is_available: boolean; category_id: string | null; image_url: string | null; description: string | null }
+interface ItemRow {
+  id: string; name: string; price: number; is_available: boolean;
+  category_id: string | null; image_url: string | null; description: string | null;
+  /** Mark-up switches; `markup_amount` null means "use the store's". */
+  markup_enabled?: boolean | null; markup_amount?: number | null;
+  /** What the customer is quoted — shelf price plus the resolved mark-up. */
+  markup?: number; customer_price?: number;
+}
 interface CatRow { id: string; title: string; sort_order: number }
 interface GroupRow { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }
 interface OptRow { id: string; menu_item_id: string; group_id: string | null; option_name: string; price_delta: number }
@@ -233,7 +243,8 @@ export function Stores() {
                     onUpload={async (file) => { if (supabase) { await uploadStoreLogo(supabase, s.id, file); await load(); } }} />
                 </div>
                 <LocationEditor store={s} onSaved={load} />
-                <MenuEditor storeId={s.id} />
+                <div className="px-4 pb-4"><StoreMarkup store={s} onSaved={load} /></div>
+                <MenuEditor storeId={s.id} key={`${s.id}:${s.markup_enabled}:${s.markup_amount}`} />
                 <CopyMenuPanel store={s} stores={rows} />
                 <div className="border-t border-black/5 p-4">
                   <button onClick={() => removeStore(s)}
@@ -392,12 +403,14 @@ function MenuEditor({ storeId }: { storeId: string }) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [catId, setCatId] = useState(''); // category for the new item ('' = uncategorised)
+  const [markup, setMarkup] = useState({ enabled: false, amount: 0 });
 
   async function load() {
     if (!supabase) return;
     const menu = await listMenu(supabase, storeId, false);
+    setMarkup(menu.markup ?? { enabled: false, amount: 0 });
     setCats((menu.categories as CatRow[]).sort((a, b) => a.sort_order - b.sort_order));
-    setItems(menu.items as ItemRow[]);
+    setItems(menu.items as unknown as ItemRow[]);
     setOpts((menu.options as OptRow[]) ?? []);
     setGroups((menu.optionGroups as GroupRow[]) ?? []);
   }
@@ -470,7 +483,12 @@ function MenuEditor({ storeId }: { storeId: string }) {
                           {it.image_url ? <img src={it.image_url} alt="" className={`h-full w-full object-cover ${it.is_available ? '' : 'opacity-40'}`} /> : <span className="text-black/25">🍽️</span>}
                         </span>
                         <span className="min-w-0">
-                          <span className={`block truncate ${it.is_available ? '' : 'text-black/40'}`}>{it.name} · ₱{Number(it.price).toFixed(2)}</span>
+                          <span className={`block truncate ${it.is_available ? '' : 'text-black/40'}`}>
+                            {it.name} · ₱{Number(it.price).toFixed(2)}
+                            {Number(it.markup ?? 0) > 0 && (
+                              <span className="text-brand-purple"> → ₱{Number(it.customer_price ?? it.price).toFixed(2)}</span>
+                            )}
+                          </span>
                           {!it.is_available && <span className="text-[11px] font-semibold text-red-600">SOLD OUT</span>}
                           {groups.some((g) => g.menu_item_id === it.id) && (
                             <span className="ml-0 block text-[11px] text-black/40">
@@ -492,6 +510,10 @@ function MenuEditor({ storeId }: { storeId: string }) {
                         </button>
                       </span>
                     </div>
+                    {/* Only meaningful once the store itself is marked up. */}
+                    {editingId === it.id && markup.enabled && (
+                      <ItemMarkup item={it} storeAmount={markup.amount} onSaved={load} />
+                    )}
                     {editingId === it.id && (
                       <ItemEditor item={it} cats={cats} onSaved={load}
                         groups={groups.filter((g) => g.menu_item_id === it.id)}

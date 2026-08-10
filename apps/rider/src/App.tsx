@@ -4,6 +4,7 @@ import {
   isLockedOut,
   overdueBalance,
   owedBalance,
+  owedByKind,
   pabiliCollectible,
   riderEarnings,
   sortRequestQueue,
@@ -390,7 +391,7 @@ function ItemActions({ item, data, onChange }: {
     return (
       <div className="mt-1.5 rounded-lg bg-white p-2 ring-1 ring-black/10">
         <p className="mb-1.5 text-[11px] font-medium text-black/60">
-          Price at the store for {item.name} — ours says {peso(item.unitPrice)}
+          Price at the store for {item.name} — ours says {peso(item.unitPrice - item.markup)}
         </p>
         <div className="flex gap-1.5">
           <input type="number" inputMode="decimal" min={0} step="0.01" autoFocus
@@ -403,11 +404,13 @@ function ItemActions({ item, data, onChange }: {
           </button>
           <button onClick={() => setMode('idle')} className="rounded-lg border border-black/15 px-2 text-xs text-black/60">Cancel</button>
         </div>
-        {valid && next !== item.unitPrice && (
+        {/* They type the shelf price; the customer's line is that plus our
+            mark-up, so the preview has to show the billed figure. */}
+        {valid && next + item.markup !== item.unitPrice && (
           <p className="mt-1 text-[11px] text-black/50">
-            {item.qty} × {peso(next)} = <span className="font-semibold">{peso(next * item.qty)}</span>
-            {' · '}{next > item.unitPrice ? 'customer pays' : 'customer saves'}{' '}
-            {peso(Math.abs(next - item.unitPrice) * item.qty)}
+            {item.qty} × {peso(next + item.markup)} = <span className="font-semibold">{peso((next + item.markup) * item.qty)}</span>
+            {' · '}{next + item.markup > item.unitPrice ? 'customer pays' : 'customer saves'}{' '}
+            {peso(Math.abs(next + item.markup - item.unitPrice) * item.qty)}
           </p>
         )}
         {/* The order is repriced the moment they tap; the menu only follows if
@@ -493,7 +496,16 @@ function StoreGroups({ order, data, onChange }: {
             {it.notes && <span className="block text-xs text-black/45">— {it.notes}</span>}
           </span>
           {it.unitPrice > 0 && (
-            <span className={`shrink-0 ${gone || waiting ? 'text-black/35' : 'text-black/50'}`}>{peso(it.unitPrice * it.qty)}</span>
+            <span className={`shrink-0 text-right ${gone || waiting ? 'text-black/35' : 'text-black/50'}`}>
+              {peso(it.unitPrice * it.qty)}
+              {/* Part of that price is ours, not the shop's — say what to hand
+                  over at the counter so the rider doesn't overpay. */}
+              {it.markup > 0 && !gone && !waiting && (
+                <span className="block text-[11px] text-brand-purple">
+                  pay {peso((it.unitPrice - it.markup) * it.qty)}
+                </span>
+              )}
+            </span>
           )}
         </div>
         {data && onChange && !gone && !waiting && (
@@ -1575,8 +1587,18 @@ function EarningsView({ live, data, ledger, owed, overdue, onSettle }:
       <EarningsBoard data={data} />
 
       <div className="rounded-2xl bg-gradient-to-br from-brand-green to-brand-purple p-5 text-white shadow-md">
-        <p className="text-xs uppercase tracking-wide text-white/80">Commission owed to operator</p>
+        <p className="text-xs uppercase tracking-wide text-white/80">Owed to operator</p>
         <p className="mt-1 text-3xl font-black">{peso(owed)}</p>
+        {/* A mark-up charge with no explanation looks like a mistake, and a
+            rider who thinks they have been shorted stops riding. */}
+        {(() => {
+          const split = owedByKind(ledger);
+          return split.markup > 0 ? (
+            <p className="mt-1 text-xs text-white/85">
+              {peso(split.commission)} commission · {peso(split.markup)} store mark-up you collected at the door
+            </p>
+          ) : null;
+        })()}
         <p className="mt-1 text-xs text-white/85">
           Settle your commission before the end of the day — any unsettled balance locks
           your account at midnight until it's paid.

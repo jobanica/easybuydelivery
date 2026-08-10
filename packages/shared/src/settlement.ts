@@ -18,6 +18,19 @@ export interface LedgerEntry {
   /** Business day this commission belongs to (YYYY-MM-DD). */
   businessDay: string;
   settled: boolean;
+  /** What the charge is: the operator's commission, or its share of a mark-up. */
+  kind?: 'commission' | 'markup';
+}
+
+/** Split an unsettled balance by what it is, so nothing reads as a mystery charge. */
+export function owedByKind(entries: readonly LedgerEntry[]): { commission: number; markup: number } {
+  let commission = 0, markup = 0;
+  for (const e of entries) {
+    if (e.settled) continue;
+    if (e.kind === 'markup') markup += e.amount;
+    else commission += e.amount;
+  }
+  return { commission: Math.round(commission * 100) / 100, markup: Math.round(markup * 100) / 100 };
 }
 
 /** Total unsettled balance across all business days. */

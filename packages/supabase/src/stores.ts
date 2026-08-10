@@ -6,6 +6,7 @@
  * toggle, independent of the system-wide operating-hours switch.
  */
 
+import { roundPeso } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface StoreInput {
@@ -204,6 +205,11 @@ export async function listMenu(db: SupabaseClient, storeId: string, availableOnl
     .order('sort_order');
   if (cats.error) throw cats.error;
 
+  // The store's mark-up settings ride along, so callers can show the customer
+  // price without a second round trip.
+  const storeRow = await db.from('stores').select('markup_enabled, markup_amount').eq('id', storeId).maybeSingle();
+  if (storeRow.error) throw storeRow.error;
+
   let itemsQuery = db.from('menu_items').select('*').eq('store_id', storeId).order('name');
   if (availableOnly) itemsQuery = itemsQuery.eq('is_available', true);
   const items = await itemsQuery;
@@ -219,7 +225,77 @@ export async function listMenu(db: SupabaseClient, storeId: string, availableOnl
     options = await fetchAllIn(db, 'menu_item_options', 'menu_item_id', itemIds);
   }
 
-  return { categories: cats.data ?? [], items: items.data ?? [], optionGroups, options };
+  const store = (storeRow.data ?? { markup_enabled: false, markup_amount: 0 }) as
+    { markup_enabled: boolean; markup_amount: number };
+
+  // `price` stays the shelf price the admin edits and the rider pays; the
+  // customer-facing figure is a separate field so nothing has to guess which
+  // one it is holding.
+  const withMarkup: MenuItemRow[] = (items.data ?? []).map((raw) => {
+    const it = raw as Record<string, unknown>;
+    const markup = effectiveMarkup(store, it as MarkupItem);
+    return { ...it, markup, customer_price: roundPeso(Number(it.price ?? 0) + markup) };
+  });
+
+  return {
+    categories: cats.data ?? [],
+    items: withMarkup,
+    optionGroups,
+    options,
+    markup: { enabled: store.markup_enabled, amount: Number(store.markup_amount ?? 0) },
+  };
+}
+
+interface MarkupItem { markup_enabled?: boolean | null; markup_amount?: number | null }
+
+/**
+ * A menu row as callers get it: everything the table holds, plus the mark-up
+ * resolved for this store and the price a customer is quoted.
+ */
+export type MenuItemRow = Record<string, unknown> & { markup: number; customer_price: number };
+
+/**
+ * Pesos added to one unit — the TypeScript twin of `effective_markup()`.
+ *
+ * Both switches must be on; the item's own amount wins over the store's. Kept
+ * in step with the database function, which remains the authority when an order
+ * is actually written.
+ */
+export function effectiveMarkup(
+  store: { markup_enabled?: boolean | null; markup_amount?: number | null },
+  item: MarkupItem,
+): number {
+  if (!store.markup_enabled) return 0;
+  if (item.markup_enabled === false) return 0;
+  return Math.max(0, Number(item.markup_amount ?? store.markup_amount ?? 0));
+}
+
+/** The mark-up switch and peso amount for a whole store. */
+export async function setStoreMarkup(
+  db: SupabaseClient, storeId: string, patch: { enabled?: boolean; amount?: number },
+) {
+  const row: Record<string, unknown> = {};
+  if (patch.enabled !== undefined) row.markup_enabled = patch.enabled;
+  if (patch.amount !== undefined) {
+    if (!(patch.amount >= 0)) throw new Error('mark-up must be zero or more');
+    row.markup_amount = patch.amount;
+  }
+  const { error } = await db.from('stores').update(row).eq('id', storeId);
+  if (error) throw error;
+}
+
+/** One item's mark-up: switch it out, or give it an amount of its own. */
+export async function setMenuItemMarkup(
+  db: SupabaseClient, itemId: string, patch: { enabled?: boolean; amount?: number | null },
+) {
+  const row: Record<string, unknown> = {};
+  if (patch.enabled !== undefined) row.markup_enabled = patch.enabled;
+  if (patch.amount !== undefined) {
+    if (patch.amount != null && !(patch.amount >= 0)) throw new Error('mark-up must be zero or more');
+    row.markup_amount = patch.amount;
+  }
+  const { error } = await db.from('menu_items').update(row).eq('id', itemId);
+  if (error) throw error;
 }
 
 export interface MenuItemPatch {

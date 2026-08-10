@@ -19,6 +19,8 @@ export interface AppSettings {
   convenience_fee_pabili: number;
   convenience_fee_padala: number;
   commission_rate: number;
+  /** Fraction of each price mark-up the operator keeps; the rest is the rider's. */
+  markup_operator_share: number;
   delivery_fee_model: 'flat' | 'per_km' | 'per_zone';
   settlement_cutoff: string;
   sms_notify_stores: boolean;

@@ -63,7 +63,8 @@ export function AddToOrder({ orderId, status, onAdded }: {
     if (!open || !storeId || !supabase) return;
     setItems(null); setBasket({});
     listMenu(supabase, storeId)
-      .then((m) => setItems((m.items ?? []) as MenuItem[]))
+      .then((m) => setItems(((m.items ?? []) as unknown as (MenuItem & { customer_price?: number })[])
+        .map((i) => ({ ...i, price: i.customer_price ?? i.price }))))
       .catch((e) => setErr(errMessage(e)));
   }, [open, storeId]);
 

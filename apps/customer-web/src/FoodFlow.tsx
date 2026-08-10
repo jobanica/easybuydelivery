@@ -50,8 +50,15 @@ function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categorie
   }
   return {
     categories: ((menu.categories ?? []) as { id: string; title: string }[]).map((c) => ({ id: c.id, title: c.title })),
-    items: (menu.items as { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
-      .map((it) => ({ ...it, category_id: it.category_id ?? null, groups: groupsByItem.get(it.id) ?? [] })),
+    // `customer_price` already carries the operator's mark-up; the shelf price
+    // behind it is the rider's business, not the customer's.
+    items: (menu.items as unknown as { id: string; name: string; price: number; customer_price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
+      .map((it) => ({
+        ...it,
+        price: it.customer_price ?? it.price,
+        category_id: it.category_id ?? null,
+        groups: groupsByItem.get(it.id) ?? [],
+      })),
   };
 }
 

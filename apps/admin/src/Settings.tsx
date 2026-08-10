@@ -10,7 +10,7 @@ import { Card, Muted, peso } from './ui.tsx';
 const SAMPLE: AppSettings = {
   is_open: true, closed_message: null, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
   convenience_fee: 0, convenience_fee_food: 0, convenience_fee_pabili: 0, convenience_fee_padala: 0,
-  commission_rate: 0.15, delivery_fee_model: 'flat',
+  commission_rate: 0.15, markup_operator_share: 1, delivery_fee_model: 'flat',
   settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
   service_food: true, service_pabili: true, service_padala: true,
@@ -207,6 +207,28 @@ export function Settings() {
         <p className="mt-2 text-xs text-black/40">
           Convenience fees are set per service and paid to the rider in full — no commission is taken on them.
         </p>
+
+        {/* Mark-up is configured per store; only the split lives here. */}
+        <div className="mt-4 rounded-xl bg-brand-purple/[0.04] p-3 ring-1 ring-brand-purple/20">
+          <p className="text-sm font-semibold text-brand-purple">Price mark-up — your share</p>
+          <p className="mt-0.5 text-xs text-black/50">
+            The mark-up itself is set per store (and per item) under Stores &amp; menus. This is how much
+            of it you keep: the rider collects the whole mark-up at the door and owes back this share
+            with their commission. The remainder is theirs to keep.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <span className="w-40">
+              <span className="mb-1 block text-xs font-medium text-black/60">Operator keeps (%)</span>
+              <input type="number" min={0} max={100} step={5} className={inp}
+                value={Math.round((s.markup_operator_share ?? 1) * 1000) / 10}
+                onChange={(e) => set('markup_operator_share', Math.min(1, Math.max(0, Number(e.target.value) / 100)))} />
+            </span>
+            <span className="text-xs text-black/55">
+              On a ₱20 mark-up you keep <b>{peso(20 * (s.markup_operator_share ?? 1))}</b>,
+              the rider keeps {peso(20 * (1 - (s.markup_operator_share ?? 1)))}.
+            </span>
+          </div>
+        </div>
         <p className="mt-4 rounded-lg bg-brand-green/10 px-3 py-2 text-sm text-green-800">
           Example: ₱{s.default_delivery_fee} delivery + {peso(s.per_store_fee)}×2 added stores →
           commission <span className="font-bold">{peso(example)}</span>

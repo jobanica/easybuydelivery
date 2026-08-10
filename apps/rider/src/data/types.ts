@@ -41,6 +41,8 @@ export interface RiderOrder {
     /** Pabili: index into `buyStores` for where this item comes from. */
     buyStoreIndex: number | null;
     name: string; qty: number; unitPrice: number; notes: string | null;
+    /** Operator mark-up inside unitPrice — the rider pays the rest at the counter. */
+    markup: number;
     status: OrderItemStatus; replacesItemId: string | null;
   }[];
   /** Where the rider buys/collects (pabili & padala pin the source). */

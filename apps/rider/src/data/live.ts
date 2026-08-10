@@ -59,13 +59,14 @@ function toRiderOrder(row: Record<string, unknown>): RiderOrder {
           .map((os) => ({ id: os.store?.id ?? null, name: os.store?.name ?? null, contact: os.store?.contact_number ?? null, lat: os.store?.lat ?? null, lng: os.store?.lng ?? null }))
       : [],
     items: Array.isArray(row.order_items)
-      ? (row.order_items as { id: string; store_id: string | null; menu_item_id: string | null; buy_store_index: number | null; name: string; qty: number; unit_price: number; notes: string | null; status: string | null; replaces_item_id: string | null }[])
+      ? (row.order_items as { id: string; store_id: string | null; menu_item_id: string | null; buy_store_index: number | null; name: string; qty: number; unit_price: number; markup_amount: number | null; notes: string | null; status: string | null; replaces_item_id: string | null }[])
           .map((it) => ({
             id: it.id ?? null, store_id: it.store_id ?? null,
             menuItemId: it.menu_item_id ?? null,
             buyStoreIndex: it.buy_store_index == null ? null : Number(it.buy_store_index),
             name: it.name,
-            qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0), notes: it.notes ?? null,
+            qty: Number(it.qty ?? 1), unitPrice: Number(it.unit_price ?? 0),
+            markup: Number(it.markup_amount ?? 0), notes: it.notes ?? null,
             status: (it.status ?? 'ok') as RiderOrder['items'][number]['status'],
             replacesItemId: it.replaces_item_id ?? null,
           }))
@@ -112,6 +113,7 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
           amount: Number(row.amount ?? 0),
           businessDay: row.business_day as string,
           settled: Boolean(row.settled),
+          kind: (row.kind as LedgerEntry['kind']) ?? 'commission',
         };
       });
     },
