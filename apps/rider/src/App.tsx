@@ -35,6 +35,7 @@ import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
 import { PinPicker } from './PinPicker.tsx';
+import { locateOnce } from './geo.ts';
 import { useLocationPublisher } from './useLocationPublisher.ts';
 import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
@@ -1004,21 +1005,19 @@ function BuyStores({ order, data, onChange }: {
 
   const canFix = Boolean(data && onChange && 'geolocation' in navigator);
 
-  function fixPin(i: number) {
+  async function fixPin(i: number) {
     if (!data || !onChange) return;
     setBusy(i); setErr(null);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await data.setBuyStoreLocation(order.id, i, { lat: pos.coords.latitude, lng: pos.coords.longitude });
-          await onChange();
-          setFixed(i);
-        } catch (e) { setErr(errMessage(e)); }
-        finally { setBusy(null); }
-      },
-      () => { setErr("Couldn't read your location — check the app's location permission."); setBusy(null); },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    try {
+      const { lat, lng } = await locateOnce();
+      await data.setBuyStoreLocation(order.id, i, { lat, lng });
+      await onChange();
+      setFixed(i);
+    } catch (e) {
+      setErr(errMessage(e));
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -1043,7 +1042,7 @@ function BuyStores({ order, data, onChange }: {
               </a>
             </div>
             {canFix && (
-              <button type="button" disabled={busy != null} onClick={() => fixPin(i)}
+              <button type="button" disabled={busy != null} onClick={() => void fixPin(i)}
                 className="mt-1 rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple disabled:opacity-50">
                 {busy === i ? 'Reading your location…'
                   : fixed === i ? '✓ Pin updated'

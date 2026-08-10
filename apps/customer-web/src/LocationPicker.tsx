@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { isInAppBrowser, inAppBrowserName, isAndroid, openInChrome, copyCurrentLink } from './inAppBrowser.tsx';
+import { locateOnce, locationAlreadyGranted } from './geo.ts';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -85,6 +86,9 @@ export function LocationPicker({
   onChangeRef.current = onChange;
 
   const [locating, setLocating] = useState(false);
+  // Silence was the bug: a failed request just put the button back and said
+  // nothing, so on iPhone it read as a dead button.
+  const [geoNote, setGeoNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
@@ -114,24 +118,30 @@ export function LocationPicker({
 
     // Centre on the device only for a drop-off. A store is somewhere else by
     // definition — but starting near the customer beats starting on Manila.
-    if (!value && navigator.geolocation) {
-      setLocating(true);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], 16); setLocating(false); },
-        () => setLocating(false),
-        { timeout: 8000 },
-      );
+    //
+    // Only when permission is already granted. iOS shows its permission sheet
+    // once and remembers a dismissal, and spending that single prompt on a map
+    // the customer never asked to move is how "Use my location" is already dead
+    // by the time they press it.
+    if (!value) {
+      void locationAlreadyGranted().then((granted) => {
+        if (!granted || !mapRef.current) return;
+        setLocating(true);
+        locateOnce()
+          .then((fix) => { map.setView([fix.lat, fix.lng], 16); })
+          .catch(() => { /* it centred on the fallback; the button still works */ })
+          .finally(() => setLocating(false));
+      });
     }
 
     return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function useMyLocation() {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const { latitude: lat, longitude: lng } = pos.coords;
+  async function useMyLocation() {
+    setLocating(true); setGeoNote(null);
+    try {
+      const { lat, lng, warning } = await locateOnce();
       mapRef.current?.setView([lat, lng], 16);
       if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
       else if (mapRef.current) {
@@ -142,9 +152,15 @@ export function LocationPicker({
             onChangeRef.current({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) });
           });
       }
-      onChangeRef.current({ lat: +lat.toFixed(6), lng: +lng.toFixed(6) });
+      onChangeRef.current({ lat, lng });
+      // A fix can succeed and still be useless — a kilometre-wide guess is a
+      // barangay, not a doorstep.
+      setGeoNote(warning);
+    } catch (e) {
+      setGeoNote(e instanceof Error ? e.message : String(e));
+    } finally {
       setLocating(false);
-    }, () => setLocating(false));
+    }
   }
 
   return (
@@ -153,7 +169,7 @@ export function LocationPicker({
       <div className="mb-2 flex items-center justify-between">
         <span className={`text-sm font-medium ${isStore ? 'text-brand-purple' : ''}`}>{heading}</span>
         {!isStore && (
-          <button type="button" onClick={useMyLocation}
+          <button type="button" onClick={() => void useMyLocation()}
             className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
             disabled={locating}>
             {locating ? 'Locating…' : '📍 Use my location'}
@@ -162,6 +178,9 @@ export function LocationPicker({
       </div>
       <div ref={elRef} style={{ height }}
         className={`w-full overflow-hidden rounded-lg ring-1 ${isStore ? 'ring-2 ring-brand-purple/40' : 'ring-black/10'}`} />
+      {geoNote && (
+        <p className="mt-1.5 rounded-lg bg-brand-yellow/25 px-3 py-2 text-xs text-yellow-900">{geoNote}</p>
+      )}
       <div className="mt-1.5 flex items-start justify-between gap-2">
         <p className="text-xs text-black/50">
           {isStore
