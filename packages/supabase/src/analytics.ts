@@ -6,7 +6,23 @@
 import { manilaDay, normalizeRange, shiftDay, type DayRange, type ServiceType } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export interface DayCount { day: string; count: number }
+/**
+ * One business day on the trend.
+ *
+ * Counts and money are kept apart rather than combined, because they are read
+ * on different scales — a day with 9 orders and ₱1,200 of commission shares no
+ * axis with one worth ₱41,000 of GMV.
+ */
+export interface DayCount {
+  day: string;
+  count: number;
+  /** Delivered that day — the count that actually earned anything. */
+  delivered: number;
+  /** Goods + delivery + store + convenience, excluding cancelled orders. */
+  gmv: number;
+  /** Operator commission booked on that day's delivered orders. */
+  commission: number;
+}
 export interface RiderRank { riderId: string; name: string; delivered: number; commission: number }
 
 export interface Analytics {
@@ -66,25 +82,35 @@ export async function getAnalytics(db: SupabaseClient, spec: number | DayRange =
   const orders = (data ?? []) as Record<string, unknown>[];
 
   const byService: Record<ServiceType, number> = { food: 0, pabili: 0, padala: 0 };
-  const dailyMap = new Map<string, number>();
+  const dailyMap = new Map<string, DayCount>();
+  const bump = (day: string): DayCount => {
+    const cur = dailyMap.get(day) ?? { day, count: 0, delivered: 0, gmv: 0, commission: 0 };
+    dailyMap.set(day, cur);
+    return cur;
+  };
   const riderMap = new Map<string, { delivered: number; commission: number }>();
   let delivered = 0, cancelled = 0, gmv = 0, commissionRevenue = 0, convenienceRevenue = 0;
 
-  // Seed every day in range so the trend has no gaps.
-  for (let i = 0; i < days; i++) dailyMap.set(shiftDay(range.from, i), 0);
+  // Seed every day in range so the trend has no gaps — a quiet Tuesday is a
+  // zero on the chart, not a missing point the line skips over.
+  for (let i = 0; i < days; i++) bump(shiftDay(range.from, i));
 
   for (const o of orders) {
     const service = o.service_type as ServiceType;
     if (service in byService) byService[service]++;
-    const day = dayKey(o.created_at as string);
-    dailyMap.set(day, (dailyMap.get(day) ?? 0) + 1);
+    const bucket = bump(dayKey(o.created_at as string));
+    bucket.count++;
 
     const status = o.status as string;
     if (status === 'cancelled') { cancelled++; continue; }
-    gmv += num(o.goods_cost) + num(o.delivery_fee) + num(o.store_fee_total) + num(o.convenience_fee);
+    const orderGmv = num(o.goods_cost) + num(o.delivery_fee) + num(o.store_fee_total) + num(o.convenience_fee);
+    gmv += orderGmv;
+    bucket.gmv += orderGmv;
 
     if (status === 'delivered') {
       delivered++;
+      bucket.delivered++;
+      bucket.commission += num(o.commission_amount);
       commissionRevenue += num(o.commission_amount);
       convenienceRevenue += num(o.convenience_fee);
       const rid = o.rider_id as string | null;
@@ -117,7 +143,9 @@ export async function getAnalytics(db: SupabaseClient, spec: number | DayRange =
     commissionRevenue: round(commissionRevenue),
     convenienceRevenue: round(convenienceRevenue),
     byService,
-    daily: [...dailyMap.entries()].map(([day, count]) => ({ day, count })),
+    daily: [...dailyMap.values()]
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .map((d) => ({ ...d, gmv: round(d.gmv), commission: round(d.commission) })),
     riders,
   };
 }
