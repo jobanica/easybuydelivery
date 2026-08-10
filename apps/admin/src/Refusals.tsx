@@ -6,6 +6,7 @@ import {
 import { errMessage, manilaDay, shiftDay } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, ErrorNote, peso } from './ui.tsx';
+import { useDayRange } from './DateRange.tsx';
 
 const today = manilaDay();
 const RANGES = [7, 30, 90];
@@ -34,7 +35,7 @@ function sampleEvents(): RiderRequestEvent[] {
 }
 
 /** Load the history once and share it between the summary and the table. */
-function useRefusals(days: number) {
+function useRefusals(range: { from: string; to: string }, key: string) {
   const [events, setEvents] = useState<RiderRequestEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,11 +43,12 @@ function useRefusals(days: number) {
     let alive = true;
     setEvents(null); setError(null);
     if (!supabase) { setEvents(sampleEvents()); return; }
-    listRiderRequestEvents(supabase, { fromDay: shiftDay(today, -(days - 1)), toDay: today })
+    listRiderRequestEvents(supabase, { fromDay: range.from, toDay: range.to })
       .then((e) => { if (alive) setEvents(e); })
       .catch((e) => { if (alive) { setError(errMessage(e)); setEvents([]); } });
     return () => { alive = false; };
-  }, [days]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const tally = useMemo(() => summarizeRefusals(events ?? []), [events]);
   return { events, tally, error };
@@ -64,7 +66,8 @@ const kindChip = (kind: string) => kind === 'transferred'
  * an order someone is already waiting on, sometimes with the goods bought.
  */
 export function RefusalSummary({ onNavigate }: { onNavigate: (tab: string) => void }) {
-  const { tally, error } = useRefusals(7);
+  const week = { from: shiftDay(today, -6), to: today };
+  const { tally, error } = useRefusals(week, 'dashboard-7');
 
   return (
     <Card title="Declines &amp; transfers · last 7 days"
@@ -102,24 +105,11 @@ export function RefusalSummary({ onNavigate }: { onNavigate: (tab: string) => vo
 
 /** Riders page: the full log, with the per-rider tally above it. */
 export function RefusalHistory() {
-  const [days, setDays] = useState(30);
-  const { events, tally, error } = useRefusals(days);
-
-  const chip = (on: boolean) =>
-    `rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
-      on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`;
+  const dates = useDayRange(30, RANGES);
+  const { events, tally, error } = useRefusals(dates.range, dates.key);
 
   return (
-    <Card
-      title="Declines &amp; transfers"
-      action={
-        <span className="flex gap-2">
-          {RANGES.map((r) => (
-            <button key={r} onClick={() => setDays(r)} className={chip(days === r)}>{r} days</button>
-          ))}
-        </span>
-      }
-    >
+    <Card title="Declines &amp; transfers" action={dates.controls}>
       {error && <ErrorNote msg={error} />}
       {!events ? (
         <p className="text-sm text-black/40">Loading…</p>
@@ -177,7 +167,7 @@ export function RefusalHistory() {
 
 /** Riders page: drop-off pins riders have moved, and the fee that followed. */
 export function PinCorrectionLog() {
-  const [days, setDays] = useState(30);
+  const dates = useDayRange(30, RANGES);
   const [rows, setRows] = useState<PinCorrection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -185,30 +175,18 @@ export function PinCorrectionLog() {
     let alive = true;
     setRows(null); setError(null);
     if (!supabase) { setRows([]); return; }
-    listPinCorrections(supabase, { fromDay: shiftDay(today, -(days - 1)), toDay: today })
+    listPinCorrections(supabase, { fromDay: dates.range.from, toDay: dates.range.to })
       .then((r) => { if (alive) setRows(r); })
       .catch((e) => { if (alive) { setError(errMessage(e)); setRows([]); } });
     return () => { alive = false; };
-  }, [days]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dates.key]);
 
   // The number that matters: how much a wrong pin added to customers' bills.
   const added = (rows ?? []).reduce((n, r) => n + Math.max(0, r.newFee - r.oldFee), 0);
 
-  const chip = (on: boolean) =>
-    `rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
-      on ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`;
-
   return (
-    <Card
-      title="Drop-off pins riders corrected"
-      action={
-        <span className="flex gap-2">
-          {RANGES.map((r) => (
-            <button key={r} onClick={() => setDays(r)} className={chip(days === r)}>{r} days</button>
-          ))}
-        </span>
-      }
-    >
+    <Card title="Drop-off pins riders corrected" action={dates.controls}>
       {error && <ErrorNote msg={error} />}
       {!rows ? (
         <p className="text-sm text-black/40">Loading…</p>

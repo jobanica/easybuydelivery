@@ -3,6 +3,7 @@ import { listOrders, getOrderDetail } from '@ebd/supabase';
 import type { ServiceType, OrderStatus } from '@ebd/shared';
 import { errMessage } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
+import { useDayRange } from './DateRange.tsx';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 
 interface OrderRow {
@@ -52,6 +53,9 @@ export function OrderHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const dates = useDayRange(30);
+  // A new span is a new list; page 5 of the old one means nothing in it.
+  useEffect(() => { setPage(0); }, [dates.key]);
 
   useEffect(() => {
     (async () => {
@@ -68,19 +72,21 @@ export function OrderHistory() {
           serviceType: service === 'all' ? undefined : service,
           status: status === 'all' ? undefined : status,
           search: search || undefined,
+          fromDay: dates.range.from, toDay: dates.range.to,
           limit: PAGE, offset: page * PAGE,
         });
         setRows(res.rows as unknown as OrderRow[]); setCount(res.count);
       } catch (e) { setError(errMessage(e)); }
       finally { setLoading(false); }
     })();
-  }, [service, status, search, page]);
+  }, [service, status, search, page, dates.key]);
 
   const pages = Math.max(1, Math.ceil(count / PAGE));
 
   return (
     <div className="space-y-4">
       <Card title="Filter">
+        <div className="mb-3">{dates.controls}</div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1.5">
             {SERVICES.map((s) => (
@@ -102,7 +108,7 @@ export function OrderHistory() {
 
       {loading ? <Muted>Loading…</Muted>
         : error ? <ErrorNote msg={error} />
-        : rows.length === 0 ? <Muted>No orders match these filters.</Muted>
+        : rows.length === 0 ? <Muted>No orders in this period match these filters.</Muted>
         : (
         <Card title={`Orders (${count})`}>
           <div className="overflow-x-auto">
