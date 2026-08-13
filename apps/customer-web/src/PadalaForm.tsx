@@ -63,7 +63,13 @@ export function PadalaForm() {
     if (a.contact_name?.trim()) set('receiverName', a.contact_name.trim());
     if (a.contact_phone?.trim()) set('dropoffContact', a.contact_phone.trim());
   }
-  function pinManually() { setChosenAddressId(null); }
+  // Clearing the pin matters: "somewhere else" used to open on the address they
+  // had just moved away from, and an order sent without touching the map went
+  // to that old spot.
+  function pinManually() {
+    setChosenAddressId(null);
+    setDropoff(null); set('dropoffAddress', '');
+  }
   useEffect(() => {
     if (!saved.loaded || chosenAddressId || saved.addresses.length === 0) return;
     chooseAddress(saved.addresses[0]!);

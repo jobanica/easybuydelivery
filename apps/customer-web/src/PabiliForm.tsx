@@ -63,7 +63,13 @@ export function PabiliForm() {
     if (a.contact_name?.trim()) setCustName(a.contact_name.trim());
     if (a.contact_phone?.trim()) set('customerContact', a.contact_phone.trim());
   }
-  function pinManually() { setChosenAddressId(null); }
+  // Clearing the pin matters: "somewhere else" used to open on the address they
+  // had just moved away from, and an order sent without touching the map went
+  // to that old spot.
+  function pinManually() {
+    setChosenAddressId(null);
+    setDropoff(null); setAddressText('');
+  }
   // Default to the customer's default address as soon as it loads.
   useEffect(() => {
     if (!saved.loaded || chosenAddressId || saved.addresses.length === 0) return;

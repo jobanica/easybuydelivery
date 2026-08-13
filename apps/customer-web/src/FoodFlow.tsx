@@ -128,7 +128,13 @@ export function FoodFlow() {
     if (a.contact_name?.trim()) setCustName(a.contact_name.trim());
     if (a.contact_phone?.trim()) setContact(a.contact_phone.trim());
   }
-  function pinManually() { setChosenAddressId(null); }
+  // Clearing the pin matters: "somewhere else" used to open on the address they
+  // had just moved away from, and an order sent without touching the map went
+  // to that old spot.
+  function pinManually() {
+    setChosenAddressId(null);
+    setDropoff(null); setAddressText('');
+  }
   useEffect(() => {
     if (!saved.loaded || chosenAddressId || saved.addresses.length === 0 || gift) return;
     chooseAddress(saved.addresses[0]!);

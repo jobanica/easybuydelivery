@@ -1,11 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import { isInAppBrowser, inAppBrowserName, isAndroid, openInChrome, copyCurrentLink } from './inAppBrowser.tsx';
 import { locateOnce, locationAlreadyGranted } from './geo.ts';
+import { getAppSettings } from '@ebd/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-/** Fallback map center — Metro Manila / Rizal (matches the tracking test point). */
-const DEFAULT_CENTER: L.LatLngTuple = [14.6, 121.0];
+/**
+ * Where the map opens when there is no pin yet.
+ *
+ * It used to be Metro Manila, which for an operator working out of Pampanga
+ * meant every fresh picker opened about fifty kilometres from anywhere it
+ * serves. The operator's own service centre is the honest default; Manila only
+ * survives as the fallback for a setup with no centre configured.
+ */
+let DEFAULT_CENTER: L.LatLngTuple = [14.6, 121.0];
+
+/** Fetched once per session and reused by every picker on the page. */
+let centreLoaded: Promise<void> | null = null;
+function loadServiceCentre(): Promise<void> {
+  if (!centreLoaded) {
+    centreLoaded = (async () => {
+      if (!supabase || !isSupabaseConfigured) return;
+      try {
+        const s = await getAppSettings(supabase);
+        if (s.service_center_lat != null && s.service_center_lng != null) {
+          DEFAULT_CENTER = [s.service_center_lat, s.service_center_lng];
+        }
+      } catch { /* the Manila fallback still gives a usable map */ }
+    })();
+  }
+  return centreLoaded;
+}
+
+/** Same spot, to within a metre or so — used to stop a sync loop. */
+const samePoint = (a: L.LatLng | null, b: LatLngValue) =>
+  a != null && Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lng - b.lng) < 1e-5;
 
 /** Teardrop pin (divIcon — no external image assets to bundle). */
 const teardrop = (fill: string, cls: string) => L.divIcon({
@@ -85,6 +115,7 @@ export function LocationPicker({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  const placeRef = useRef<((lat: number, lng: number, tell?: boolean) => void) | null>(null);
   const [locating, setLocating] = useState(false);
   // Silence was the bug: a failed request just put the button back and said
   // nothing, so on iPhone it read as a dead button.
@@ -98,7 +129,9 @@ export function LocationPicker({
       attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
 
-    const place = (lat: number, lng: number) => {
+    // `tell` is false when the move came *from* the parent — announcing it back
+    // would bounce the value round the loop forever.
+    const place = (lat: number, lng: number, tell = true) => {
       if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
       else {
         const m = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
@@ -108,10 +141,11 @@ export function LocationPicker({
         });
         markerRef.current = m;
       }
-      onChangeRef.current({ lat: +lat.toFixed(6), lng: +lng.toFixed(6) });
+      if (tell) onChangeRef.current({ lat: +lat.toFixed(6), lng: +lng.toFixed(6) });
     };
+    placeRef.current = place;
 
-    if (value) place(value.lat, value.lng);
+    if (value) place(value.lat, value.lng, false);
     map.on('click', (e: L.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng));
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0);
@@ -124,6 +158,10 @@ export function LocationPicker({
     // the customer never asked to move is how "Use my location" is already dead
     // by the time they press it.
     if (!value) {
+      void loadServiceCentre().then(() => {
+        // Still no pin and still on the fallback? Move to where we actually deliver.
+        if (mapRef.current && !markerRef.current) mapRef.current.setView(DEFAULT_CENTER, 13);
+      });
       void locationAlreadyGranted().then((granted) => {
         if (!granted || !mapRef.current) return;
         setLocating(true);
@@ -137,6 +175,28 @@ export function LocationPicker({
     return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Follow a pin that arrives from outside — a saved address loading, or the
+   * customer switching which one they're delivering to.
+   *
+   * Without this the map was built once and never moved again: the form knew
+   * the right coordinates and showed "📍 pin set", while the map underneath sat
+   * on the fallback centre with no marker at all. Tapping that map to "fix" it
+   * then wrote a pin from the wrong part of the province.
+   */
+  useEffect(() => {
+    if (!mapRef.current || !placeRef.current) return;
+    // Cleared from outside — take the pin off the map too, or it goes on
+    // pointing at an address the form no longer holds.
+    if (!value) {
+      if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
+      return;
+    }
+    if (samePoint(markerRef.current?.getLatLng() ?? null, value)) return;
+    placeRef.current(value.lat, value.lng, false);
+    mapRef.current.setView([value.lat, value.lng], 16);
+  }, [value?.lat, value?.lng]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function useMyLocation() {
     setLocating(true); setGeoNote(null);
