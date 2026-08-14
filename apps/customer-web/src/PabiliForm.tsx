@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
-  DEFAULT_FEE_CONFIG, storeFeeTotal, convenienceFeeTotal, MAX_STORES_PER_ORDER,
+  DEFAULT_FEE_CONFIG, storeFeeTotal, MAX_STORES_PER_ORDER,
   type DeliveryFeeModel, type DistanceFeeConfig,
   errMessage,
 } from '@ebd/shared';
@@ -121,11 +121,9 @@ export function PabiliForm() {
   const namedStores = stores.filter((st) => st.name.trim() !== '');
   const storeCount = Math.max(1, namedStores.length);
   const storeFee = storeFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, perStoreFee });
-  // One convenience fee per shop: each is its own queue and its own wait.
-  const convenienceTotal = convenienceFeeTotal(storeCount, { ...DEFAULT_FEE_CONFIG, convenienceFee });
   // Fees are all we can quote up front. Nobody knows what the goods cost until
   // the rider is at the counter, and a made-up estimate only ever misleads.
-  const feesTotal = deliveryFee + storeFee + convenienceTotal;
+  const feesTotal = deliveryFee + storeFee + convenienceFee;
   const hasItems = form.items.some((i) => i.name.trim() !== '');
 
   function setStore(i: number, patch: Partial<PabiliStoreInput>) {
@@ -157,7 +155,7 @@ export function PabiliForm() {
       customerId,
       customerContact: form.customerContact,
       deliveryFee,
-      convenienceFee: convenienceTotal,
+      convenienceFee,
       itemsDescription: pabiliItemsSummary(form.items),
       // The picker indexes the rows on screen, blanks included; the order only
       // stores the named ones, so translate before sending.
@@ -375,10 +373,7 @@ export function PabiliForm() {
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
           value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
         {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
-        {convenienceTotal > 0 && (
-          <Row label={storeCount > 1 ? `Convenience fee (${storeCount} stores)` : 'Convenience fee'}
-            value={peso(convenienceTotal)} />
-        )}
+        {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
         <div className="mt-1 flex justify-between border-t border-black/10 pt-2 text-sm font-bold">
           <span>Fees to pay</span>
           <span>{needsPinsForFee ? '—' : peso(feesTotal)}</span>

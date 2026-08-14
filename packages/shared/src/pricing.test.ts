@@ -5,7 +5,6 @@ import {
   commission,
   riderEarnings,
   storeFeeTotal,
-  convenienceFeeTotal,
   orderCost,
   distanceDeliveryFee,
   resolveDeliveryFee,
@@ -146,22 +145,14 @@ test('resolveDeliveryFee: falls back to flat when no store is pinned', () => {
   assert.equal(fee, 55);
 });
 
-test('convenience fee is charged once per store, and never zero times', () => {
-  const cfg = { ...DEFAULT_FEE_CONFIG, convenienceFee: 35 };
-  assert.equal(convenienceFeeTotal(0, cfg), 35);  // padala — no store, still one fee
-  assert.equal(convenienceFeeTotal(1, cfg), 35);
-  assert.equal(convenienceFeeTotal(2, cfg), 70);
-  assert.equal(convenienceFeeTotal(3, cfg), 105);
-});
-
-test('a three-store order totals goods + delivery + 2 store fees + 3 convenience', () => {
-  const cost = orderCost(
-    { deliveryFee: 80, storeCount: 3, goodsCost: 600 },
-    { perStoreFee: 25, commissionRate: 0.15, convenienceFee: 35 },
-  );
-  assert.equal(cost.storeFeeTotal, 50);
-  assert.equal(cost.convenienceFee, 105);
-  assert.equal(cost.customerTotal, 835);
+test('the convenience fee is flat — extra stops are billed by the store fee alone', () => {
+  const cfg = { perStoreFee: 25, commissionRate: 0.15, convenienceFee: 35 };
+  const one = orderCost({ deliveryFee: 80, storeCount: 1, goodsCost: 600 }, cfg);
+  const three = orderCost({ deliveryFee: 80, storeCount: 3, goodsCost: 600 }, cfg);
+  assert.equal(one.convenienceFee, 35);
+  assert.equal(three.convenienceFee, 35);      // not 105
+  assert.equal(three.storeFeeTotal, 50);       // the two extra stops, billed once each
+  assert.equal(three.customerTotal, 765);
   // Commission is on delivery + store fees only — the convenience fee is the rider's.
-  assert.equal(cost.commission, 19.5);
+  assert.equal(three.commission, 19.5);
 });

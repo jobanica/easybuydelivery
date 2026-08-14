@@ -32,8 +32,8 @@ test('collects distinct store links', () => {
 test('a multi-store order carries store fee + convenience fee (rider keeps it)', () => {
   const built = buildFoodOrder(base, { ...DEFAULT_FEE_CONFIG, convenienceFee: 20 });
   assert.equal(built.order.store_fee_total, 25);    // ₱25 for the 1 added store
-  // One convenience fee per stop: two stores, two queues, two waits.
-  assert.equal(built.order.convenience_fee, 40);
+  // Flat, whatever the store count — the extra stop is the store fee's job.
+  assert.equal(built.order.convenience_fee, 20);
   assert.equal(built.order.commission_amount, 11.25); // unchanged — convenience excluded
 });
 

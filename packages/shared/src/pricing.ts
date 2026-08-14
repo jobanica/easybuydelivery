@@ -104,15 +104,6 @@ export function storeFeeTotal(storeCount: number, config: FeeConfig): number {
   return roundPeso(addedStores(storeCount) * config.perStoreFee);
 }
 
-/**
- * Convenience fee for an order touching `storeCount` stores — one per stop.
- *
- * Each shop is its own queue, its own counter, its own wait. A padala (no
- * store at all) and a single-store order both carry exactly one.
- */
-export function convenienceFeeTotal(storeCount: number, config: FeeConfig): number {
-  return roundPeso(Math.max(1, Math.trunc(storeCount)) * config.convenienceFee);
-}
 
 export interface CommissionInput {
   /** The delivery fee charged for this order. */
@@ -192,7 +183,9 @@ export function orderCost(
 ): OrderCostBreakdown {
   const goods = input.goodsCost ?? 0;
   const stores = storeFeeTotal(input.storeCount, config);
-  const convenience = convenienceFeeTotal(input.storeCount, config);
+  // One per order, however many shops the rider visits. Extra stops are paid
+  // for by the per-store fee; charging this again per stop double-counts them.
+  const convenience = roundPeso(config.convenienceFee);
   const customerTotal = roundPeso(
     goods + input.deliveryFee + stores + convenience,
   );
