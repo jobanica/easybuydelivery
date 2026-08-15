@@ -22,6 +22,7 @@ SOURCE = os.path.join(ROOT, 'apps/customer-web/public/icons/logo-source.jpg')
 CUSTOMER_ICONS = os.path.join(ROOT, 'apps/customer-web/public/icons')
 CUSTOMER_PUBLIC = os.path.join(ROOT, 'apps/customer-web/public')
 RIDER_RES = os.path.join(ROOT, 'apps/rider/android/app/src/main/res')
+CUSTOMER_RES = os.path.join(ROOT, 'apps/customer-web/android/app/src/main/res')
 # Committed, not built into an app: these are uploaded by hand to Play Console.
 OUT_STORE = os.path.join(ROOT, 'docs/store-assets')
 
@@ -134,8 +135,18 @@ save(tile(512, bg=WHITE, shape='square', badge_ratio=0.76), f'{CUSTOMER_ICONS}/m
 save(tile(180, bg=WHITE, shape='square', badge_ratio=0.96), f'{CUSTOMER_ICONS}/apple-touch-icon.png')
 save(tile(64, bg=None, shape='square', badge_ratio=1.0), f'{CUSTOMER_PUBLIC}/favicon.png')
 
-print('rider app')
 DENSITIES = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+
+print('customer android launcher')
+# The badge on white, as the logo was drawn — the customer app carries no label.
+for name, px in DENSITIES.items():
+    out = f'{CUSTOMER_RES}/mipmap-{name}'
+    save(tile(px, bg=WHITE, shape='rounded', badge_ratio=0.88), f'{out}/ic_launcher.png')
+    save(tile(px, bg=WHITE, shape='circle', badge_ratio=0.80), f'{out}/ic_launcher_round.png')
+    fg = int(px * 108 / 48)
+    save(tile(fg, bg=None, shape='square', badge_ratio=0.56), f'{out}/ic_launcher_foreground.png')
+
+print('rider app')
 for name, px in DENSITIES.items():
     out = f'{RIDER_RES}/mipmap-{name}'
     save(tile(px, bg=PURPLE, shape='rounded', badge_ratio=0.72, label='RIDER'),
@@ -147,8 +158,18 @@ for name, px in DENSITIES.items():
     save(tile(fg, bg=None, shape='square', badge_ratio=0.46, label='RIDER'),
          f'{out}/ic_launcher_foreground.png')
 
-print('rider splash')
+print('splashes')
 import glob  # noqa: E402 — only needed for the splash sweep
+# The customer splash is the badge on white; the rider's is purple with RIDER.
+for path in glob.glob(f'{CUSTOMER_RES}/drawable*/splash.png'):
+    w, h = Image.open(path).size
+    canvas = Image.new('RGBA', (w, h), WHITE)
+    short = min(w, h)
+    art = tile(int(short * 0.5), bg=None, shape='square', badge_ratio=0.92)
+    canvas.alpha_composite(art, (int((w - art.width) / 2), int((h - art.height) / 2)))
+    canvas.convert('RGB').save(path)
+print('  ', len(glob.glob(f'{CUSTOMER_RES}/drawable*/splash.png')), 'customer splash images')
+
 for path in glob.glob(f'{RIDER_RES}/drawable*/splash.png'):
     w, h = Image.open(path).size
     canvas = Image.new('RGBA', (w, h), PURPLE)
