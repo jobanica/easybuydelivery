@@ -350,6 +350,101 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
   };
 }
 
+export interface MyOrderDetail {
+  id: string;
+  service_type: string;
+  status: string;
+  created_at: string;
+  delivered_at: string | null;
+  payment_method: string | null;
+  payment_status: string | null;
+  goods_cost: number;
+  delivery_fee: number;
+  store_fee_total: number;
+  convenience_fee: number;
+  estimated_amount: number | null;
+  actual_amount: number | null;
+  goods_receipt_url: string | null;
+  item_description: string | null;
+  notes: string | null;
+  delivery_address: string | null;
+  area_province: string | null;
+  area_city: string | null;
+  area_barangay: string | null;
+  recipient_name: string | null;
+  recipient_contact: string | null;
+  customer_name: string | null;
+  customer_contact: string | null;
+  stores: string[];
+  items: {
+    id: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    notes: string | null;
+    status: OrderItemStatus;
+    storeName: string | null;
+  }[];
+}
+
+/**
+ * One of the caller's own orders in full — what was bought, from where, and
+ * what each part of the bill was for.
+ *
+ * The history list can only show a total; when someone questions a charge weeks
+ * later, the total is exactly the number they are querying. RLS scopes this to
+ * the caller's own orders, so there is nothing to check here beyond the id.
+ */
+export async function getMyOrderDetail(db: SupabaseClient, orderId: string): Promise<MyOrderDetail | null> {
+  const { data, error } = await db
+    .from('orders')
+    .select('id, service_type, status, created_at, delivered_at, payment_method, payment_status, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, goods_receipt_url, item_description, notes, delivery_address, area_province, area_city, area_barangay, recipient_name, recipient_contact, customer_name, customer_contact, order_stores(store:stores(name)), order_items(id, name, qty, unit_price, notes, status, store:stores(name))')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as Record<string, unknown>;
+  const num = (v: unknown) => Number(v ?? 0);
+  return {
+    id: row.id as string,
+    service_type: row.service_type as string,
+    status: row.status as string,
+    created_at: row.created_at as string,
+    delivered_at: (row.delivered_at as string) ?? null,
+    payment_method: (row.payment_method as string) ?? null,
+    payment_status: (row.payment_status as string) ?? null,
+    goods_cost: num(row.goods_cost),
+    delivery_fee: num(row.delivery_fee),
+    store_fee_total: num(row.store_fee_total),
+    convenience_fee: num(row.convenience_fee),
+    estimated_amount: row.estimated_amount == null ? null : num(row.estimated_amount),
+    actual_amount: row.actual_amount == null ? null : num(row.actual_amount),
+    goods_receipt_url: (row.goods_receipt_url as string) ?? null,
+    item_description: (row.item_description as string) ?? null,
+    notes: (row.notes as string) ?? null,
+    delivery_address: (row.delivery_address as string) ?? null,
+    area_province: (row.area_province as string) ?? null,
+    area_city: (row.area_city as string) ?? null,
+    area_barangay: (row.area_barangay as string) ?? null,
+    recipient_name: (row.recipient_name as string) ?? null,
+    recipient_contact: (row.recipient_contact as string) ?? null,
+    customer_name: (row.customer_name as string) ?? null,
+    customer_contact: (row.customer_contact as string) ?? null,
+    stores: ((row.order_stores ?? []) as { store: { name: string | null } | null }[])
+      .map((os) => os.store?.name).filter((n): n is string => Boolean(n)),
+    items: ((row.order_items ?? []) as Record<string, unknown>[]).map((it) => ({
+      id: it.id as string,
+      name: it.name as string,
+      qty: Number(it.qty ?? 1),
+      unitPrice: num(it.unit_price),
+      notes: (it.notes as string) ?? null,
+      status: ((it.status as OrderItemStatus) ?? 'ok'),
+      storeName: (it.store as { name?: string } | null)?.name ?? null,
+    })),
+  };
+}
+
 export interface OrderRiderInfo {
   name: string | null;
   mobile_number: string | null;
