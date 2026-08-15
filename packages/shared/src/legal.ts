@@ -18,7 +18,7 @@ export const OPERATOR_NAME = 'Easy Buy Delivery';
  * has to reach someone. Deliberately a business address rather than anyone's
  * personal inbox — these pages are public and get scraped.
  */
-export const SUPPORT_EMAIL = 'easybuydelivery.support@gmail.com';
+export const SUPPORT_EMAIL = 'ngasparillo@gmail.com';
 
 /**
  * Support hotline, or null when there isn't one yet.
