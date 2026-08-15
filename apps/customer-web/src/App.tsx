@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { PadalaForm } from './PadalaForm.tsx';
+import { InstallApp } from './InstallApp.tsx';
 import { PabiliForm } from './PabiliForm.tsx';
 import { FoodFlow } from './FoodFlow.tsx';
 import { Track } from './tracking/Track.tsx';
@@ -107,6 +108,9 @@ export function App() {
           </>
         )}
       </main>
+
+      {/* Sits above the tab bar, so it never covers the navigation. */}
+      <InstallApp />
 
       {/* Bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/95 backdrop-blur">
