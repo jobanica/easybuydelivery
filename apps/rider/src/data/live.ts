@@ -152,7 +152,7 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
       await riderMarkItemSoldOut(db, itemId);
     },
     async setBuyStoreLocation(orderId, index, at) {
-      await riderSetBuyStoreLocation(db, orderId, index, at);
+      return riderSetBuyStoreLocation(db, orderId, index, at);
     },
     async correctItemPrice(itemId, unitPrice) {
       await riderCorrectItemPrice(db, itemId, unitPrice);

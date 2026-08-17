@@ -165,7 +165,7 @@ export function RefusalHistory() {
   );
 }
 
-/** Riders page: drop-off pins riders have moved, and the fee that followed. */
+/** Riders page: pins riders have moved, and the fee that followed. */
 export function PinCorrectionLog() {
   const dates = useDayRange(30, RANGES);
   const [rows, setRows] = useState<PinCorrection[] | null>(null);
@@ -186,7 +186,7 @@ export function PinCorrectionLog() {
   const added = (rows ?? []).reduce((n, r) => n + Math.max(0, r.newFee - r.oldFee), 0);
 
   return (
-    <Card title="Drop-off pins riders corrected" action={dates.controls}>
+    <Card title="Map pins riders corrected" action={dates.controls}>
       {error && <ErrorNote msg={error} />}
       {!rows ? (
         <p className="text-sm text-black/40">Loading…</p>
@@ -202,7 +202,7 @@ export function PinCorrectionLog() {
             <table className="w-full text-sm">
               <thead className="text-left text-black/50">
                 <tr className="border-b border-black/5">
-                  <Th>When</Th><Th>Rider</Th><Th>Order</Th><Th>Moved</Th><Th>Delivery fee</Th>
+                  <Th>When</Th><Th>Rider</Th><Th>Order</Th><Th>Pin</Th><Th>Moved</Th><Th>Delivery fee</Th>
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +214,9 @@ export function PinCorrectionLog() {
                       <Td><span className="font-medium">{r.riderName}</span></Td>
                       <Td className="capitalize text-black/60">
                         {r.order ? `${r.order.serviceType} · ${r.order.status.replaceAll('_', ' ')}` : '—'}
+                      </Td>
+                      <Td className="whitespace-nowrap text-black/60">
+                        {r.kind === 'pickup' ? '🛒 Shop' : '🏠 Drop-off'}
                       </Td>
                       <Td className="whitespace-nowrap text-black/60">
                         {r.movedM == null ? '—'

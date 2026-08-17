@@ -36,7 +36,6 @@ import { peso } from './ui.tsx';
 import { Qr } from './Qr.tsx';
 import { DeliveryMap } from './DeliveryMap.tsx';
 import { PinPicker } from './PinPicker.tsx';
-import { locateOnce } from './geo.ts';
 import { useLocationPublisher } from './useLocationPublisher.ts';
 import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
@@ -990,45 +989,53 @@ function AddonRequests({ order, data, onChange }:
 }
 
 /**
- * The written address, next to the pin. When the pin lands on the wrong house
- * this is all the rider has — a house number to look for, or a landmark to ask
- * a neighbour about.
- */
-/**
- * The stores a pabili run has to visit. These are names the customer typed, not
- * registered merchants, so there's nothing to call — but the rider needs the
- * route, and every stop past the first is one the customer paid a fee for.
- */
-/**
- * The pabili shopping route, and the one control that fixes a bad pin.
+ * The pabili shopping route, and the controls that fix a bad shop pin.
  *
- * Customers pin these stores from home, off memory or a map, and land a street
- * away — the rider is the one standing in the doorway. "I'm here" writes their
- * own position onto the store, which is what the navigation button and any
- * later transfer will use.
+ * Customers pin these shops from home, off memory or a map, and land a street —
+ * sometimes a barangay — away. The rider is the one standing in the doorway.
+ *
+ * The first shop is special: it is stored as the order's pickup, so it is the
+ * pin the per-km delivery fee is measured from. Correcting it re-quotes the fee
+ * and tells the customer in the chat. Later shops are extra stops already paid
+ * for by the store fee, so fixing those pins only helps navigation.
  */
 function BuyStores({ order, data, onChange }: {
   order: RiderOrder; data?: RiderData; onChange?: () => Promise<void>;
 }) {
-  const [busy, setBusy] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [pin, setPin] = useState<LatLng | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [fixed, setFixed] = useState<number | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   if (order.buyStores.length === 0) return null;
 
-  const canFix = Boolean(data && onChange && 'geolocation' in navigator);
+  const canFix = Boolean(data && onChange);
 
-  async function fixPin(i: number) {
-    if (!data || !onChange) return;
-    setBusy(i); setErr(null);
+  function open(i: number) {
+    const st = order.buyStores[i];
+    setEditing(i);
+    setErr(null); setDone(null);
+    setPin(st?.lat != null && st.lng != null ? { lat: st.lat, lng: st.lng } : null);
+  }
+
+  async function save(i: number) {
+    if (!data || !onChange || !pin) return;
+    setBusy(true); setErr(null);
     try {
-      const { lat, lng } = await locateOnce();
-      await data.setBuyStoreLocation(order.id, i, { lat, lng });
+      const res = await data.setBuyStoreLocation(order.id, i, pin);
+      if (!res.updated) { setErr(res.message ?? 'That pin could not be used.'); return; }
+      const fee = res.old_fee != null && res.new_fee != null && res.old_fee !== res.new_fee
+        ? ` Delivery fee ${peso(res.old_fee)} → ${peso(res.new_fee)}.`
+        : '';
+      setDone(res.repriced
+        ? `Pin moved.${fee || ' The fee is unchanged.'} The customer has been told in the chat.`
+        : 'Pin moved. This is an extra stop, so the fee is unchanged.');
+      setEditing(null);
       await onChange();
-      setFixed(i);
     } catch (e) {
       setErr(errMessage(e));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
@@ -1038,33 +1045,66 @@ function BuyStores({ order, data, onChange }: {
         🛒 Buy from {order.buyStores.length} store{order.buyStores.length === 1 ? '' : 's'}
       </p>
       <ol className="space-y-2 text-sm">
-        {order.buyStores.map((st, i) => (
-          <li key={i}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate">
-                <span className="mr-1.5 text-black/40">{i + 1}.</span>{st.name}
-                {st.lat == null && <span className="ml-1.5 text-[11px] text-black/40">no pin</span>}
-              </span>
-              <a href={st.lat != null && st.lng != null
-                    ? directionsTo({ lat: st.lat, lng: st.lng })
-                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(st.name)}`}
-                target="_blank" rel="noreferrer"
-                className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
-                🧭 Go
-              </a>
-            </div>
-            {canFix && (
-              <button type="button" disabled={busy != null} onClick={() => void fixPin(i)}
-                className="mt-1 rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple disabled:opacity-50">
-                {busy === i ? 'Reading your location…'
-                  : fixed === i ? '✓ Pin updated'
-                  : st.lat == null ? '📍 I\'m here — set the pin' : '📍 Wrong spot? Set pin to my location'}
-              </button>
-            )}
-          </li>
-        ))}
+        {order.buyStores.map((st, i) => {
+          const here = st.lat != null && st.lng != null ? { lat: st.lat, lng: st.lng } : null;
+          const moved = pin && here ? haversineMeters(pin, here) : null;
+          return (
+            <li key={i}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  <span className="mr-1.5 text-black/40">{i + 1}.</span>{st.name}
+                  {here == null && <span className="ml-1.5 text-[11px] text-black/40">no pin</span>}
+                </span>
+                <a href={here ? directionsTo(here)
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(st.name)}`}
+                  target="_blank" rel="noreferrer"
+                  className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] font-medium text-brand-purple">
+                  🧭 Go
+                </a>
+              </div>
+
+              {canFix && editing !== i && (
+                <button type="button" onClick={() => open(i)}
+                  className="mt-1 rounded-lg border border-brand-purple/40 px-2 py-1 text-[11px] font-medium text-brand-purple">
+                  {here == null ? '📍 Set the pin' : '📍 Shop isn\'t here? Fix the pin'}
+                </button>
+              )}
+
+              {editing === i && (
+                <div className="mt-1.5 rounded-xl bg-white/70 p-2.5 ring-1 ring-brand-purple/20">
+                  <p className="mb-1.5 text-[11px] text-black/55">
+                    {i === 0
+                      ? 'Drag the pin onto the real shop, or tap “I’m here”. The delivery fee is worked out from this pin, so it will be re-priced and the customer told in the chat.'
+                      : 'Drag the pin onto the real shop, or tap “I’m here”. This is an extra stop — the fee does not change.'}
+                  </p>
+                  <PinPicker value={pin} onChange={setPin} height={180} />
+                  {moved != null && moved >= 20 && (
+                    <p className="mt-1.5 text-[11px] text-black/50">
+                      Moving it {formatDistance(moved)} from the customer's pin.
+                    </p>
+                  )}
+                  {err && <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{err}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" onClick={() => setEditing(null)} disabled={busy}
+                      className="flex-1 rounded-lg border border-black/10 bg-white py-1.5 text-[11px] font-semibold text-black/60">
+                      Cancel
+                    </button>
+                    <button type="button" onClick={() => void save(i)} disabled={busy || !pin}
+                      className="flex-1 rounded-lg bg-brand-purple py-1.5 text-[11px] font-bold text-white disabled:opacity-50">
+                      {busy ? 'Saving…' : 'Move the pin'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
-      {err && <p className="mt-1.5 text-[11px] text-red-600">{err}</p>}
+      {done && (
+        <p className="mt-1.5 rounded-lg bg-brand-green/10 px-2.5 py-1.5 text-[11px] font-medium text-green-800">
+          ✓ {done}
+        </p>
+      )}
       {order.store_fee_total > 0 && (
         <p className="mt-1.5 text-[11px] text-black/45">
           Extra stops · {peso(order.store_fee_total)} store fee on this order.

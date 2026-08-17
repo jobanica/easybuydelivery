@@ -166,9 +166,16 @@ export function createPreviewData(): RiderData {
       }));
     },
     async setBuyStoreLocation(orderId, index, at) {
+      // The first store is the order's pickup, so correcting it moves that pin
+      // too — that is the one the fee is measured from.
       active = active.map((o) => (o.id === orderId
-        ? { ...o, buyStores: o.buyStores.map((st, i) => (i === index ? { ...st, ...at } : st)) }
+        ? {
+            ...o,
+            buyStores: o.buyStores.map((st, i) => (i === index ? { ...st, ...at } : st)),
+            ...(index === 0 ? { pickupLat: at.lat, pickupLng: at.lng } : {}),
+          }
         : o));
+      return { updated: true, repriced: index === 0, moved_m: 0, old_fee: 60, new_fee: 60 };
     },
     async correctDeliveryPin(orderId, at) {
       active = active.map((o) => (o.id === orderId

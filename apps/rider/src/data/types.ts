@@ -1,5 +1,5 @@
 import type { OrderStatus, ServiceType, LedgerEntry, PaymentMethod, EarningRecord } from '@ebd/shared';
-import type { OrderItemStatus, OrderAddon, RiderPinCorrectionResult } from '@ebd/supabase';
+import type { OrderItemStatus, OrderAddon, RiderPinCorrectionResult, BuyStorePinResult } from '@ebd/supabase';
 
 export type { OrderAddon };
 
@@ -91,8 +91,11 @@ export interface RiderData {
   confirmPayment(orderId: string, note?: string): Promise<void>;
   /** Store ran out: drop the item from the bill (no customer approval needed). */
   markSoldOut(itemId: string): Promise<void>;
-  /** Pabili: put a store's map pin where the shop really is (the rider's position). */
-  setBuyStoreLocation(orderId: string, index: number, at: { lat: number; lng: number }): Promise<void>;
+  /** Pabili: put a store's map pin where the shop really is. Correcting the
+      first store re-quotes the delivery fee from it. */
+  setBuyStoreLocation(
+    orderId: string, index: number, at: { lat: number; lng: number },
+  ): Promise<BuyStorePinResult>;
   /** The shelf price differs from ours: record what the store actually charges. */
   correctItemPrice(itemId: string, unitPrice: number): Promise<void>;
   /** Put the drop-off pin where the customer really is; re-quotes the fee by distance. */

@@ -234,17 +234,34 @@ export async function updatePabiliActualAmount(
  * The rider corrects where a pabili store actually is, from their own position.
  *
  * The customer pinned it from home, off memory or a map, and landed a street
- * away. The rider is standing in the doorway — one tap puts the pin where the
- * shop is, for the navigation button and for whoever takes a transfer.
+ * away — on Pabili that is the normal case, not the exception, because they are
+ * pinning a shop they are not standing in.
+ *
+ * Correcting the *first* store also moves the order's pickup pin and re-quotes
+ * the delivery fee from it, because that is the pin the fee was measured from.
+ * Later stores are extra stops paid for by the store fee, so fixing their pins
+ * helps navigation without touching the bill.
  */
+export interface BuyStorePinResult {
+  updated: boolean;
+  /** True when this pin drives the fee and the fee was re-quoted from it. */
+  repriced?: boolean;
+  reason?: 'outside_area' | 'unchanged';
+  message?: string;
+  moved_m?: number | null;
+  old_fee?: number;
+  new_fee?: number;
+}
+
 export async function riderSetBuyStoreLocation(
   db: SupabaseClient,
   orderId: string,
   index: number,
   at: { lat: number; lng: number },
-): Promise<void> {
-  const { error } = await db.rpc('rider_set_buy_store_location', {
+): Promise<BuyStorePinResult> {
+  const { data, error } = await db.rpc('rider_set_buy_store_location', {
     p_order_id: orderId, p_index: index, p_lat: at.lat, p_lng: at.lng,
   });
   if (error) throw error;
+  return (data ?? { updated: false }) as BuyStorePinResult;
 }

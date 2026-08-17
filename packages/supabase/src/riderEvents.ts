@@ -133,12 +133,14 @@ export function summarizeRefusals(events: readonly RiderRequestEvent[]): RiderRe
   );
 }
 
-/** A drop-off pin a rider moved, and what it did to the delivery fee. */
+/** A pin a rider moved, and what it did to the delivery fee. */
 export interface PinCorrection {
   id: string;
   riderId: string | null;
   riderName: string;
   orderId: string;
+  /** Which end of the trip moved: where we deliver, or the pabili shop. */
+  kind: 'dropoff' | 'pickup';
   /** How far the pin moved, in metres. */
   movedM: number | null;
   oldFee: number;
@@ -148,12 +150,13 @@ export interface PinCorrection {
 }
 
 /**
- * Drop-off pins riders have corrected, newest first. Admin-only by RLS.
+ * Pins riders have corrected, newest first. Admin-only by RLS.
  *
  * Worth watching because a pin correction is the one rider action that raises
  * what a customer owes without anyone approving it. Almost all of these are
- * honest — the customer really did pin the wrong street — but a rider who
- * quietly nudges every drop-off outward shows up here and nowhere else.
+ * honest — the customer really did pin the wrong street, or a pabili shop they
+ * were never standing in — but a rider who quietly nudges every trip longer
+ * shows up here and nowhere else.
  */
 export async function listPinCorrections(
   db: SupabaseClient,
@@ -164,7 +167,7 @@ export async function listPinCorrections(
 
   const { data, error } = await db
     .from('order_pin_corrections')
-    .select('id, rider_id, order_id, moved_m, old_fee, new_fee, created_at, rider:riders(name), order:orders(service_type, status)')
+    .select('id, rider_id, order_id, kind, moved_m, old_fee, new_fee, created_at, rider:riders(name), order:orders(service_type, status)')
     .gte('created_at', `${opts.fromDay}T00:00:00${MANILA_OFFSET}`)
     .lt('created_at', `${dayAfter.toISOString().slice(0, 10)}T00:00:00${MANILA_OFFSET}`)
     .order('created_at', { ascending: false })
@@ -179,6 +182,7 @@ export async function listPinCorrections(
       riderId: (row.rider_id as string | null) ?? null,
       riderName: rider?.name ?? 'Unknown rider',
       orderId: row.order_id as string,
+      kind: row.kind === 'pickup' ? 'pickup' : 'dropoff',
       movedM: row.moved_m == null ? null : Number(row.moved_m),
       oldFee: Number(row.old_fee ?? 0),
       newFee: Number(row.new_fee ?? 0),

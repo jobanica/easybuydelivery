@@ -49,9 +49,15 @@ export async function recordAppInstall(
 
 /** True when the app is running as an installed app rather than a browser tab. */
 export function isInstalledApp(): boolean {
+  // This package is built without the DOM lib (it also runs under node in
+  // tests), so reach for the browser globals through `globalThis`.
+  const w = globalThis as unknown as {
+    matchMedia?: (q: string) => { matches: boolean };
+    navigator?: { standalone?: boolean };
+  };
   try {
-    return window.matchMedia?.('(display-mode: standalone)').matches
-      || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    return w.matchMedia?.('(display-mode: standalone)').matches === true
+      || w.navigator?.standalone === true;
   } catch { return false; }
 }
 
