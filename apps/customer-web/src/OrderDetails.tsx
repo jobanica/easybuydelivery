@@ -15,7 +15,7 @@ const when = (iso: string) => new Intl.DateTimeFormat('en-PH', {
 const payLabel: Record<string, string> = {
   cod: 'Cash on delivery',
   rider_qr: 'GCash to rider',
-  online: 'Paid online',
+  online: 'Pay online (collected at the door)',
 };
 
 function Line({ label, value, strong, muted }: {

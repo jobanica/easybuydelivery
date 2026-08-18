@@ -133,7 +133,7 @@ export function PadalaForm() {
       dropoff: { contact: form.dropoffContact, name: form.receiverName, lat: dropoff?.lat, lng: dropoff?.lng, address: form.dropoffAddress },
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
-      paid: form.pay === 'online',
+      paid: false,
     };
   }
 

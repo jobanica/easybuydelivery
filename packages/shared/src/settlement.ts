@@ -1,13 +1,15 @@
 /**
  * Rider settlement gate.
  *
- * Every completed COD (or rider-QR) order adds its commission to the rider's
- * ledger. At the daily cutoff, the previous day's balance becomes due; a rider
- * with any unsettled balance from a business day BEFORE today is locked out of
- * accepting new orders until they settle.
+ * Every completed order adds its commission to the rider's ledger, whatever the
+ * customer paid with — the money passes through the rider either way. At the
+ * daily cutoff, the previous day's balance becomes due; a rider with any
+ * unsettled balance from a business day BEFORE today is locked out of accepting
+ * new orders until they settle.
  *
- * Online-paid orders do not add to the ledger — that money already reached the
- * operator, so there is nothing for the rider to hold.
+ * An adjustment is the operator's own correction and is the one entry that can
+ * be negative, so a balance can go below zero: that means the operator owes the
+ * rider, and it comes off their next commissions.
  */
 
 import { roundPeso } from './money.ts';
@@ -18,19 +20,29 @@ export interface LedgerEntry {
   /** Business day this commission belongs to (YYYY-MM-DD). */
   businessDay: string;
   settled: boolean;
-  /** What the charge is: the operator's commission, or its share of a mark-up. */
-  kind?: 'commission' | 'markup';
+  /**
+   * What the entry is: the operator's commission, its share of a mark-up, or an
+   * adjustment the operator posted (negative when it credits the rider).
+   */
+  kind?: 'commission' | 'markup' | 'adjustment';
 }
 
 /** Split an unsettled balance by what it is, so nothing reads as a mystery charge. */
-export function owedByKind(entries: readonly LedgerEntry[]): { commission: number; markup: number } {
-  let commission = 0, markup = 0;
+export function owedByKind(
+  entries: readonly LedgerEntry[],
+): { commission: number; markup: number; adjustment: number } {
+  let commission = 0, markup = 0, adjustment = 0;
   for (const e of entries) {
     if (e.settled) continue;
     if (e.kind === 'markup') markup += e.amount;
+    else if (e.kind === 'adjustment') adjustment += e.amount;
     else commission += e.amount;
   }
-  return { commission: Math.round(commission * 100) / 100, markup: Math.round(markup * 100) / 100 };
+  return {
+    commission: roundPeso(commission),
+    markup: roundPeso(markup),
+    adjustment: roundPeso(adjustment),
+  };
 }
 
 /** Total unsettled balance across all business days. */
@@ -76,7 +88,10 @@ export interface RiderBalance {
 
 /**
  * Summarize each rider's owed/overdue balance and lock state as of `today`.
- * Riders with nothing owed are omitted so the admin view lists only who owes.
+ *
+ * Riders sitting at exactly zero are omitted — they are settled up and need no
+ * row. A negative balance is kept: it means the operator owes that rider, which
+ * is precisely the thing that should not go unseen.
  */
 export function summarizeRiderBalances(
   groups: readonly RiderLedgerGroup[],
@@ -90,6 +105,6 @@ export function summarizeRiderBalances(
       overdue: overdueBalance(g.entries, today),
       locked: isLockedOut(g.entries, today),
     }))
-    .filter((b) => b.owed > 0)
+    .filter((b) => b.owed !== 0)
     .sort((a, b) => Number(b.locked) - Number(a.locked) || b.overdue - a.overdue);
 }

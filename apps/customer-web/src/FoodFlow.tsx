@@ -361,12 +361,15 @@ export function FoodFlow() {
           deliveryLat: dropoff?.lat,
           deliveryLng: dropoff?.lng,
           paymentMethod: pay,
-          paid: pay === 'online',
+          // No order arrives paid. "Pay online" used to set this true without a
+          // gateway behind it, so orders were marked settled while no money had
+          // moved. It is paid when someone actually hands it over.
+          paid: false,
         }, fees.config));
       } else {
         buildFoodOrder({
           customerId: 'preview-customer', customerContact: contact.trim() || '09171234567',
-          deliveryFee, lines: cart, paymentMethod: pay, paid: pay === 'online',
+          deliveryFee, lines: cart, paymentMethod: pay, paid: false,
         }, fees.config);
         setCreatedId('preview-only');
       }
@@ -676,7 +679,7 @@ export function FoodFlow() {
               </div>
               {pay === 'online' && !needsDropoff && (
                 <div className="mt-1 flex justify-between text-xs text-black/50">
-                  <span>Collected at door (goods)</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
+                  <span>Pay the rider at the door</span><span>{peso(collectibleAtDoor(summary, 'online'))}</span>
                 </div>
               )}
               {pay === 'rider_qr' && !needsDropoff && (
@@ -700,7 +703,7 @@ export function FoodFlow() {
                 : custName.trim().length < 2 ? 'Enter your name'
                 : !contact.trim() ? 'Enter your mobile number'
                 : !pay ? 'Choose a payment method'
-                : pay === 'online' ? `Pay online & order · ${peso(summary.customerTotal)}`
+                : pay === 'online' ? `Place order (pay at door) · ${peso(summary.customerTotal)}`
                 : pay === 'rider_qr' ? `Place order (GCash to rider) · ${peso(summary.customerTotal)}`
                 : `Place order (COD) · ${peso(summary.customerTotal)}`}
             </button>

@@ -833,12 +833,9 @@ function fullCollectible(o: RiderOrder): number | null {
 }
 
 function amountToCollect(o: RiderOrder): number | null {
-  if (o.payment_method === 'online') {
-    if (o.service_type === 'pabili') return o.actual_amount;
-    return o.goods_cost;
-  }
   // Paid to the rider via GCash QR — no cash to collect at the door.
   if (o.payment_method === 'rider_qr') return 0;
+  // "Pay online" takes no money yet (no gateway), so it collects like COD.
   return fullCollectible(o);
 }
 
@@ -1627,21 +1624,30 @@ function EarningsView({ live, data, ledger, owed, overdue, onSettle }:
       <EarningsBoard data={data} />
 
       <div className="rounded-2xl bg-gradient-to-br from-brand-green to-brand-purple p-5 text-white shadow-md">
-        <p className="text-xs uppercase tracking-wide text-white/80">Owed to operator</p>
-        <p className="mt-1 text-3xl font-black">{peso(owed)}</p>
-        {/* A mark-up charge with no explanation looks like a mistake, and a
-            rider who thinks they have been shorted stops riding. */}
+        <p className="text-xs uppercase tracking-wide text-white/80">
+          {owed < 0 ? 'The operator owes you' : 'Owed to operator'}
+        </p>
+        <p className="mt-1 text-3xl font-black">{peso(Math.abs(owed))}</p>
+        {/* A charge with no explanation looks like a mistake, and a rider who
+            thinks they have been shorted stops riding. A credit unexplained is
+            just as bad — it reads as an error waiting to be taken back. */}
         {(() => {
           const split = owedByKind(ledger);
-          return split.markup > 0 ? (
-            <p className="mt-1 text-xs text-white/85">
-              {peso(split.commission)} commission · {peso(split.markup)} store mark-up you collected at the door
-            </p>
+          const parts = [
+            split.commission !== 0 ? `${peso(split.commission)} commission` : null,
+            split.markup !== 0 ? `${peso(split.markup)} store mark-up you collected at the door` : null,
+            split.adjustment !== 0
+              ? `${peso(Math.abs(split.adjustment))} ${split.adjustment < 0 ? 'credited back to you' : 'adjustment'}`
+              : null,
+          ].filter(Boolean);
+          return parts.length > 1 ? (
+            <p className="mt-1 text-xs text-white/85">{parts.join(' · ')}</p>
           ) : null;
         })()}
         <p className="mt-1 text-xs text-white/85">
-          Settle your commission before the end of the day — any unsettled balance locks
-          your account at midnight until it's paid.
+          {owed < 0
+            ? 'This comes off your next commissions — nothing to settle today.'
+            : 'Settle your commission before the end of the day — any unsettled balance locks your account at midnight until it\'s paid.'}
         </p>
         {owed > 0 && (
           <button onClick={() => setPayOpen(true)} className="mt-3 w-full rounded-xl bg-white py-2.5 text-sm font-bold text-brand-purple">
@@ -1667,13 +1673,20 @@ function EarningsView({ live, data, ledger, owed, overdue, onSettle }:
           <p className="py-4 text-center text-sm text-black/40">No commission recorded yet.</p>
         ) : (
           <ul className="divide-y divide-black/5">
-            {history.map((e) => (
-              <li key={e.businessDay} className="flex items-center justify-between py-2.5 text-sm">
+            {/* A day can hold several entries — a commission, a mark-up, a
+                credit — so the day alone is not a key. */}
+            {history.map((e, i) => (
+              <li key={`${e.businessDay}-${i}`} className="flex items-center justify-between py-2.5 text-sm">
                 <span className="text-black/60">{e.businessDay}</span>
                 <span className="flex items-center gap-2">
-                  <span className="font-semibold">{peso(e.amount)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${e.settled ? 'bg-brand-green/15 text-green-800' : 'bg-brand-yellow/30 text-yellow-800'}`}>
-                    {e.settled ? 'Settled' : 'Unsettled'}
+                  <span className={`font-semibold ${e.amount < 0 ? 'text-green-700' : ''}`}>
+                    {e.amount < 0 ? `− ${peso(-e.amount)}` : peso(e.amount)}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    e.amount < 0 ? 'bg-brand-green/15 text-green-800'
+                      : e.settled ? 'bg-brand-green/15 text-green-800'
+                      : 'bg-brand-yellow/30 text-yellow-800'}`}>
+                    {e.amount < 0 ? 'Credit' : e.settled ? 'Settled' : 'Unsettled'}
                   </span>
                 </span>
               </li>

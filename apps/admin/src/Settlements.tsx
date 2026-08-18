@@ -104,12 +104,18 @@ export function Settlements() {
                 {balances.map((b) => (
                   <tr key={b.riderId} className="border-t border-black/5">
                     <Td className="font-medium">{b.riderName ?? b.riderId}</Td>
-                    <Td>{peso(b.owed)}</Td>
-                    <Td className={b.overdue > 0 ? 'text-red-600' : ''}>{peso(b.overdue)}</Td>
+                    <Td className={b.owed < 0 ? 'text-green-700' : ''}>
+                      {b.owed < 0 ? `${peso(-b.owed)} to them` : peso(b.owed)}
+                    </Td>
+                    <Td className={b.overdue > 0 ? 'text-red-600' : ''}>
+                      {b.overdue < 0 ? '—' : peso(b.overdue)}
+                    </Td>
                     <Td>
                       {b.locked
                         ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Locked</span>
-                        : <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-xs font-medium text-green-800">Active</span>}
+                        : b.owed < 0
+                          ? <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-xs font-medium text-green-800">You owe them</span>
+                          : <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-xs font-medium text-green-800">Active</span>}
                     </Td>
                   </tr>
                 ))}

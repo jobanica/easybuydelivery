@@ -55,8 +55,8 @@ export function PaymentChoice({ value, onChange }:
       )}
       {value === 'online' && (
         <p className="mt-1 text-xs text-black/50">
-          You'll pay the delivery fee online now; the rider is reimbursed for
-          goods at the door. (Demo — real GCash/Maya via PayMongo needs API keys.)
+          Card and e-wallet checkout isn't live yet — for now you'll pay the
+          rider the full amount at the door, same as cash on delivery.
         </p>
       )}
     </div>

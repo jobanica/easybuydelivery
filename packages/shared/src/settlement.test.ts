@@ -69,5 +69,27 @@ test('owedByKind separates a mark-up charge from commission, ignoring settled ro
     // Rows written before mark-ups existed carry no kind: they are commission.
     { amount: 7.5, businessDay: '2026-08-10', settled: false },
   ]);
-  assert.deepEqual(split, { commission: 18.75, markup: 42 });
+  assert.deepEqual(split, { commission: 18.75, markup: 42, adjustment: 0 });
+});
+
+test('a credit is its own line, and pulls the balance below zero', () => {
+  const entries: LedgerEntry[] = [
+    { amount: 11.25, businessDay: '2026-08-10', settled: false, kind: 'commission' },
+    { amount: -69.63, businessDay: '2026-08-10', settled: false, kind: 'adjustment' },
+  ];
+  assert.deepEqual(owedByKind(entries), { commission: 11.25, markup: 0, adjustment: -69.63 });
+  // Negative owed means the operator owes the rider.
+  assert.equal(owedBalance(entries), -58.38);
+});
+
+test('a rider the operator owes still appears in the admin list', () => {
+  const [only] = summarizeRiderBalances(
+    [{ riderId: 'r1', riderName: 'Neil', entries: [
+      { amount: -69.63, businessDay: '2026-08-17', settled: false, kind: 'adjustment' },
+    ] }],
+    '2026-08-18',
+  );
+  assert.equal(only?.owed, -69.63);
+  // A credit is not a debt: it must never lock the rider out.
+  assert.equal(only?.locked, false);
 });

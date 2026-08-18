@@ -177,7 +177,7 @@ export function PabiliForm() {
       deliveryAddress: addressText,
       notes: form.notes,
       paymentMethod: form.pay ?? 'cod',
-      paid: form.pay === 'online',
+      paid: false,
     };
   }
 
