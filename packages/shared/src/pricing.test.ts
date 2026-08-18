@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   addedStores,
   commission,
+  counterTotal,
   riderEarnings,
   storeFeeTotal,
   orderCost,
@@ -155,4 +156,28 @@ test('the convenience fee is flat — extra stops are billed by the store fee al
   assert.equal(three.customerTotal, 765);
   // Commission is on delivery + store fees only — the convenience fee is the rider's.
   assert.equal(three.commission, 19.5);
+});
+
+test('counterTotal is what the shop is owed, not what the customer is billed', () => {
+  // The screenshot case: Angel's Burger ₱45 + ₱70, Andoks ₱95 + ₱150.
+  assert.equal(counterTotal([
+    { qty: 1, unitPrice: 45 }, { qty: 1, unitPrice: 70 },
+  ]), 115);
+  assert.equal(counterTotal([
+    { qty: 1, unitPrice: 95 }, { qty: 2, unitPrice: 75 },
+  ]), 245);
+});
+
+test('counterTotal strips our mark-up — the shop gets its shelf price', () => {
+  // Billed ₱130 each, ₱10 of which is ours: the counter is owed ₱240 for two.
+  assert.equal(counterTotal([{ qty: 2, unitPrice: 130, markup: 10 }]), 240);
+});
+
+test('counterTotal skips what is not being bought', () => {
+  const lines = [
+    { qty: 1, unitPrice: 100 },
+    { qty: 1, unitPrice: 60, status: 'sold_out' },
+    { qty: 1, unitPrice: 80, status: 'proposed' },
+  ];
+  assert.equal(counterTotal(lines), 100);
 });

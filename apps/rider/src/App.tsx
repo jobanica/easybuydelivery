@@ -6,6 +6,7 @@ import {
   owedBalance,
   owedByKind,
   pabiliCollectible,
+  counterTotal,
   riderEarnings,
   sortRequestQueue,
   SUPPORT_EMAIL,
@@ -469,6 +470,21 @@ function ItemActions({ item, data, onChange }: {
   );
 }
 
+/** The line under a store's items: the cash to hand that counter. */
+function CounterTotal({ items }: { items: RiderOrder['items'] }) {
+  const due = counterTotal(items);
+  if (due <= 0) return null;
+  const dropped = items.some((i) => i.status === 'sold_out' || i.status === 'proposed');
+  return (
+    <div className="mt-2 flex items-baseline justify-between border-t border-black/10 pt-2">
+      <span className="text-xs font-semibold text-black/60">
+        Pay this store{dropped && <span className="ml-1 font-normal text-black/40">(sold-out excluded)</span>}
+      </span>
+      <span className="text-sm font-black text-brand-purple">{peso(due)}</span>
+    </div>
+  );
+}
+
 function StoreGroups({ order, data, onChange }: {
   order: RiderOrder; data?: RiderData; onChange?: () => Promise<void>;
 }) {
@@ -551,7 +567,12 @@ function StoreGroups({ order, data, onChange }: {
                 )}
               </span>
             </div>
-            {items.length > 0 && <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>}
+            {items.length > 0 && (
+              <>
+                <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>
+                <CounterTotal items={items} />
+              </>
+            )}
           </div>
         );
       })}
@@ -574,6 +595,7 @@ function StoreGroups({ order, data, onChange }: {
               )}
             </div>
             <ul className="mt-2 space-y-1 text-sm">{items.map(ItemRow)}</ul>
+            <CounterTotal items={items} />
           </div>
         );
       })}
@@ -584,6 +606,7 @@ function StoreGroups({ order, data, onChange }: {
             {splitByBuyStore ? '🛒 Any store — buy wherever you can' : 'Order'}
           </p>
           <ul className="space-y-1 text-sm">{anyStore.map(ItemRow)}</ul>
+          <CounterTotal items={anyStore} />
         </div>
       )}
     </div>

@@ -125,6 +125,35 @@ export function commission(input: CommissionInput, config: FeeConfig = DEFAULT_F
   return roundPeso(base * config.commissionRate);
 }
 
+/** One line as the rider sees it at the counter. */
+export interface CounterLine {
+  qty: number;
+  /** What the customer is billed per unit — our mark-up included. */
+  unitPrice: number;
+  /** The mark-up portion of `unitPrice`. Ours, not the shop's. */
+  markup?: number;
+  /** 'sold_out' is never bought; 'proposed' is not on the bill until accepted. */
+  status?: string;
+}
+
+/**
+ * Cash the rider hands one counter.
+ *
+ * Deliberately NOT the customer's total for those lines. A sold-out item is
+ * never bought, a proposed replacement is not on the bill until the customer
+ * accepts it, and the mark-up is the operator's — the shop is owed its shelf
+ * price and nothing more, so a rider paying the billed figure overpays.
+ *
+ * @example
+ * // ₱120 shelf + ₱10 mark-up, two of them → the shop gets ₱240
+ * counterTotal([{ qty: 2, unitPrice: 130, markup: 10 }]) // 240
+ */
+export function counterTotal(lines: readonly CounterLine[]): number {
+  return roundPeso(lines
+    .filter((l) => l.status !== 'sold_out' && l.status !== 'proposed')
+    .reduce((sum, l) => sum + (l.unitPrice - (l.markup ?? 0)) * l.qty, 0));
+}
+
 export interface RiderEarningsInput {
   /** Delivery fee charged on this order (collected by the rider). */
   deliveryFee: number;
