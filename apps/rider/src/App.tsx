@@ -41,6 +41,8 @@ import { useLocationPublisher } from './useLocationPublisher.ts';
 import { useRiderPosition, formatDistance } from './useRiderPosition.ts';
 import { ChatButton } from './Chat.tsx';
 import { usePushRegistration } from './usePushRegistration.ts';
+import { useNewOrderAlert } from './useNewOrderAlert.ts';
+import { isAlertMuted, setAlertMuted, playNewOrderAlert } from './alert.ts';
 import { usePlatformStatus, ClosedBanner } from './PlatformStatus.tsx';
 import { supabase } from './lib/supabase.ts';
 import { APP_VERSION } from './config.ts';
@@ -107,6 +109,8 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
   // else, and it stays at the head until somebody does.
   const pool = sortRequestQueue(open.filter((o) => accepts(o.service_type)));
   const head = pool[0] ?? null;
+  // Only announce what the rider could actually take right now.
+  useNewOrderAlert(pool.map((o) => o.id), online && !locked);
   const transfers = pool.filter((o) => o.isTransfer);
   const newRequests = pool.filter((o) => !o.isTransfer);
 
@@ -1853,6 +1857,7 @@ function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSa
       {canEdit && profile && <ServicesSection profile={profile} onSaved={onProfileSaved} />}
       {canEdit && profile && <PushSection profile={profile} onSaved={onProfileSaved} />}
 
+      <SoundSection />
       <LocationSection />
 
       <SettingsCard title="Help & support">
@@ -2040,6 +2045,38 @@ function PushSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () 
         </span>
         <Switch on={profile.push_enabled} disabled={busy} onChange={toggle} />
       </label>
+    </SettingsCard>
+  );
+}
+
+/**
+ * The alert sound, and a way to hear it on purpose.
+ *
+ * A rider who has never heard it cannot know whether it works, and finding out
+ * during a shift is too late — so there is a Test button. The preference is per
+ * device, not per account: the phone that is muted is the phone in the pocket.
+ */
+function SoundSection() {
+  const [muted, setMuted] = useState(isAlertMuted);
+  return (
+    <SettingsCard title="Request alert sound">
+      <label className="flex items-center justify-between">
+        <span>
+          <span className="block text-sm font-medium">Chime for new requests</span>
+          <span className="block text-xs text-black/45">
+            Sounds and buzzes when an order enters the pool, and repeats every 25s while it waits.
+          </span>
+        </span>
+        <Switch on={!muted} onChange={() => { const next = !muted; setMuted(next); setAlertMuted(next); }} />
+      </label>
+      <button type="button" onClick={() => playNewOrderAlert()}
+        className="mt-3 w-full rounded-xl border border-brand-purple/40 py-2 text-sm font-semibold text-brand-purple">
+        🔔 Play it now
+      </button>
+      <p className="mt-2 text-xs text-black/45">
+        Hear nothing? Turn off silent mode and check the volume — a browser can only
+        play sound after you've tapped the screen at least once.
+      </p>
     </SettingsCard>
   );
 }
