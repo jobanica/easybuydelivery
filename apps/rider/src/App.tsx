@@ -163,7 +163,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
           <button onClick={() => setTab('requests')}
             className="relative flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.04]">
             <BellIcon />
-            {online && pool.length > 0 && (
+            {!locked && pool.length > 0 && (
               <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-purple px-1 text-[10px] font-bold text-white">
                 {pool.length}
               </span>
@@ -185,10 +185,16 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 
         {tab === 'requests' && (
           locked ? <LockCard overdue={overdue} onSettle={() => setTab('earnings')} />
-            : !online ? <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} />
-            : pool.length === 0 ? <Empty icon="📭">No requests in the pool right now.</Empty>
+            : pool.length === 0 ? (
+                online
+                  ? <Empty icon="📭">No requests in the pool right now.</Empty>
+                  : <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} waiting={0} />
+              )
             : <div className="space-y-5">
-                <QueueNote waiting={pool.length} />
+                {/* Offline riders see the work too. Hiding it behind the toggle
+                    meant nobody could tell whether going online was worth it. */}
+                {!online && <OfflineCard onGoOnline={toggleOnline} busy={onlineBusy} waiting={pool.length} />}
+                {online && <QueueNote waiting={pool.length} />}
                 {transfers.length > 0 && (
                   <div className="space-y-3">
                     <div className="rounded-2xl bg-brand-yellow/20 px-4 py-3 ring-1 ring-brand-yellow">
@@ -200,6 +206,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
                     {transfers.map((o) => (
                       <RequestCard key={o.id} order={o} riderPos={riderPos}
                         queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
+                        offline={!online}
                         onAccept={() => accept(o.id)} />
                     ))}
                   </div>
@@ -210,6 +217,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
                     {newRequests.map((o) => (
                       <RequestCard key={o.id} order={o} riderPos={riderPos}
                         queuePos={pool.indexOf(o) + 1} locked={o.id !== head?.id}
+                        offline={!online}
                         onAccept={() => accept(o.id)} />
                     ))}
                   </div>
@@ -236,7 +244,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
         )}
       </main>
 
-      <BottomNav tab={tab} onTab={setTab} requests={online ? pool.length : 0} deliveries={active.length} />
+      <BottomNav tab={tab} onTab={setTab} requests={locked ? 0 : pool.length} deliveries={active.length} />
     </div>
   );
 }
@@ -743,8 +751,10 @@ function QueueNote({ waiting }: { waiting: number }) {
   );
 }
 
-function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept }: {
+function RequestCard({ order, riderPos, queuePos = 1, locked = false, offline = false, onAccept }: {
   order: RiderOrder; riderPos?: LatLng | null; queuePos?: number; locked?: boolean;
+  /** Visible, but not takeable until the rider goes online. */
+  offline?: boolean;
   onAccept: () => void;
 }) {
   const [mapOpen, setMapOpen] = useState(false);
@@ -818,10 +828,16 @@ function RequestCard({ order, riderPos, queuePos = 1, locked = false, onAccept }
         </p>
       </div>
       <div className="border-t border-black/5 p-3">
-        <button onClick={onAccept}
-          className="w-full rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:brightness-95">
-          Accept
-        </button>
+        {offline ? (
+          <p className="rounded-xl bg-black/[0.04] py-2.5 text-center text-xs font-semibold text-black/50">
+            Go online to accept this
+          </p>
+        ) : (
+          <button onClick={onAccept}
+            className="w-full rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:brightness-95">
+            Accept
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2157,12 +2173,30 @@ function LockCard({ overdue, onSettle, compact = false }: { overdue: number; onS
   );
 }
 
-function OfflineCard({ onGoOnline, busy }: { onGoOnline: () => void; busy: boolean }) {
+/**
+ * Offline, with the pool listed underneath.
+ *
+ * The old version hid the requests entirely, so a rider deciding whether to
+ * start a shift had no way to tell if there was anything to earn. Saying how
+ * many are waiting turns "go online" from a guess into a decision.
+ */
+function OfflineCard({ onGoOnline, busy, waiting = 0 }:
+  { onGoOnline: () => void; busy: boolean; waiting?: number }) {
   return (
     <div className="rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-black/5">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-black/[0.05] text-2xl">😴</div>
-      <h2 className="text-lg font-bold">You're offline</h2>
-      <p className="mt-1 text-sm text-black/60">Go online to see the order pool and accept deliveries.</p>
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-black/[0.05] text-2xl">
+        {waiting > 0 ? '📦' : '😴'}
+      </div>
+      <h2 className="text-lg font-bold">
+        {waiting > 0
+          ? `${waiting} ${waiting === 1 ? 'request is' : 'requests are'} waiting`
+          : "You're offline"}
+      </h2>
+      <p className="mt-1 text-sm text-black/60">
+        {waiting > 0
+          ? 'Go online to take one — whoever accepts first gets it.'
+          : 'Go online and new requests will appear here as they come in.'}
+      </p>
       <button onClick={onGoOnline} disabled={busy}
         className="mt-4 w-full rounded-xl bg-brand-green py-3 font-semibold text-white disabled:opacity-60">
         {busy ? 'Saving…' : 'Go online'}
