@@ -74,3 +74,18 @@ test('advanceOrderStatus allows a legal padala transition', async () => {
   await advanceOrderStatus(db, { id: 'o1', service_type: 'padala', status: 'accepted' }, 'picked_up');
   assert.deepEqual(calls, ['orders', 'order_status_events']);
 });
+
+test('padala carries the convenience fee, and it stays out of the commission', () => {
+  const row = buildPadalaOrderRow({ ...base, deliveryFee: 60, convenienceFee: 30 });
+  assert.equal(row.convenience_fee, 30);
+  // The fee is the rider's in full — commission is 15% of the delivery fee alone.
+  assert.equal(row.commission_amount, 9);
+});
+
+test('a padala with no convenience fee configured books zero, not undefined', () => {
+  // Regression: the field was never set at all, so every padala order shipped
+  // with the column default while the operator had a rate configured.
+  const row = buildPadalaOrderRow(base);
+  assert.equal(row.convenience_fee, 0);
+  assert.ok('convenience_fee' in row);
+});

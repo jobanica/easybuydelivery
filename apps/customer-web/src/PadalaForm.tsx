@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { commission, type FeePayer,
-  errMessage,
-} from '@ebd/shared';
+import { type FeePayer, errMessage } from '@ebd/shared';
 import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG, type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
 import { getAppSettings } from '@ebd/supabase';
@@ -86,14 +84,21 @@ export function PadalaForm() {
   // pickup -> drop-off distance under per-km pricing.
   const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
     { model: 'flat', flatFee: DEFAULT_DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG });
+  // Padala carries one convenience fee like any other run — it is the rider's
+  // in full. The operator sets it per service; padala was reading neither the
+  // padala rate nor the fallback, so every one of these went out at zero.
+  const [convenienceFee, setConvenienceFee] = useState(0);
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
-    getAppSettings(supabase).then((s) => setFeeCfg({
-      model: s.delivery_fee_model,
-      flatFee: s.default_delivery_fee,
-      distance: { baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km },
-    })).catch(() => {});
+    getAppSettings(supabase).then((s) => {
+      setFeeCfg({
+        model: s.delivery_fee_model,
+        flatFee: s.default_delivery_fee,
+        distance: { baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km },
+      });
+      setConvenienceFee(s.convenience_fee_padala ?? s.convenience_fee);
+    }).catch(() => {});
   }, []);
 
   const deliveryFee = useMemo(() => resolveDeliveryFee({
@@ -110,11 +115,6 @@ export function PadalaForm() {
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const operatorCut = useMemo(
-    () => commission({ deliveryFee, storeCount: 0 }),
-    [deliveryFee],
-  );
-
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -124,6 +124,7 @@ export function PadalaForm() {
       customerId,
       customerContact: form.customerContact,
       deliveryFee,
+      convenienceFee,
       feePayer: form.feePayer,
       itemDescription: form.itemDescription,
       areaProvince: area?.province,
@@ -275,8 +276,12 @@ export function PadalaForm() {
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
         <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
           value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
-        <Row label="Operator commission (15%)" value={peso(operatorCut)} muted />
-        <p className="mt-2 text-xs text-black/50">Padala is delivery-fee only — no goods are purchased.</p>
+        {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}
+        <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
+          <span>Total</span>
+          <span>{feeBlocker ? feeBlockerShort : peso(deliveryFee + convenienceFee)}</span>
+        </div>
+        <p className="mt-2 text-xs text-black/50">Padala is delivery only — no goods are purchased.</p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={submitting || !form.pay || !pickup || !dropoff || !form.receiverName.trim() || !form.dropoffAddress.trim() || !form.pickupAddress.trim() || (areaRequired && !area)}

@@ -8,6 +8,7 @@
 import {
   commission,
   canTransition,
+  roundPeso,
   DEFAULT_FEE_CONFIG,
   type FeeConfig,
   type FeePayer,
@@ -20,6 +21,12 @@ export interface PadalaRequestInput {
   customerId: string;
   customerContact: string;
   deliveryFee: number;
+  /**
+   * Flat convenience fee for this run — the rider's in full, so it never enters
+   * the commission base. Omitting it is how padala shipped at zero while the
+   * operator had a rate set.
+   */
+  convenienceFee?: number;
   feePayer: FeePayer;
   itemDescription: string;
   pickup: { lat?: number; lng?: number; contact: string; address?: string };
@@ -45,6 +52,7 @@ export interface PadalaOrderRow {
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
   store_fee_total: 0;
+  convenience_fee: number;
   goods_cost: 0;
   commission_amount: number;
   item_description: string;
@@ -91,6 +99,7 @@ export function buildPadalaOrderRow(
     payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
     store_fee_total: 0,
+    convenience_fee: roundPeso(input.convenienceFee ?? 0),
     goods_cost: 0,
     commission_amount: commission({ deliveryFee: input.deliveryFee, storeCount: 0 }, config),
     item_description: input.itemDescription.trim(),
