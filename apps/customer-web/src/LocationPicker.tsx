@@ -102,13 +102,16 @@ export function LocationPicker({
   onChange: (v: LatLngValue) => void;
   height?: number;
   /** Which end of the trip this pin is — drives its colour and its wording. */
-  kind?: 'dropoff' | 'store';
+  /** 'store' is a shop we buy from; 'pickup' is where a padala is collected. */
+  kind?: 'dropoff' | 'store' | 'pickup';
   /** Overrides the default heading above the map. */
   label?: string;
 }) {
-  const isStore = kind === 'store';
+  // Both origins share the pin and the purple treatment; only the words differ.
+  const isPickup = kind === 'pickup';
+  const isStore = kind === 'store' || isPickup;
   const pinIcon = isStore ? storePin : dropPin;
-  const heading = label ?? (isStore ? 'Where to buy' : 'Delivery location');
+  const heading = label ?? (isPickup ? 'Where to collect' : isStore ? 'Where to buy' : 'Delivery location');
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -245,8 +248,10 @@ export function LocationPicker({
         <p className="text-xs text-black/50">
           {isStore
             ? value
-              ? 'Wrong spot? Drag the map or tap again to move the store pin.'
-              : 'Drag the map and tap to drop a pin on the store you want us to buy from.'
+              ? `Wrong spot? Drag the map or tap again to move the ${isPickup ? 'pickup' : 'store'} pin.`
+              : isPickup
+                ? 'Drag the map and tap to drop a pin where the rider collects the item.'
+                : 'Drag the map and tap to drop a pin on the store you want us to buy from.'
             : value
               ? 'Wrong spot? Tap the map or drag the pin to move your drop-off.'
               : 'Tap the map (or use your location) to set your drop-off point.'}

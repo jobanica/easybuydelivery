@@ -208,10 +208,17 @@ export function PadalaForm() {
           placeholder="e.g. Documents, small parcel" required />
       </Field>
       <AreaPicker value={area} onChange={setArea} onRequired={setAreaRequired} />
-      <div>
-        <span className="mb-1 block text-sm font-medium text-black/70">📦 Pick up from</span>
-        <LocationPicker value={pickup} onChange={setPickup} kind="store" label="Pin the pickup" />
-        <p className="mt-1 text-xs text-black/40">Where the rider collects the item (e.g. your place).</p>
+      <div className="space-y-3">
+        <div>
+          <span className="mb-1 block text-sm font-medium text-black/70">📦 Pick up from</span>
+          <LocationPicker value={pickup} onChange={setPickup} kind="pickup" label="Pin the pickup" />
+          <p className="mt-1 text-xs text-black/40">Where the rider collects the item (e.g. your place).</p>
+        </div>
+        {/* The drop-off has always had a written address beside its pin; the
+            pickup never did, so a rider arriving at a bad pin had nothing to
+            read and no house to ask for. */}
+        <DeliveryAddressField value={form.pickupAddress} onChange={(v) => set('pickupAddress', v)}
+          label="Complete pickup address" />
       </div>
       <AddressChooser
         addresses={saved.addresses} loaded={saved.loaded}
