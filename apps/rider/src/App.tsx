@@ -861,7 +861,11 @@ const STATUS_ACTION: Record<OrderStatus, string> = {
 
 /** The full customer total (what COD collects / what a GCash-to-rider QR charges). */
 function fullCollectible(o: RiderOrder): number | null {
-  if (o.service_type === 'padala') return o.delivery_fee;
+  // Padala used to be special-cased to the delivery fee alone. It never needed
+  // to be — a padala carries no goods and no store fee, so the general sum
+  // below already gives the right answer. The special case only meant that
+  // when padala started charging a convenience fee, the rider was told to
+  // collect without it and was short every run.
   if (o.service_type === 'pabili') {
     if (o.actual_amount == null) return null;
     return pabiliCollectible({
@@ -871,7 +875,7 @@ function fullCollectible(o: RiderOrder): number | null {
       convenienceFee: o.convenience_fee,
     });
   }
-  // Food: goods + delivery + store + convenience.
+  // Food and padala: goods + delivery + store + convenience.
   return o.goods_cost + o.delivery_fee + o.store_fee_total + o.convenience_fee;
 }
 
@@ -1480,7 +1484,9 @@ function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
             {order.payment_status === 'paid'
               ? isRiderQr
                 ? <span className="text-green-700">✓ Paid by GCash to you — no cash to collect</span>
-                : <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)} goods` : ' · nothing to collect'}</span>
+                /* Not "goods": a padala carries none, and under the current
+                   rules an online order collects the whole bill at the door. */
+                : <span className="text-green-700">✓ Paid online{collect ? ` · collect ${peso(collect)}` : ' · nothing to collect'}</span>
               : isRiderQr
                 ? <span className="text-brand-purple">GCash to rider{qrAmount != null ? ` · ${peso(qrAmount)}` : ''} — no cash to collect</span>
                 : collect == null

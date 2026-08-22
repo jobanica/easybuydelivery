@@ -110,7 +110,7 @@ export function createPreviewData(): RiderData {
     {
       id: 'ord-padala-1', createdAt: minsAgo(11), service_type: 'padala', status: 'pending',
       payment_method: 'online', payment_status: 'paid', customerName: 'Ana Reyes', recipientName: null, recipientContact: null,
-      delivery_fee: 40, store_fee_total: 0, convenience_fee: 0, goods_cost: 0, commission_amount: 6,
+      delivery_fee: 40, store_fee_total: 0, convenience_fee: 30, goods_cost: 0, commission_amount: 6,
       customer_contact: '0917 555 6666', item_description: 'Documents envelope (paid online)',
       estimated_amount: null, budget_cap: null, actual_amount: null, goodsReceiptUrl: null,
       buyStores: [],
