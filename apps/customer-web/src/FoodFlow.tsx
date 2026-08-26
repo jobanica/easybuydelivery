@@ -461,9 +461,13 @@ export function FoodFlow() {
           <div className="space-y-4">
             {shownStores.map((s) => {
               const open = isOpenNow(s.opens_at, s.closes_at, s.open_days);
+              // Closed shops open too. Blocking the tap hid the whole menu out
+              // of hours, so a customer could not even see what a place sells,
+              // let alone plan tomorrow's order. Ordering is what closing
+              // stops — browsing is not.
               return (
-              <button key={s.id} onClick={() => open && setOpenStoreId(s.id)} disabled={!open}
-                className={`block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition ${open ? 'hover:shadow-md' : 'cursor-not-allowed'}`}>
+              <button key={s.id} onClick={() => setOpenStoreId(s.id)}
+                className="block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
                 <div className="relative h-36 w-full">
                   {s.logo_url ? (
                     <img src={s.logo_url} alt="" className={`h-full w-full object-cover ${open ? '' : 'grayscale'}`} />
@@ -741,6 +745,7 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
   onAdd: (it: MenuItem) => void;
   onCustomize: (id: string) => void;
 }) {
+  const storeOpen = isOpenNow(store.opens_at, store.closes_at, store.open_days);
   return (
     <section className="space-y-4">
       {/* Hero */}
@@ -782,6 +787,19 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
         </div>
       </div>
 
+      {!storeOpen && (
+        <div className="rounded-2xl bg-brand-yellow/20 px-4 py-3 ring-1 ring-brand-yellow">
+          <p className="text-sm font-bold text-yellow-900">
+            {!isOpenNow(null, null, store.open_days)
+              ? 'Closed today'
+              : store.opens_at ? `Closed — opens ${formatHm(store.opens_at)}` : 'Closed right now'}
+          </p>
+          <p className="mt-0.5 text-xs text-yellow-900/80">
+            Have a look at the menu; you can order once they open.
+          </p>
+        </div>
+      )}
+
       {/* Search this menu */}
       <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/5">
         <SearchIcon />
@@ -810,12 +828,14 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
                   ? <img src={it.image_url} alt="" className="h-full w-full object-cover" />
                   : <div className="flex h-full w-full items-center justify-center text-4xl">🍽️</div>}
               </div>
-              <button
-                onClick={() => (it.groups.length === 0 ? onAdd(it) : onCustomize(it.id))}
-                aria-label={it.groups.length === 0 ? `Add ${it.name}` : `Customize ${it.name}`}
-                className="absolute -bottom-3 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-lg font-bold text-white shadow-md ring-2 ring-white transition hover:brightness-95">
-                +
-              </button>
+              {storeOpen && (
+                <button
+                  onClick={() => (it.groups.length === 0 ? onAdd(it) : onCustomize(it.id))}
+                  aria-label={it.groups.length === 0 ? `Add ${it.name}` : `Customize ${it.name}`}
+                  className="absolute -bottom-3 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-lg font-bold text-white shadow-md ring-2 ring-white transition hover:brightness-95">
+                  +
+                </button>
+              )}
             </div>
             <div className="flex flex-1 flex-col p-3 pt-4">
               <p className="text-sm font-semibold leading-tight">{it.name}</p>
