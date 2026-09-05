@@ -458,7 +458,9 @@ export function FoodFlow() {
             <span className="text-xs text-black/40">{shownStores.length} places</span>
           </div>
 
-          <div className="space-y-4">
+          {/* Two to a row, matching the menu grid inside a shop — twice as many
+              places visible before scrolling, and the same rhythm throughout. */}
+          <div className="grid grid-cols-2 gap-3">
             {shownStores.map((s) => {
               const open = isOpenNow(s.opens_at, s.closes_at, s.open_days);
               // Closed shops open too. Blocking the tap hid the whole menu out
@@ -467,44 +469,38 @@ export function FoodFlow() {
               // stops — browsing is not.
               return (
               <button key={s.id} onClick={() => setOpenStoreId(s.id)}
-                className="block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
-                <div className="relative h-36 w-full">
+                className="flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+                <div className="relative aspect-[4/3] w-full">
                   {s.logo_url ? (
                     <img src={s.logo_url} alt="" className={`h-full w-full object-cover ${open ? '' : 'grayscale'}`} />
                   ) : (
-                    <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green/15 to-brand-purple/15 text-5xl ${open ? '' : 'grayscale'}`}>
+                    <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green/15 to-brand-purple/15 text-4xl ${open ? '' : 'grayscale'}`}>
                       {cuisineEmoji(s.category)}
                     </div>
                   )}
                   {!open && <div className="absolute inset-0 bg-white/50" />}
                   {open ? (
-                    <span className="absolute left-3 top-3 rounded-full bg-brand-green px-2.5 py-1 text-[11px] font-bold text-white shadow">● Open now</span>
+                    <span className="absolute left-2 top-2 rounded-full bg-brand-green px-2 py-0.5 text-[10px] font-bold text-white shadow">● Open</span>
                   ) : (
-                    <span className="absolute left-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-bold text-white shadow">
+                    <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white shadow">
                       {!isOpenNow(null, null, s.open_days) ? 'Closed today'
-                        : s.opens_at ? `Closed · opens ${formatHm(s.opens_at)}` : 'Closed'}
+                        : s.opens_at ? `Opens ${formatHm(s.opens_at)}` : 'Closed'}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 p-3.5">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-lg shadow ring-1 ring-black/5">
-                    {s.logo_url ? <img src={s.logo_url} alt="" className={`h-full w-full object-cover ${open ? '' : 'grayscale'}`} /> : cuisineEmoji(s.category)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate font-bold ${open ? '' : 'text-black/50'}`}>{s.name}</span>
-                    <span className="text-xs text-black/50">
-                      {s.category || 'Restaurant'}
-                      {(s.opens_at || s.closes_at || (s.open_days && s.open_days.length < 7)) &&
-                        <span className="text-black/35"> · {scheduleLabel(s.opens_at, s.closes_at, s.open_days)}</span>}
+                <div className="flex flex-1 flex-col p-3">
+                  <span className={`line-clamp-2 text-sm font-bold leading-tight ${open ? '' : 'text-black/50'}`}>{s.name}</span>
+                  <span className="mt-0.5 truncate text-xs text-black/50">{s.category || 'Restaurant'}</span>
+                  {(s.opens_at || s.closes_at || (s.open_days && s.open_days.length < 7)) && (
+                    <span className="mt-auto truncate pt-1 text-[11px] text-black/35">
+                      🕒 {scheduleLabel(s.opens_at, s.closes_at, s.open_days)}
                     </span>
-                    {s.address && <span className="block truncate text-xs text-black/40">📍 {s.address}</span>}
-                  </span>
-                  <span className={open ? 'text-brand-purple' : 'text-black/25'}>→</span>
+                  )}
                 </div>
               </button>
             ); })}
             {shownStores.length === 0 && (
-              <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+              <p className="col-span-2 rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
                 {storeSearch ? `No restaurants match “${storeSearch}”.`
                   : cuisine ? `No ${cuisine} restaurants yet.` : 'No restaurants available yet.'}
               </p>
