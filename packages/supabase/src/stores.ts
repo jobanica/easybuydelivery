@@ -31,6 +31,41 @@ export interface MenuItemInput {
   price: number;
 }
 
+/**
+ * The operator's own shop, if one is flagged. Null when none is — including on
+ * a database that predates migration 0076, where the column does not exist and
+ * the filter is simply dropped rather than erroring.
+ */
+export async function getOwnShop(db: SupabaseClient) {
+  const { data, error } = await db
+    .from('stores')
+    .select('*')
+    .eq('is_own_shop', true)
+    .eq('is_available', true)
+    .maybeSingle();
+  if (error) {
+    // 42703 = column does not exist: the migration has not been applied yet.
+    if (error.code === '42703') return null;
+    throw error;
+  }
+  return data ?? null;
+}
+
+/**
+ * Make `storeId` the operator's own shop, or clear the flag entirely.
+ *
+ * Cleared first, always: a partial unique index allows only one own shop, so
+ * setting the new one before releasing the old would collide. Landing on none
+ * is the safe failure — the shop simply stops being offered.
+ */
+export async function setOwnShop(db: SupabaseClient, storeId: string | null) {
+  const cleared = await db.from('stores').update({ is_own_shop: false }).eq('is_own_shop', true);
+  if (cleared.error) throw cleared.error;
+  if (!storeId) return;
+  const { error } = await db.from('stores').update({ is_own_shop: true }).eq('id', storeId);
+  if (error) throw error;
+}
+
 /** Customer-facing: only stores currently available. */
 export async function listAvailableStores(db: SupabaseClient) {
   const { data, error } = await db

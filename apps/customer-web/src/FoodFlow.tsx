@@ -92,7 +92,8 @@ const DEFAULT_FEE_SETTINGS: FeeSettings = {
   model: 'flat', flatFee: DELIVERY_FEE, distance: DEFAULT_DISTANCE_FEE_CONFIG, config: DEFAULT_FEE_CONFIG,
 };
 
-export function FoodFlow() {
+export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
+  const shopMode = mode === 'shop';
   const { ensureContact, mobile, name: savedName } = useAuth();
   const riders = useRiderAvailability('food');
   const [stores, setStores] = useState<Store[]>([]);
@@ -188,7 +189,11 @@ export function FoodFlow() {
             }
           }
           // Only the store list up front — each menu loads lazily when opened.
-          setStores((rows as { id: string; name: string; category: string | null; address: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null }[])
+          // The own shop is its own service, so it is either the whole list or
+          // absent from it; it must never sit among the restaurants.
+          type StoreRow = { id: string; name: string; category: string | null; address: string | null; lat: number | null; lng: number | null; logo_url: string | null; opens_at: string | null; closes_at: string | null; open_days: number[] | null; is_own_shop?: boolean };
+          setStores((rows as StoreRow[])
+            .filter((s) => Boolean(s.is_own_shop) === shopMode)
             .map((s) => ({
               id: s.id, name: s.name, category: s.category ?? '', address: s.address,
               lat: s.lat, lng: s.lng, logo_url: s.logo_url,
@@ -225,6 +230,11 @@ export function FoodFlow() {
   const storeCount = distinctStoreCount(cart);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const openStore = stores.find((s) => s.id === openStoreId) ?? null;
+  // In shop mode there is exactly one store, so a list of one is not a choice:
+  // open it and put the customer among the products.
+  useEffect(() => {
+    if (shopMode && !openStoreId && stores[0]) setOpenStoreId(stores[0].id);
+  }, [shopMode, openStoreId, stores]);
   // Under per-km pricing we need the drop-off pin before we can price/checkout.
   // A drop-off pin is required for distance pricing, and for gift orders so the
   // rider knows where to deliver to the recipient.
@@ -411,7 +421,7 @@ export function FoodFlow() {
           menuItems={menuItems}
           menuCat={menuCat} setMenuCat={setMenuCat}
           menuSearch={menuSearch} setMenuSearch={setMenuSearch}
-          onBack={() => setOpenStoreId(null)}
+          onBack={shopMode ? null : () => setOpenStoreId(null)}
           onAdd={(it) => addToCart(openStore, it)}
           onCustomize={(id) => setCustomizingId(id)}
         />
@@ -737,7 +747,8 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
   menuItems: MenuItem[];
   menuCat: string; setMenuCat: (c: string) => void;
   menuSearch: string; setMenuSearch: (s: string) => void;
-  onBack: () => void;
+  /** Null when there is nowhere to go back to — the shop is its own service. */
+  onBack: (() => void) | null;
   onAdd: (it: MenuItem) => void;
   onCustomize: (id: string) => void;
 }) {
@@ -751,10 +762,12 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
             ? <img src={store.logo_url} alt="" className="h-full w-full object-cover" />
             : <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green to-brand-purple text-6xl">{cuisineEmoji(store.category)}</div>}
         </div>
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
-          <button onClick={onBack} aria-label="Back"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-lg text-black/70 shadow">←</button>
-        </div>
+        {onBack && (
+          <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+            <button onClick={onBack} aria-label="Back"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-lg text-black/70 shadow">←</button>
+          </div>
+        )}
         {/* Overlapping logo + title card */}
         <div className="relative mx-5 -mt-10 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
           <div className="flex items-center gap-3">

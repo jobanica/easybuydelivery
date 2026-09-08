@@ -13,7 +13,7 @@ const SAMPLE: AppSettings = {
   commission_rate: 0.15, markup_operator_share: 1, delivery_fee_model: 'flat',
   settlement_cutoff: '00:00', sms_notify_stores: false,
   delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
-  service_food: true, service_pabili: true, service_padala: true,
+  service_food: true, service_pabili: true, service_padala: true, service_shop: true,
   max_active_orders_per_rider: 0,
   settlement_gcash_number: null, settlement_gcash_name: null, settlement_qr_url: null,
   service_center_lat: null, service_center_lng: null, service_radius_km: 0,
@@ -106,6 +106,8 @@ export function Settings() {
           Turn a whole service on or off. When off, customers see it greyed out and can’t order it.
         </p>
         <div className="divide-y divide-black/5">
+          <ServiceRow label="Easy Buy Shop" desc="Your own shelves. Mark the store under Stores first."
+            on={s.service_shop ?? true} onChange={(v) => set('service_shop', v)} />
           <ServiceRow label="Food / Restaurants" desc="Browse stores and order food."
             on={s.service_food} onChange={(v) => set('service_food', v)} />
           <ServiceRow label="Pabili" desc="Buy-anything errand service."

@@ -11,15 +11,19 @@ import { REQUIRE_ACCOUNT } from './config.ts';
 import { Welcome } from './Welcome.tsx';
 import { Account } from './Account.tsx';
 import { usePlatformStatus, ClosedNotice } from './PlatformStatus.tsx';
+import { Home } from './Home.tsx';
+import { getOwnShop } from '@ebd/supabase';
 
-type Service = 'food' | 'pabili' | 'padala';
-type Tab = Service | 'track' | 'account';
+type Service = 'shop' | 'food' | 'pabili' | 'padala';
+type Tab = Service | 'home' | 'track' | 'account';
 type ServiceAvailability = Record<Service, boolean>;
-const ALL_ON: ServiceAvailability = { food: true, pabili: true, padala: true };
+// The shop starts off: it only exists once the operator flags a store as theirs.
+const ALL_ON: ServiceAvailability = { shop: false, food: true, pabili: true, padala: true };
 
 export function App() {
-  const { live, mobile, email, signOut } = useAuth();
-  const [tab, setTab] = useState<Tab>('food');
+  const { live, mobile, email, name, signOut } = useAuth();
+  // Home first: the tab bar used to open on Food whichever errand brought them.
+  const [tab, setTab] = useState<Tab>('home');
   const platform = usePlatformStatus();
   // When the account gate is on, AuthGate is the branded entry — skip the
   // in-app welcome so we don't show two landing screens.
@@ -28,22 +32,27 @@ export function App() {
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
-    getAppSettings(supabase)
-      .then((s) => setEnabled({ food: s.service_food, pabili: s.service_pabili, padala: s.service_padala }))
-      .catch(() => { /* keep all-on if settings can't load */ });
+    // The shop is offered only when the operator both switched it on and
+    // actually flagged a store as their own — otherwise the tile leads nowhere.
+    Promise.all([getAppSettings(supabase), getOwnShop(supabase).catch(() => null)])
+      .then(([s, shop]) => setEnabled({
+        shop: (s.service_shop ?? true) && Boolean(shop),
+        food: s.service_food, pabili: s.service_pabili, padala: s.service_padala,
+      }))
+      .catch(() => { /* keep the defaults if settings can't load */ });
   }, []);
 
   // If the selected service gets turned off, fall back to the first enabled one.
   useEffect(() => {
-    if (tab === 'track' || tab === 'account' || enabled[tab]) return;
-    const firstOn = (['food', 'pabili', 'padala'] as Service[]).find((k) => enabled[k]);
-    if (firstOn) setTab(firstOn);
+    if (tab === 'home' || tab === 'track' || tab === 'account' || enabled[tab]) return;
+    setTab('home');
   }, [enabled, tab]);
 
-  const noneEnabled = !enabled.food && !enabled.pabili && !enabled.padala;
+  const noneEnabled = !enabled.shop && !enabled.food && !enabled.pabili && !enabled.padala;
   const tracking = tab === 'track';
   const account = tab === 'account';
-  const service = tracking || account ? 'food' : tab;
+  const atHome = tab === 'home';
+  const service: Service = tracking || account || atHome ? 'food' : tab;
 
   if (!entered) {
     return <Welcome onOrder={() => setEntered(true)} onTrack={() => { setEntered(true); setTab('track'); }} />;
@@ -58,7 +67,7 @@ export function App() {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-lg font-black">E</span>
             <div className="leading-tight">
               <h1 className="text-base font-extrabold tracking-tight">Easy Buy Delivery</h1>
-              <p className="text-[11px] opacity-90">Food • Pabili • Padala</p>
+              <p className="text-[11px] opacity-90">{enabled.shop ? 'Shop • Food • Pabili • Padala' : 'Food • Pabili • Padala'}</p>
             </div>
           </div>
           {live && REQUIRE_ACCOUNT && (
@@ -87,7 +96,7 @@ export function App() {
         {account ? (
           <Account />
         ) : tracking ? (
-          <Track onClose={() => setTab('food')} />
+          <Track onClose={() => setTab('home')} />
         ) : !platform.open ? (
           // Closed: no new orders, but Account and Track stay reachable above
           // so a delivery already on its way can still be followed.
@@ -100,8 +109,13 @@ export function App() {
           <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/60 shadow-sm ring-1 ring-black/5">
             This service is temporarily unavailable.
           </p>
+        ) : atHome ? (
+          <Home enabled={enabled} onPick={setTab} name={name} />
         ) : (
           <>
+            {/* The shop and the restaurants share every step past the storefront
+                — same cart, same fees, same delivery — so they share the flow. */}
+            {service === 'shop' && <FoodFlow mode="shop" />}
             {service === 'food' && <FoodFlow />}
             {service === 'pabili' && <PabiliForm />}
             {service === 'padala' && <PadalaForm />}
@@ -115,6 +129,10 @@ export function App() {
       {/* Bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-stretch justify-around px-2 py-1.5">
+          <TabButton label="Home" active={tab === 'home'} onClick={() => setTab('home')} icon={<HomeIcon />} />
+          {enabled.shop && (
+            <TabButton label="Shop" active={tab === 'shop'} onClick={() => setTab('shop')} icon={<ShopIcon />} />
+          )}
           <TabButton label="Food" active={tab === 'food'} disabled={!enabled.food} onClick={() => setTab('food')} icon={<FoodIcon />} />
           <TabButton label="Pabili" active={tab === 'pabili'} disabled={!enabled.pabili} onClick={() => setTab('pabili')} icon={<BagIcon />} />
           <TabButton label="Padala" active={tab === 'padala'} disabled={!enabled.padala} onClick={() => setTab('padala')} icon={<BoxIcon />} />
@@ -147,5 +165,7 @@ const iconProps = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', s
 function FoodIcon() { return <svg {...iconProps}><path d="M3 2v7a3 3 0 0 0 3 3v10M6 2v6M9 2v6M9 2v20M17 2c-1.5 0-3 1.5-3 5s1.5 5 3 5v10" /></svg>; }
 function BagIcon() { return <svg {...iconProps}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></svg>; }
 function BoxIcon() { return <svg {...iconProps}><path d="M21 8V6a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 6v12a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 18z" /><path d="m3.3 7 8.7 5 8.7-5M12 22V12" /></svg>; }
+function HomeIcon() { return <svg {...iconProps}><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>; }
+function ShopIcon() { return <svg {...iconProps}><path d="M3 9h18l-1.5 11a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z" /><path d="M8 9V6a4 4 0 0 1 8 0v3" /></svg>; }
 function PinIcon() { return <svg {...iconProps}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>; }
 function UserIcon() { return <svg {...iconProps}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>; }

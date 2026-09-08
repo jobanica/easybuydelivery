@@ -32,6 +32,8 @@ export interface AppSettings {
   service_food: boolean;
   service_pabili: boolean;
   service_padala: boolean;
+  /** The operator's own shop. Undefined on databases before migration 0076. */
+  service_shop?: boolean;
   /** Max active (not delivered/cancelled) orders a rider may hold. 0 = unlimited. */
   max_active_orders_per_rider: number;
   /** Where riders send their daily commission settlement (GCash/Maya). */

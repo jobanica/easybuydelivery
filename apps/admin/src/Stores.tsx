@@ -21,6 +21,7 @@ import {
   deleteStore,
   deleteMenuItem,
   copyStoreMenu,
+  setOwnShop,
 } from '@ebd/supabase';
 import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS,
   errMessage,
@@ -66,6 +67,7 @@ interface StoreRow {
   category: string | null;
   contact_number: string | null;
   is_available: boolean;
+  is_own_shop?: boolean;
   address: string | null;
   lat: number | null;
   lng: number | null;
@@ -227,6 +229,11 @@ export function Stores() {
                   }`}>
                     {s.lat != null && s.lng != null ? '📍 Pinned' : 'No location'}
                   </span>
+                  {s.is_own_shop && (
+                    <span className="ml-2 rounded-full bg-brand-purple/15 px-2 py-0.5 text-[11px] font-medium text-brand-purple">
+                      🛍️ Easy Buy Shop
+                    </span>
+                  )}
                 </span>
               </button>
               <div className="flex items-center gap-2 text-sm">
@@ -237,6 +244,7 @@ export function Stores() {
             {openId === s.id && (
               <>
                 <StoreDetailsEditor store={s} onSaved={load} />
+                <OwnShopControl store={s} onSaved={load} />
                 <div className="border-t border-black/5 p-4">
                   <h4 className="mb-2 text-sm font-semibold">Store logo</h4>
                   <ImageUpload url={s.logo_url}
@@ -839,6 +847,49 @@ function CopyMenuPanel({ store, stores }: { store: StoreRow; stores: StoreRow[] 
           {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Which store is Easy Buy's own.
+ *
+ * Every store here is admin-owned already — merchants have no logins — so this
+ * is not about permission. It marks the one shop the operator stocks
+ * themselves, which the customer app offers as a service in its own right
+ * rather than listing among the restaurants. Only one can hold it at a time.
+ */
+function OwnShopControl({ store, onSaved }: {
+  store: { id: string; name: string; is_own_shop?: boolean };
+  onSaved: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const on = Boolean(store.is_own_shop);
+
+  async function flip() {
+    if (!supabase) return;
+    setBusy(true); setErr(null);
+    try { await setOwnShop(supabase, on ? null : store.id); await onSaved(); }
+    catch (e) { setErr(errMessage(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="border-t border-black/5 p-4">
+      <h4 className="mb-2 text-sm font-semibold">Easy Buy Shop</h4>
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm text-black/60">
+          {on
+            ? 'Customers see this as the Easy Buy Shop, with its own tile on the home screen.'
+            : 'Make this your own shop — shown to customers as its own service, not as a restaurant.'}
+          <span className="mt-0.5 block text-xs text-black/40">
+            Only one store can be the Easy Buy Shop. Turning this on moves it off whichever store has it now.
+          </span>
+        </span>
+        <Toggle on={on} onChange={() => { if (!busy) void flip(); }} />
+      </label>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
