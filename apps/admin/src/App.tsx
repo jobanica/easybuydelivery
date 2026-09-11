@@ -14,8 +14,8 @@ import { OrderHistory } from './OrderHistory.tsx';
 import { Analytics } from './Analytics.tsx';
 import { Riders } from './Riders.tsx';
 import { Staff } from './Staff.tsx';
-import { useAdminRole } from './AdminGate.tsx';
-import { can, ROLE_LABEL, type AdminSection } from '@ebd/shared';
+import { useAdminAccess } from './AdminGate.tsx';
+import { allowedSections, canAccess, ROLE_LABEL, type AdminSection } from '@ebd/shared';
 import {
   IconDashboard, IconChart, IconStore, IconRiders, IconScooter, IconOrders, IconHistory, IconWallet,
   IconSettings, IconMegaphone, IconUsers, IconSearch, IconMenu,
@@ -47,10 +47,14 @@ const TITLES: Record<Tab, string> = {
 };
 
 export function App() {
-  const role = useAdminRole();
-  const nav = NAV.filter((n) => can(role, n.key));
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const access = useAdminAccess();
+  const allowed = allowedSections(access);
+  const nav = NAV.filter((n) => allowed.includes(n.key));
+  // Land on the first thing they can actually open. A member whose permissions
+  // don't include the dashboard shouldn't be greeted by a locked door.
+  const [tab, setTab] = useState<Tab>(allowed[0] ?? 'dashboard');
   const [open, setOpen] = useState(false); // mobile sidebar
+  const whoLabel = access.isOwner ? 'Owner' : ROLE_LABEL[access.role];
 
   return (
     <div className="min-h-screen bg-[#f4f5f2] text-brand-ink">
@@ -71,7 +75,7 @@ export function App() {
           </div>
           <div className="ml-auto flex items-center gap-2 rounded-xl bg-white/15 py-1 pl-1 pr-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple text-xs font-bold">EB</span>
-            <span className="hidden text-sm font-semibold sm:inline">{ROLE_LABEL[role]}</span>
+            <span className="hidden text-sm font-semibold sm:inline">{whoLabel}</span>
             {isSupabaseConfigured && supabase && (
               <button onClick={() => void signOut(supabase!)}
                 className="ml-1 rounded-lg bg-white/20 px-2 py-1 text-xs font-medium hover:bg-white/30">
@@ -102,6 +106,11 @@ export function App() {
                   </li>
                 );
               })}
+              {nav.length === 0 && (
+                <li className="px-3 text-sm text-black/45">
+                  Nothing has been shared with you yet. Ask the owner to give you access.
+                </li>
+              )}
             </ul>
           </nav>
         </aside>
@@ -122,13 +131,13 @@ export function App() {
             </p>
           )}
 
-          {!can(role, tab) ? (
+          {!canAccess(access, tab) ? (
             <p className="rounded-xl bg-white p-6 text-sm text-black/50 shadow-sm ring-1 ring-black/5">
-              Your role ({ROLE_LABEL[role]}) doesn't have access to this section.
+              This section hasn't been shared with you. The owner decides who sees what — ask them if you need it.
             </p>
           ) : (
             <>
-              {tab === 'dashboard' && <Dashboard onNavigate={(t) => can(role, t as Tab) && setTab(t as Tab)} />}
+              {tab === 'dashboard' && <Dashboard onNavigate={(t) => canAccess(access, t as Tab) && setTab(t as Tab)} />}
               {tab === 'analytics' && <Analytics />}
               {tab === 'stores' && <Stores />}
               {tab === 'ridersActive' && <Riders />}

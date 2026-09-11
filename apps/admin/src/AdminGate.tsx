@@ -1,14 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { onAuthChange, onPasswordRecovery, sendPasswordReset, updatePassword, signOut } from '@ebd/supabase';
-import { isStaffRole, type StaffRole,
+import { onAuthChange, onPasswordRecovery, sendPasswordReset, updatePassword, signOut, getMyAccess } from '@ebd/supabase';
+import { isStaffRole, type StaffAccess, type StaffRole,
   errMessage,
 } from '@ebd/shared';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { IconScooter } from './icons.tsx';
 
-const RoleContext = createContext<StaffRole>('admin');
+/** Preview mode has no session, so it stands in as the owner. */
+const OWNER: StaffAccess = { role: 'admin', isOwner: true, permissions: null };
+
+const RoleContext = createContext<StaffAccess>(OWNER);
+/** How the signed-in staff member stands: their role, ownership, permissions. */
+export const useAdminAccess = () => useContext(RoleContext);
 /** The signed-in staff member's role (defaults to admin in preview mode). */
-export const useAdminRole = () => useContext(RoleContext);
+export const useAdminRole = (): StaffRole => useContext(RoleContext).role;
 
 /**
  * Admin sign-in gate. The admin console writes to RLS-protected tables, so it
@@ -21,30 +26,36 @@ export const useAdminRole = () => useContext(RoleContext);
  */
 export function AdminGate({ children }: { children: ReactNode }) {
   if (!isSupabaseConfigured || !supabase) {
-    return <RoleContext.Provider value="admin">{children}</RoleContext.Provider>;
+    return <RoleContext.Provider value={OWNER}>{children}</RoleContext.Provider>;
   }
   return <Gate>{children}</Gate>;
 }
 
 function Gate({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
-  const [role, setRole] = useState<string | null>(null);
+  const [access, setAccess] = useState<StaffAccess | null>(null);
   const [recovery, setRecovery] = useState(false);
 
   useEffect(() => onAuthChange(supabase!, (u) => setUserId(u?.id ?? null)), []);
   useEffect(() => onPasswordRecovery(supabase!, () => setRecovery(true)), []);
   useEffect(() => {
-    if (!userId) { setRole(null); return; }
-    supabase!.from('profiles').select('role').eq('id', userId).maybeSingle()
-      .then(({ data }) => setRole(data?.role ?? 'customer'));
+    if (!userId) { setAccess(null); return; }
+    getMyAccess(supabase!, userId)
+      .then((me) => setAccess({
+        id: me.id,
+        role: (me.role ?? 'customer') as StaffRole,
+        isOwner: me.is_owner,
+        permissions: me.permissions,
+      }))
+      .catch(() => setAccess({ id: userId, role: 'customer' as StaffRole }));
   }, [userId]);
 
   if (recovery) return <SetNewPassword onDone={() => setRecovery(false)} />;
   if (userId === undefined) return <Center>Loading…</Center>;
   if (!userId) return <SignIn />;
-  if (role === null) return <Center>Checking access…</Center>;
-  if (!isStaffRole(role)) return <NotAuthorized />;
-  return <RoleContext.Provider value={role}>{children}</RoleContext.Provider>;
+  if (access === null) return <Center>Checking access…</Center>;
+  if (!isStaffRole(access.role)) return <NotAuthorized />;
+  return <RoleContext.Provider value={access}>{children}</RoleContext.Provider>;
 }
 
 function SignIn() {
