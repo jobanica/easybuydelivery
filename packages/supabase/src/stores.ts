@@ -66,6 +66,17 @@ export async function setOwnShop(db: SupabaseClient, storeId: string | null) {
   if (error) throw error;
 }
 
+/**
+ * Mark a category as food or non-food. Only the own shop shows the split to
+ * customers; on a restaurant it is simply never asked about.
+ */
+export async function setCategoryKind(
+  db: SupabaseClient, categoryId: string, kind: 'food' | 'non_food',
+) {
+  const { error } = await db.from('menu_categories').update({ kind }).eq('id', categoryId);
+  if (error) throw error;
+}
+
 /** Customer-facing: only stores currently available. */
 export async function listAvailableStores(db: SupabaseClient) {
   const { data, error } = await db

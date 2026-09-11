@@ -22,6 +22,7 @@ import {
   deleteMenuItem,
   copyStoreMenu,
   setOwnShop,
+  setCategoryKind,
 } from '@ebd/supabase';
 import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS,
   errMessage,
@@ -86,7 +87,7 @@ interface ItemRow {
   /** What the customer is quoted — shelf price plus the resolved mark-up. */
   markup?: number; customer_price?: number;
 }
-interface CatRow { id: string; title: string; sort_order: number }
+interface CatRow { id: string; title: string; sort_order: number; kind?: 'food' | 'non_food' }
 interface GroupRow { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }
 interface OptRow { id: string; menu_item_id: string; group_id: string | null; option_name: string; price_delta: number }
 
@@ -252,7 +253,7 @@ export function Stores() {
                 </div>
                 <LocationEditor store={s} onSaved={load} />
                 <div className="px-4 pb-4"><StoreMarkup store={s} onSaved={load} /></div>
-                <MenuEditor storeId={s.id} key={`${s.id}:${s.markup_enabled}:${s.markup_amount}`} />
+                <MenuEditor storeId={s.id} isOwnShop={Boolean(s.is_own_shop)} key={`${s.id}:${s.markup_enabled}:${s.markup_amount}:${s.is_own_shop}`} />
                 <CopyMenuPanel store={s} stores={rows} />
                 <div className="border-t border-black/5 p-4">
                   <button onClick={() => removeStore(s)}
@@ -401,7 +402,7 @@ function LocationEditor({ store, onSaved }: { store: StoreRow; onSaved: () => vo
   );
 }
 
-function MenuEditor({ storeId }: { storeId: string }) {
+function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop?: boolean }) {
   const [cats, setCats] = useState<CatRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [opts, setOpts] = useState<OptRow[]>([]);
@@ -460,13 +461,30 @@ function MenuEditor({ storeId }: { storeId: string }) {
       <div className="mb-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/40">Categories</p>
         <div className="mb-2 flex flex-wrap gap-2">
-          {cats.map((c) => (
-            <span key={c.id} className="inline-flex items-center gap-1 rounded-full bg-brand-green/15 px-2.5 py-1 text-xs font-medium text-green-800">
-              {c.title}
-              <button onClick={() => removeCategory(c.id)} title="Delete category"
-                className="text-green-800/60 hover:text-red-600">×</button>
-            </span>
-          ))}
+          {cats.map((c) => {
+            const nonFood = c.kind === 'non_food';
+            return (
+              <span key={c.id} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
+                {c.title}
+                {/* Only the Easy Buy Shop splits its shelves; a restaurant is all food. */}
+                {isOwnShop && (
+                  <button
+                    onClick={async () => {
+                      if (!supabase) return;
+                      await setCategoryKind(supabase, c.id, nonFood ? 'food' : 'non_food');
+                      await load();
+                    }}
+                    title="Switch between Food and Non-food"
+                    className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold">
+                    {nonFood ? 'Non-food' : 'Food'}
+                  </button>
+                )}
+                <button onClick={() => removeCategory(c.id)} title="Delete category"
+                  className={nonFood ? 'text-brand-purple/60 hover:text-red-600' : 'text-green-800/60 hover:text-red-600'}>×</button>
+              </span>
+            );
+          })}
           {cats.length === 0 && <span className="text-xs text-black/40">No categories yet.</span>}
         </div>
         <form onSubmit={addCategory} className="flex gap-2">

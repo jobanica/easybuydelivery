@@ -35,7 +35,8 @@ const DELIVERY_FEE = 50;
 interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
-interface Category { id: string; title: string }
+type ShopKind = 'food' | 'non_food';
+interface Category { id: string; title: string; kind?: ShopKind }
 interface Store { id: string; name: string; category: string; address?: string | null; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
@@ -49,7 +50,8 @@ function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categorie
     groupsByItem.set(g.menu_item_id, arr);
   }
   return {
-    categories: ((menu.categories ?? []) as { id: string; title: string }[]).map((c) => ({ id: c.id, title: c.title })),
+    categories: ((menu.categories ?? []) as { id: string; title: string; kind?: ShopKind }[])
+      .map((c) => ({ id: c.id, title: c.title, kind: c.kind })),
     // `customer_price` already carries the operator's mark-up; the shelf price
     // behind it is the rider's business, not the customer's.
     items: (menu.items as unknown as { id: string; name: string; price: number; customer_price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
@@ -101,6 +103,9 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
   const [customizingId, setCustomizingId] = useState<string | null>(null);
   const [menuCat, setMenuCat] = useState<string>(''); // '' = all categories
+  // Which half of the own shop's shelves the customer is browsing. Null means
+  // they have not chosen yet, which is the first thing the shop asks.
+  const [shopKind, setShopKind] = useState<ShopKind | null>(null);
   const [menuSearch, setMenuSearch] = useState('');
   const [storeSearch, setStoreSearch] = useState(''); // filter the restaurant list
   const [cuisine, setCuisine] = useState<string>(''); // '' = all cuisines
@@ -245,6 +250,9 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
 
   // Reset menu filters whenever the open restaurant changes.
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
+  useEffect(() => { setMenuCat(''); setMenuSearch(''); }, [shopKind]);
+  // Coming back to the shop starts at the question again, not wherever they left.
+  useEffect(() => { if (!shopMode) setShopKind(null); }, [shopMode]);
 
   // Lazily load a restaurant's menu the first time it's opened.
   const [menuLoading, setMenuLoading] = useState(false);
@@ -281,8 +289,22 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
     return s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
   }).sort((a, b) => Number(isOpenNow(b.opens_at, b.closes_at, b.open_days)) - Number(isOpenNow(a.opens_at, a.closes_at, a.open_days)));
 
-  // Menu items filtered by the selected category + search box.
+  // The shop's shelves, split food / non-food. Both halves only exist once the
+  // operator has marked some categories non-food; until then the shop behaves
+  // exactly as it did and the customer is never asked a pointless question.
+  const shopCats = openStore?.categories ?? [];
+  const hasBothKinds = shopMode
+    && shopCats.some((c) => c.kind === 'non_food')
+    && shopCats.some((c) => (c.kind ?? 'food') === 'food');
+  const askKind = hasBothKinds && shopKind === null;
+  const kindCatIds = shopKind
+    ? new Set(shopCats.filter((c) => (c.kind ?? 'food') === shopKind).map((c) => c.id))
+    : null;
+  const shownCategories = kindCatIds ? shopCats.filter((c) => kindCatIds.has(c.id)) : shopCats;
+
+  // Menu items filtered by the chosen half, the selected category + search box.
   const menuItems = (openStore?.items ?? []).filter((it) => {
+    if (kindCatIds && !(it.category_id && kindCatIds.has(it.category_id))) return false;
     if (menuCat && it.category_id !== menuCat) return false;
     if (menuSearch.trim() && !it.name.toLowerCase().includes(menuSearch.trim().toLowerCase())) return false;
     return true;
@@ -413,15 +435,20 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      {openStore ? (
+      {openStore && askKind ? (
+        <ShopKindPicker store={openStore} onPick={setShopKind} />
+      ) : openStore ? (
         <StoreDetail
           store={openStore}
+          categories={shownCategories}
+          kindLabel={shopKind && hasBothKinds ? (shopKind === 'food' ? 'Food' : 'Non-food') : null}
+          onChangeKind={hasBothKinds ? () => setShopKind(null) : null}
           fees={fees}
           menuLoading={menuLoading}
           menuItems={menuItems}
           menuCat={menuCat} setMenuCat={setMenuCat}
           menuSearch={menuSearch} setMenuSearch={setMenuSearch}
-          onBack={shopMode ? null : () => setOpenStoreId(null)}
+          onBack={shopMode ? (hasBothKinds ? () => setShopKind(null) : null) : () => setOpenStoreId(null)}
           onAdd={(it) => addToCart(openStore, it)}
           onCustomize={(id) => setCustomizingId(id)}
         />
@@ -740,8 +767,13 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
 }
 
 /** Restaurant detail: hero, info card, category tabs, 2-column menu grid. */
-function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
+function StoreDetail({ store, categories, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
   store: Store;
+  /** The categories to tab through — narrowed to one half inside the own shop. */
+  categories?: Category[];
+  /** "Food" / "Non-food" when the shop is split, so the customer can see which half they are in. */
+  kindLabel?: string | null;
+  onChangeKind?: (() => void) | null;
   fees: FeeSettings;
   menuLoading: boolean;
   menuItems: MenuItem[];
@@ -809,6 +841,19 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
         </div>
       )}
 
+      {/* Which half of the shop this is, and the way back to the other one. */}
+      {kindLabel && (
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-brand-purple/[0.06] px-4 py-2.5 ring-1 ring-brand-purple/20">
+          <span className="text-sm font-semibold text-brand-purple">Browsing {kindLabel}</span>
+          {onChangeKind && (
+            <button onClick={onChangeKind}
+              className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm">
+              Switch
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Search this menu */}
       <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/5">
         <SearchIcon />
@@ -818,10 +863,10 @@ function StoreDetail({ store, fees, menuLoading, menuItems, menuCat, setMenuCat,
       </div>
 
       {/* Category tabs */}
-      {store.categories.length > 0 && (
+      {(categories ?? store.categories).length > 0 && (
         <div className="-mx-1 flex gap-4 overflow-x-auto border-b border-black/10 px-1">
           <CatTab active={menuCat === ''} onClick={() => setMenuCat('')}>Popular</CatTab>
-          {store.categories.map((c) => (
+          {(categories ?? store.categories).map((c) => (
             <CatTab key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatTab>
           ))}
         </div>
@@ -968,5 +1013,54 @@ function Customizer({ item, onAdd }: { item: MenuItem; onAdd: (options: CartOpti
         {missing ? 'Choose required options' : `Add to cart · ${peso(total)}`}
       </button>
     </div>
+  );
+}
+
+/**
+ * The first question the own shop asks: food, or everything else.
+ *
+ * A shop carrying shampoo beside siopao is two shops to a customer's mind, and
+ * scrolling through one to reach the other is the whole reason to ask. Only
+ * shown when both halves are actually stocked — a question with one real answer
+ * is a tax, not a choice.
+ */
+function ShopKindPicker({ store, onPick }: {
+  store: Store;
+  onPick: (k: ShopKind) => void;
+}) {
+  const open = isOpenNow(store.opens_at, store.closes_at, store.open_days);
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white text-2xl shadow ring-1 ring-black/5">
+          {store.logo_url ? <img src={store.logo_url} alt="" className="h-full w-full object-cover" /> : '🛍️'}
+        </span>
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-black">{store.name}</h2>
+          <p className="text-sm text-black/50">
+            {open
+              ? <span className="font-semibold text-brand-green">Open now</span>
+              : <span className="font-semibold text-black/50">Closed — have a look anyway</span>}
+          </p>
+        </div>
+      </div>
+
+      <p className="text-sm text-black/55">What are you shopping for?</p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => onPick('food')}
+          className="flex flex-col rounded-2xl bg-gradient-to-br from-brand-green/15 to-brand-green/5 p-4 text-left shadow-sm ring-1 ring-brand-green/25 transition hover:shadow-md">
+          <span className="text-3xl leading-none">🍚</span>
+          <span className="mt-2.5 text-base font-extrabold leading-tight">Food</span>
+          <span className="mt-1 text-xs leading-snug text-black/55">Snacks, drinks, anything to eat.</span>
+        </button>
+        <button onClick={() => onPick('non_food')}
+          className="flex flex-col rounded-2xl bg-gradient-to-br from-brand-purple/15 to-brand-purple/5 p-4 text-left shadow-sm ring-1 ring-brand-purple/25 transition hover:shadow-md">
+          <span className="text-3xl leading-none">🧴</span>
+          <span className="mt-2.5 text-base font-extrabold leading-tight">Non-food</span>
+          <span className="mt-1 text-xs leading-snug text-black/55">Household, personal care, everything else.</span>
+        </button>
+      </div>
+    </section>
   );
 }
