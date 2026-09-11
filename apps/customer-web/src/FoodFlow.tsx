@@ -36,7 +36,7 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 type ShopKind = 'food' | 'non_food';
-interface Category { id: string; title: string; kind?: ShopKind }
+interface Category { id: string; title: string; kind?: ShopKind; image_url?: string | null }
 interface Store { id: string; name: string; category: string; address?: string | null; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
@@ -50,8 +50,8 @@ function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categorie
     groupsByItem.set(g.menu_item_id, arr);
   }
   return {
-    categories: ((menu.categories ?? []) as { id: string; title: string; kind?: ShopKind }[])
-      .map((c) => ({ id: c.id, title: c.title, kind: c.kind })),
+    categories: ((menu.categories ?? []) as { id: string; title: string; kind?: ShopKind; image_url?: string | null }[])
+      .map((c) => ({ id: c.id, title: c.title, kind: c.kind, image_url: c.image_url ?? null })),
     // `customer_price` already carries the operator's mark-up; the shelf price
     // behind it is the rider's business, not the customer's.
     items: (menu.items as unknown as { id: string; name: string; price: number; customer_price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
@@ -313,6 +313,20 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
     if (menuSearch.trim() && !it.name.toLowerCase().includes(menuSearch.trim().toLowerCase())) return false;
     return true;
   });
+
+  // In the shop, a category is a shelf you walk to, not a tab you skim. A
+  // restaurant menu is short enough to scroll; a shop stocking hotdogs beside
+  // shampoo is not, so the shelves come first and the products come after one
+  // is chosen. Searching goes straight past them — someone typing a name has
+  // already said which shelf they want.
+  const shopShelves = shopMode ? shownCategories : [];
+  const countInCat = (id: string) => (openStore?.items ?? [])
+    .filter((it) => it.category_id === id).length;
+  const browsingShelves = shopShelves.length > 0 && !menuCat && !menuSearch.trim();
+  const openShelf = shopShelves.find((c) => c.id === menuCat) ?? null;
+
+  /** Back out of a shelf to the row of shelves, whatever got us in there. */
+  const backToShelves = () => { setMenuCat(''); setMenuSearch(''); };
   const customizingItem = (openStore?.items ?? []).find((it) => it.id === customizingId) ?? null;
 
   // Cart grouped by store (one order → one rider visits each store).
@@ -450,6 +464,9 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
         <StoreDetail
           store={openStore}
           categories={shownCategories}
+          shelves={browsingShelves ? shopShelves : null}
+          shelfCount={countInCat}
+          openShelf={openShelf}
           kindLabel={shopKind && hasBothKinds ? (shopKind === 'food' ? 'Food' : 'Non-food') : null}
           onChangeKind={hasBothKinds ? () => setShopKind(null) : null}
           fees={fees}
@@ -457,7 +474,14 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           menuItems={menuItems}
           menuCat={menuCat} setMenuCat={setMenuCat}
           menuSearch={menuSearch} setMenuSearch={setMenuSearch}
-          onBack={shopMode ? (hasBothKinds ? () => setShopKind(null) : null) : () => setOpenStoreId(null)}
+          onBack={
+            !shopMode ? () => setOpenStoreId(null)
+              // Inside a shelf, back is the way out to the shelves. Standing at
+              // the shelves, it is the way back to food vs non-food — and when
+              // the shop only stocks one half, there is nowhere further back.
+              : !browsingShelves ? backToShelves
+                : hasBothKinds ? () => setShopKind(null) : null
+          }
           onAdd={(it) => addToCart(openStore, it)}
           onCustomize={(id) => setCustomizingId(id)}
         />
@@ -810,10 +834,16 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
 }
 
 /** Restaurant detail: hero, info card, category tabs, 2-column menu grid. */
-function StoreDetail({ store, categories, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
+function StoreDetail({ store, categories, shelves, shelfCount, openShelf, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
   store: Store;
   /** The categories to tab through — narrowed to one half inside the own shop. */
   categories?: Category[];
+  /** Non-null when the shop's shelves should be shown instead of products. */
+  shelves?: Category[] | null;
+  /** How many products sit on a shelf, so an empty one says so before it's opened. */
+  shelfCount?: (categoryId: string) => number;
+  /** The shelf currently being browsed, named above its products. */
+  openShelf?: Category | null;
   /** "Food" / "Non-food" when the shop is split, so the customer can see which half they are in. */
   kindLabel?: string | null;
   onChangeKind?: (() => void) | null;
@@ -901,55 +931,99 @@ function StoreDetail({ store, categories, kindLabel, onChangeKind, fees, menuLoa
       <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/5">
         <SearchIcon />
         <input value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)}
-          placeholder="Search this menu"
+          placeholder={shelves ? 'Search the whole shop' : 'Search this menu'}
           className="w-full bg-transparent text-sm outline-none placeholder-black/40" />
       </div>
 
-      {/* Category tabs */}
-      {(categories ?? store.categories).length > 0 && (
-        <div className="-mx-1 flex gap-4 overflow-x-auto border-b border-black/10 px-1">
-          <CatTab active={menuCat === ''} onClick={() => setMenuCat('')}>Popular</CatTab>
-          {(categories ?? store.categories).map((c) => (
-            <CatTab key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatTab>
-          ))}
-        </div>
-      )}
-
-      {/* Menu grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {menuItems.map((it) => (
-          <div key={it.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-            <div className="relative">
-              <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
-                {it.image_url
-                  ? <img src={it.image_url} alt="" className="h-full w-full object-cover" />
-                  : <div className="flex h-full w-full items-center justify-center text-4xl">🍽️</div>}
-              </div>
-              {storeOpen && (
-                <button
-                  onClick={() => (it.groups.length === 0 ? onAdd(it) : onCustomize(it.id))}
-                  aria-label={it.groups.length === 0 ? `Add ${it.name}` : `Customize ${it.name}`}
-                  className="absolute -bottom-3 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-lg font-bold text-white shadow-md ring-2 ring-white transition hover:brightness-95">
-                  +
+      {/* The shop's shelves. Chosen first, so products never arrive in a heap. */}
+      {shelves ? (
+        shelves.length === 0 ? (
+          <p className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-black/45 shadow-sm ring-1 ring-black/5">
+            Nothing stocked here yet.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {shelves.map((c) => {
+              const n = shelfCount?.(c.id) ?? 0;
+              return (
+                <button key={c.id} onClick={() => setMenuCat(c.id)}
+                  className="flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
+                    {c.image_url
+                      ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+                      : <div className="flex h-full w-full items-center justify-center text-4xl">🗂️</div>}
+                  </div>
+                  <div className="p-3">
+                    <p className="text-sm font-bold leading-tight">{c.title}</p>
+                    <p className="mt-0.5 text-xs text-black/45">
+                      {n === 0 ? 'Coming soon' : `${n} item${n === 1 ? '' : 's'}`}
+                    </p>
+                  </div>
                 </button>
-              )}
-            </div>
-            <div className="flex flex-1 flex-col p-3 pt-4">
-              <p className="text-sm font-semibold leading-tight">{it.name}</p>
-              {it.description && <p className="mt-0.5 line-clamp-2 text-xs text-black/45">{it.description}</p>}
-              <div className="mt-auto flex items-baseline gap-1 pt-2">
-                <span className="font-bold text-brand-ink">{peso(it.price)}</span>
-                {it.groups.length > 0 && <span className="text-[11px] text-black/40">+ options</span>}
-              </div>
-            </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
-      {menuItems.length === 0 && (
-        <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
-          {!store.loaded || menuLoading ? 'Loading menu…'
-            : menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
-        </p>
+        )
+      ) : (
+        <>
+          {/* Which shelf these products came off, and the way back to the rest. */}
+          {openShelf && (
+            <div className="flex items-center gap-2">
+              <h3 className="min-w-0 flex-1 truncate text-lg font-black">{openShelf.title}</h3>
+              <button onClick={onBack ?? undefined}
+                className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm ring-1 ring-black/5">
+                All categories
+              </button>
+            </div>
+          )}
+
+          {/* Category tabs — a restaurant's menu is short enough to skim across. */}
+          {!openShelf && (categories ?? store.categories).length > 0 && (
+            <div className="-mx-1 flex gap-4 overflow-x-auto border-b border-black/10 px-1">
+              <CatTab active={menuCat === ''} onClick={() => setMenuCat('')}>Popular</CatTab>
+              {(categories ?? store.categories).map((c) => (
+                <CatTab key={c.id} active={menuCat === c.id} onClick={() => setMenuCat(c.id)}>{c.title}</CatTab>
+              ))}
+            </div>
+          )}
+
+          {/* Menu grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {menuItems.map((it) => (
+              <div key={it.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+                <div className="relative">
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
+                    {it.image_url
+                      ? <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                      : <div className="flex h-full w-full items-center justify-center text-4xl">🍽️</div>}
+                  </div>
+                  {storeOpen && (
+                    <button
+                      onClick={() => (it.groups.length === 0 ? onAdd(it) : onCustomize(it.id))}
+                      aria-label={it.groups.length === 0 ? `Add ${it.name}` : `Customize ${it.name}`}
+                      className="absolute -bottom-3 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-lg font-bold text-white shadow-md ring-2 ring-white transition hover:brightness-95">
+                      +
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col p-3 pt-4">
+                  <p className="text-sm font-semibold leading-tight">{it.name}</p>
+                  {it.description && <p className="mt-0.5 line-clamp-2 text-xs text-black/45">{it.description}</p>}
+                  <div className="mt-auto flex items-baseline gap-1 pt-2">
+                    <span className="font-bold text-brand-ink">{peso(it.price)}</span>
+                    {it.groups.length > 0 && <span className="text-[11px] text-black/40">+ options</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {menuItems.length === 0 && (
+            <p className="rounded-2xl bg-white p-6 text-center text-sm text-black/40 shadow-sm ring-1 ring-black/5">
+              {!store.loaded || menuLoading ? 'Loading menu…'
+                : menuSearch || menuCat ? 'No items match your filter.' : 'No items on this menu yet.'}
+            </p>
+          )}
+        </>
       )}
     </section>
   );
