@@ -20,3 +20,4 @@ export * from './installs.ts';
 export * from './notifications.ts';
 export * from './settings.ts';
 export * from './analytics.ts';
+export * from './fulfilment.ts';

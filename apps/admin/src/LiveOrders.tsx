@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listActiveOrdersAdmin, adminCancelOrder } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
+import { listDeliveryOptions, adminSetDelivery, type DeliveryOption } from '@ebd/supabase';
 import { Th, Td, Muted, ErrorNote, Card, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
 
@@ -15,6 +16,9 @@ interface OrderRow {
   created_at: string;
   rider: RiderRef | null;
   notes?: string | null;
+  fulfilment?: 'pickup' | 'delivery';
+  delivery_handler?: 'easybuy' | 'in_house' | null;
+  delivery_option_id?: string | null;
 }
 
 const now = new Date();
@@ -69,6 +73,13 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
     finally { setBusyId(null); }
   }
 
+  // The operator's own vehicles, for assigning a carrier to a shop order.
+  const [vehicles, setVehicles] = useState<DeliveryOption[]>([]);
+  useEffect(() => {
+    if (!supabase) return;
+    listDeliveryOptions(supabase).then(setVehicles).catch(() => {});
+  }, []);
+
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -112,13 +123,21 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
                 <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${serviceColor[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span></Td>
                 <Td className="capitalize">{o.status.replaceAll('_', ' ')}</Td>
                 <Td>
-                  {o.rider ? (
+                  {o.fulfilment === 'pickup' ? (
+                    <span className="rounded-full bg-brand-purple/15 px-2 py-0.5 text-xs font-medium text-brand-purple">🏪 Pick-up</span>
+                  ) : o.rider ? (
                     <>
                       <span className="font-medium">{o.rider.name}</span>
                       {o.rider.mobile_number && <span className="mt-0.5 block text-xs text-black/40">{o.rider.mobile_number}</span>}
                     </>
+                  ) : o.delivery_handler == null ? (
+                    <Carrier order={o} options={vehicles} onDone={reload} />
+                  ) : o.delivery_handler === 'in_house' ? (
+                    <span className="rounded-full bg-brand-green/15 px-2 py-0.5 text-xs font-medium text-green-800">
+                      🚚 {vehicles.find((v) => v.id === o.delivery_option_id)?.name ?? 'In-house'}
+                    </span>
                   ) : (
-                    <span className="rounded-full bg-brand-yellow/30 px-2 py-0.5 text-xs font-medium text-yellow-800">Unassigned</span>
+                    <span className="rounded-full bg-brand-yellow/30 px-2 py-0.5 text-xs font-medium text-yellow-800">Waiting for a rider</span>
                   )}
                 </Td>
                 <Td>
@@ -142,4 +161,64 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
   );
 
   return embedded ? table : <Card title="Live orders">{table}</Card>;
+}
+
+
+/**
+ * Who carries this order, chosen once the operator can see what was bought.
+ *
+ * Until this is answered the order sits still: no rider can see it, because a
+ * rider taking a sack of rice meant for the van would strand the customer. The
+ * customer is told the fee in the order chat the moment it is set — they agreed
+ * to the order without knowing it, so they hear it from us, not at the door.
+ */
+function Carrier({ order, options, onDone }: {
+  order: { id: string };
+  options: DeliveryOption[];
+  onDone: () => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function assign(handler: 'easybuy' | 'in_house', optionId?: string) {
+    if (!supabase) return;
+    setBusy(true); setErr(null);
+    try { await adminSetDelivery(supabase, order.id, handler, optionId); await onDone(); }
+    catch (e) { setErr(errMessage(e)); }
+    finally { setBusy(false); }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="rounded-lg bg-brand-purple px-2.5 py-1 text-xs font-semibold text-white">
+        Choose carrier
+      </button>
+    );
+  }
+
+  return (
+    <div className="min-w-[11rem] space-y-1.5">
+      <button disabled={busy} onClick={() => void assign('easybuy')}
+        className="w-full rounded-lg border border-black/10 px-2 py-1 text-left text-xs font-medium disabled:opacity-50">
+        🛵 Easy Buy rider <span className="text-black/40">— fee by distance</span>
+      </button>
+      {options.map((v) => (
+        <button key={v.id} disabled={busy} onClick={() => void assign('in_house', v.id)}
+          className="flex w-full items-center gap-2 rounded-lg border border-black/10 px-2 py-1 text-left text-xs font-medium disabled:opacity-50">
+          {v.image_url
+            ? <img src={v.image_url} alt="" className="h-5 w-5 shrink-0 rounded object-cover" />
+            : <span className="shrink-0">🚚</span>}
+          <span className="min-w-0 flex-1 truncate">{v.name}</span>
+          <span className="shrink-0 text-black/50">{peso(Number(v.fee))}</span>
+        </button>
+      ))}
+      {options.length === 0 && (
+        <p className="text-[11px] text-black/45">No vehicles yet — add them under Settings.</p>
+      )}
+      {err && <p className="text-[11px] text-red-600">{err}</p>}
+      <button onClick={() => setOpen(false)} className="text-[11px] text-black/40">Cancel</button>
+    </div>
+  );
 }

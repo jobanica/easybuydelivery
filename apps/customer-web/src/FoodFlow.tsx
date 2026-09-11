@@ -106,6 +106,9 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   // Which half of the own shop's shelves the customer is browsing. Null means
   // they have not chosen yet, which is the first thing the shop asks.
   const [shopKind, setShopKind] = useState<ShopKind | null>(null);
+  // The shop sells sacks of rice and cases of softdrinks; plenty of customers
+  // would rather collect. Restaurants never ask — they only ever deliver.
+  const [collect, setCollect] = useState(false);
   const [menuSearch, setMenuSearch] = useState('');
   const [storeSearch, setStoreSearch] = useState(''); // filter the restaurant list
   const [cuisine, setCuisine] = useState<string>(''); // '' = all cuisines
@@ -244,7 +247,8 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   // A drop-off pin is required for distance pricing, and for gift orders so the
   // rider knows where to deliver to the recipient.
   // Every order needs somewhere to go, whatever the fee model says.
-  const needsDropoff = !dropoff;
+  // Nothing to pin when the customer is collecting it themselves.
+  const needsDropoff = !collect && !dropoff;
   const needsAddress = addressText.trim().length < 5;
   useAreaBackfill({ addresses: saved.addresses, chosenId: chosenAddressId, area, reload: saved.reload });
 
@@ -252,7 +256,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
   useEffect(() => { setMenuCat(''); setMenuSearch(''); }, [shopKind]);
   // Coming back to the shop starts at the question again, not wherever they left.
-  useEffect(() => { if (!shopMode) setShopKind(null); }, [shopMode]);
+  useEffect(() => { if (!shopMode) { setShopKind(null); setCollect(false); } }, [shopMode]);
 
   // Lazily load a restaurant's menu the first time it's opened.
   const [menuLoading, setMenuLoading] = useState(false);
@@ -387,7 +391,12 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           recipientName: gift ? recipientName.trim() || undefined : undefined,
           deliveryAddress: addressText,
           recipientContact: gift ? recipientContact.trim() || undefined : undefined,
-          deliveryFee,
+          // A collection costs nothing to deliver; a shop delivery is priced by
+          // the operator once they see what was bought, so it leaves here at
+          // zero with no carrier, and is quoted in the chat.
+          deliveryFee: collect ? 0 : deliveryFee,
+          fulfilment: collect ? 'pickup' : 'delivery',
+          deliveryHandler: shopMode && !collect ? null : undefined,
           lines: cart,
           notes: fullNote,
           deliveryLat: dropoff?.lat,
@@ -705,14 +714,48 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
               </div>
             </div>
 
+            {/* Collect or have it brought — only the own shop asks. */}
+            {shopMode && (
+              <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                <span className="mb-2 block text-sm font-medium text-black/70">How do you want it?</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setCollect(false)}
+                    className={`rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition ${
+                      !collect ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`}>
+                    🛵 Deliver it
+                  </button>
+                  <button type="button" onClick={() => setCollect(true)}
+                    className={`rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition ${
+                      collect ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-black/60 ring-black/10'}`}>
+                    🏪 I'll pick it up
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-black/50">
+                  {collect
+                    ? 'Collect it from the shop — no delivery fee.'
+                    : "We'll work out the delivery fee once we see your order and message you before anything moves."}
+                </p>
+              </div>
+            )}
+
             <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
               <Row label="Goods" value={peso(summary.goodsCost)} />
-              <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
-                value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
+              {collect ? (
+                <Row label="Pick-up" value="No delivery fee" />
+              ) : shopMode ? (
+                <Row label="Delivery fee" value="We'll confirm" />
+              ) : (
+                <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+                  value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
+              )}
               {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
               {summary.convenienceFee > 0 && <Row label="Convenience fee" value={peso(summary.convenienceFee)} />}
               <div className="mt-1 flex justify-between border-t border-black/5 pt-2 text-sm font-bold">
-                <span>Total</span><span>{needsDropoff ? '—' : peso(summary.customerTotal)}</span>
+                <span>Total</span>
+                <span>{needsDropoff ? '—'
+                  : collect ? peso(summary.customerTotal - summary.deliveryFee)
+                  : shopMode ? `${peso(summary.customerTotal - summary.deliveryFee)} + delivery`
+                  : peso(summary.customerTotal)}</span>
               </div>
               {pay === 'online' && !needsDropoff && (
                 <div className="mt-1 flex justify-between text-xs text-black/50">

@@ -35,6 +35,15 @@ export interface FoodCheckoutInput {
   notes?: string;
   paymentMethod?: PaymentMethod;
   paid?: boolean;
+  /**
+   * Own-shop orders answer two extra questions. 'pickup' means the customer
+   * collects and there is nothing to deliver; a delivery from the shop starts
+   * with no carrier at all, so the operator can choose one after seeing what
+   * was bought. Restaurants leave both undefined and behave as they always did.
+   */
+  fulfilment?: 'pickup' | 'delivery';
+  /** Pass null to leave the carrier — and therefore the fee — for the operator. */
+  deliveryHandler?: 'easybuy' | 'in_house' | null;
 }
 
 export interface FoodOrderRow {
@@ -46,6 +55,8 @@ export interface FoodOrderRow {
   delivery_fee: number;
   store_fee_total: number;
   convenience_fee: number;
+  fulfilment?: 'pickup' | 'delivery';
+  delivery_handler?: 'easybuy' | 'in_house' | null;
   goods_cost: number;
   commission_amount: number;
   delivery_lat: number | null;
@@ -93,6 +104,10 @@ export function buildFoodOrder(
       customer_id: input.customerId,
       service_type: 'food',
       status: 'pending',
+      fulfilment: input.fulfilment ?? 'delivery',
+      // undefined leaves the column default ('easybuy'); an explicit null parks
+      // the order out of the rider pool until the operator picks a carrier.
+      ...(input.deliveryHandler !== undefined ? { delivery_handler: input.deliveryHandler } : {}),
       payment_method: input.paymentMethod ?? 'cod',
       payment_status: input.paid ? 'paid' : 'unpaid',
       delivery_fee: summary.deliveryFee,

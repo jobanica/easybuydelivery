@@ -23,6 +23,7 @@ import {
   copyStoreMenu,
   setOwnShop,
   setCategoryKind,
+  uploadCategoryImage,
 } from '@ebd/supabase';
 import { isOpenNow, scheduleLabel, WEEKDAYS, ALL_DAYS,
   errMessage,
@@ -87,7 +88,7 @@ interface ItemRow {
   /** What the customer is quoted — shelf price plus the resolved mark-up. */
   markup?: number; customer_price?: number;
 }
-interface CatRow { id: string; title: string; sort_order: number; kind?: 'food' | 'non_food' }
+interface CatRow { id: string; title: string; sort_order: number; kind?: 'food' | 'non_food'; image_url?: string | null }
 interface GroupRow { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }
 interface OptRow { id: string; menu_item_id: string; group_id: string | null; option_name: string; price_delta: number }
 
@@ -460,14 +461,15 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
       {/* Categories */}
       <div className="mb-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/40">Categories</p>
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="mb-2 space-y-1.5">
           {cats.map((c) => {
             const nonFood = c.kind === 'non_food';
             return (
-              <span key={c.id} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
-                {c.title}
-                {/* Only the Easy Buy Shop splits its shelves; a restaurant is all food. */}
+              <div key={c.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-black/5">
+                {/* A supplier's logo makes the shelf recognisable at a glance. */}
+                <ImageUpload url={c.image_url ?? null} size="h-10 w-10" rounded="rounded-lg"
+                  onUpload={async (file) => { if (supabase) { await uploadCategoryImage(supabase, c.id, file); await load(); } }} />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.title}</span>
                 {isOwnShop && (
                   <button
                     onClick={async () => {
@@ -476,13 +478,14 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
                       await load();
                     }}
                     title="Switch between Food and Non-food"
-                    className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold">
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
                     {nonFood ? 'Non-food' : 'Food'}
                   </button>
                 )}
                 <button onClick={() => removeCategory(c.id)} title="Delete category"
-                  className={nonFood ? 'text-brand-purple/60 hover:text-red-600' : 'text-green-800/60 hover:text-red-600'}>×</button>
-              </span>
+                  className="shrink-0 text-black/30 hover:text-red-600">×</button>
+              </div>
             );
           })}
           {cats.length === 0 && <span className="text-xs text-black/40">No categories yet.</span>}
