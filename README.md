@@ -84,8 +84,53 @@ the full math and settlement flow.
 Ship as one PWA with role-based views first, split into native later where
 background GPS is required (rider app).
 
+## Repository layout
+
+```
+docs/                     project spec (overview, flows, data model, decisions)
+supabase/migrations/      Postgres schema, RLS, settlement functions
+packages/shared/          @ebd/shared — pricing/commission/cart/settlement logic + types
+packages/supabase/        @ebd/supabase — data-access layer over supabase-js
+apps/customer-web/        customer ordering (Food / Pabili / Padala)
+apps/rider/               rider app (pool, delivery flow, settlement gate)
+apps/admin/               operator dashboard (stores, riders, orders)
+```
+
+## Getting started
+
+```bash
+npm install          # workspace install (Node 22+)
+npm test             # run shared-layer tests (node:test, no build step)
+npm run typecheck    # type-check the workspace
+```
+
+For the backend, see [`supabase/README.md`](supabase/README.md).
+
 ## Status
 
-This repository currently contains the **project overview and specification**.
-No application code has been scaffolded yet — see
-[docs/roadmap.md](docs/roadmap.md) for the proposed build order.
+**Phases 0–2 landed.** Done so far:
+
+- ✅ **Phase 0** — Supabase schema (enums, core tables, unified order queue,
+  commission ledger + settlement functions, RLS; validated against Postgres 16)
+  and `@ebd/shared` (commission formula, order-cost + cart math, settlement
+  gate, order-status state machine).
+- ✅ **Phase 1 (Padala)** — `@ebd/supabase` data layer + customer web request
+  form + admin rider-approval / live-orders.
+- ✅ **Phase 2 (Food)** — admin store/menu management with per-merchant on/off
+  toggle, and the customer multi-store cart with ₱25/store fee math.
+- ✅ **Phase 3 (Pabili)** — buy-anything request with estimate + spending cap,
+  the rider actual-amount update, and confirm-at-cap over-budget handling.
+- ✅ **Rider app** — settlement lock gate, order pool + accept, per-service
+  status flow, Pabili actual-amount entry, amount-to-collect, and commission
+  accrual on delivery.
+- ✅ **Admin settlement management** — who owes / who's locked, and mark-paid
+  confirmation that settles the ledger and reactivates the account.
+- ✅ **Phase 4 (payments + live tracking)** — COD / online / rider-QR payment
+  methods with the correct settlement impact, and per-order live rider tracking
+  (Supabase Realtime transport + a live-ETA map).
+- ⬜ **Real Supabase project wiring** and production map/payment providers —
+  see [docs/open-decisions.md](docs/open-decisions.md) (#6, #9).
+
+Frontends run in **preview mode** with sample data until `VITE_SUPABASE_URL` /
+`VITE_SUPABASE_ANON_KEY` are set. **63 unit tests** pass; all three apps build;
+the customer, rider, and admin flows are browser-verified.
