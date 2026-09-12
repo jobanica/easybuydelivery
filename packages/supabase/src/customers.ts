@@ -53,6 +53,12 @@ export interface CustomerOrder {
   area_city: string | null;
   area_barangay: string | null;
   order_stores: { store: { name: string | null } | null }[];
+  /** 'pickup' when the customer is collecting it themselves. */
+  fulfilment?: string | null;
+  /** 'easybuy' = a rider, 'in_house' = the operator's own vehicle, null = undecided. */
+  delivery_handler?: string | null;
+  /** The operator's vehicle, when one is carrying it. */
+  delivery_option?: { name: string | null; image_url: string | null } | null;
 }
 
 /**
@@ -289,20 +295,27 @@ export interface ActiveDelivery {
   /** Set the moment the rider says they're at the door. */
   arrived_at: string | null;
   delivery_address: string | null;
+  /** Set when the operator is carrying it themselves, or it's a collection. */
+  carrier: Carrier | null;
 }
 
 /**
- * The customer's current in-progress delivery (a rider is assigned and it isn't
- * delivered/cancelled), with pickup (store) and drop-off coordinates for the
- * live tracking map. Null when there's nothing to track.
+ * The customer's current order in flight, with pickup (store) and drop-off
+ * coordinates for the live tracking map. Null when there's nothing to track.
+ *
+ * "In flight" used to mean a rider had it, which quietly excluded every order
+ * the operator carries themselves — an in-house vehicle or a pick-up never gets
+ * a rider, so the customer's Track tab said "nothing in progress" while a
+ * kuliglig was on its way to them. Those orders belong here too; what differs
+ * is that there is no live map, only a carrier and a status.
  */
 export async function getActiveDelivery(db: SupabaseClient, customerId: string): Promise<ActiveDelivery | null> {
   const { data, error } = await db
     .from('orders')
-    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, arrived_at, delivery_address, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id)')
+    .select('id, status, service_type, payment_method, item_description, pickup_lat, pickup_lng, delivery_lat, delivery_lng, goods_cost, delivery_fee, store_fee_total, convenience_fee, estimated_amount, actual_amount, arrived_at, delivery_address, fulfilment, delivery_handler, order_stores(store:stores(name, lat, lng)), order_items(id, name, qty, unit_price, status, replaces_item_id), delivery_option:delivery_options(name, image_url)')
     .eq('customer_id', customerId)
-    .not('rider_id', 'is', null)
-    .not('status', 'in', '(delivered,cancelled)')
+    .or('rider_id.not.is.null,delivery_handler.eq.in_house,fulfilment.eq.pickup')
+    .not('status', 'in', '(delivered,cancelled,pending)')
     .order('created_at', { ascending: false })
     .limit(1);
   if (error) throw error;
@@ -314,8 +327,10 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     store_fee_total: number | null; convenience_fee: number | null;
     estimated_amount: number | null; actual_amount: number | null;
     arrived_at: string | null; delivery_address: string | null;
+    fulfilment: string | null; delivery_handler: string | null;
     order_stores?: { store: { name: string | null; lat: number | null; lng: number | null } | null }[];
     order_items?: { id: string; name: string; qty: number; unit_price: number; status: string | null; replaces_item_id: string | null }[];
+    delivery_option?: { name: string | null; image_url: string | null } | null;
   } | undefined;
   if (!row) return null;
   const store = row.order_stores?.find((os) => os.store?.lat != null && os.store?.lng != null)?.store
@@ -347,7 +362,35 @@ export async function getActiveDelivery(db: SupabaseClient, customerId: string):
     actual_amount: row.actual_amount == null ? null : Number(row.actual_amount),
     arrived_at: row.arrived_at ?? null,
     delivery_address: row.delivery_address ?? null,
+    carrier: orderCarrier(row),
   };
+}
+
+/**
+ * What is bringing this order, or that nothing is because the customer is
+ * collecting it. Null while a rider has it — the map and the rider's name say
+ * it better than a label would.
+ */
+export function orderCarrier(o: {
+  fulfilment?: string | null;
+  delivery_handler?: string | null;
+  delivery_option?: { name: string | null; image_url: string | null } | null;
+}): Carrier | null {
+  if (o.fulfilment === 'pickup') return { kind: 'pickup', name: null, image: null };
+  if (o.delivery_handler === 'in_house') {
+    return {
+      kind: 'in_house',
+      name: o.delivery_option?.name ?? 'Our own vehicle',
+      image: o.delivery_option?.image_url ?? null,
+    };
+  }
+  return null;
+}
+
+export interface Carrier {
+  kind: 'pickup' | 'in_house';
+  name: string | null;
+  image: string | null;
 }
 
 export interface MyOrderDetail {
@@ -601,7 +644,7 @@ export async function cancelOrder(db: SupabaseClient, orderId: string): Promise<
 export async function listCustomerOrders(db: SupabaseClient, customerId: string): Promise<CustomerOrder[]> {
   const { data, error } = await db
     .from('orders')
-    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, customer_name, customer_contact, delivery_lat, delivery_lng, delivery_address, area_province, area_city, area_barangay, order_stores(store:stores(name))')
+    .select('id, service_type, status, created_at, goods_cost, delivery_fee, store_fee_total, convenience_fee, payment_method, recipient_name, recipient_contact, estimated_amount, actual_amount, goods_receipt_url, customer_name, customer_contact, delivery_lat, delivery_lng, delivery_address, area_province, area_city, area_barangay, fulfilment, delivery_handler, order_stores(store:stores(name)), delivery_option:delivery_options(name, image_url)')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(30);

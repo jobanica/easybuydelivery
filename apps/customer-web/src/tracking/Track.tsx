@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getActiveDelivery, getOrderRiderInfo, respondToItemChange, cancelEmptyOrder,
   orderGoodsAmount, orderGoodsIsFinal, listOrderAddons, requestOrderAddon, cancelOrderAddon,
-  getAppSettings,
+  getAppSettings, operatorFlow,
   type ActiveDelivery, type OrderRiderInfo, type OrderAddon } from '@ebd/supabase';
 import { supabase } from '../lib/supabase.ts';
 import { useAuth } from '../auth/AuthContext.tsx';
@@ -9,7 +9,7 @@ import { TrackingMap } from './TrackingMap.tsx';
 import { PayRider } from '../PayRider.tsx';
 import { ChatButton } from '../Chat.tsx';
 import { peso } from '../ui.tsx';
-import { errMessage } from '@ebd/shared';
+import { errMessage, orderStatusLabel } from '@ebd/shared';
 import { useArrivalAlert, ArrivalBanner, NotificationOptIn } from '../ArrivalAlert.tsx';
 
 /** "My order" — what the customer ordered, shown alongside the live map. */
@@ -255,6 +255,91 @@ function AddonPanel({ delivery, storeFee }: { delivery: ActiveDelivery; storeFee
 const DEMO_PICKUP = { lat: 14.170, lng: 121.240 };
 const DEMO_DROPOFF = { lat: 14.186, lng: 121.256 };
 
+/** What each step of an operator-carried order is called, to the customer. */
+const STEP_LABEL: Record<string, string> = {
+  pending: 'Placed',
+  accepted: 'Confirmed',
+  preparing: 'Being prepared',
+  picked_up: 'Loaded',
+  on_the_way: 'On the way',
+  delivered: 'Delivered',
+};
+
+/**
+ * An order the shop is carrying itself, or one the customer is collecting.
+ *
+ * No rider means no live location, so this shows the two things that are
+ * actually known: what has the order, and how far along it is. Previously the
+ * customer got neither — the Track tab looked for an order with a rider on it,
+ * found none, and said nothing was in progress while a kuliglig was en route.
+ */
+function CarrierPanel({ delivery, onClose }: { delivery: ActiveDelivery; onClose: () => void }) {
+  const carrier = delivery.carrier!;
+  const pickup = carrier.kind === 'pickup';
+  const flow = operatorFlow(pickup ? 'pickup' : 'delivery', delivery.service_type)
+    .filter((s) => s !== 'pending');
+  const at = flow.indexOf(delivery.status);
+
+  return (
+    <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
+      <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
+        <h2 className="font-bold">{pickup ? 'Your collection' : 'Your delivery'}</h2>
+        <button onClick={onClose} className="text-sm text-brand-purple">Close</button>
+      </div>
+
+      <div className="flex items-center gap-3 px-4 py-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand-green/10 text-2xl ring-1 ring-black/5">
+          {pickup ? '🏪' : carrier.image
+            ? <img src={carrier.image} alt="" className="h-full w-full object-cover" />
+            : '🚚'}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-base font-black">
+            {pickup ? 'You’re collecting this' : carrier.name}
+          </p>
+          <p className="text-sm text-black/55">{orderStatusLabel(delivery.status, carrier)}</p>
+          {!pickup && delivery.delivery_fee > 0 && (
+            <p className="text-xs text-black/45">Delivery fee {peso(delivery.delivery_fee)}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Where it has got to. One line, because there is no map to draw. */}
+      <ol className="space-y-0 border-t border-black/5 px-4 py-3">
+        {flow.map((s, i) => {
+          const done = at >= 0 && i <= at;
+          const now = i === at;
+          return (
+            <li key={s} className="flex items-center gap-3 py-1.5">
+              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                done ? 'bg-brand-green text-white' : 'bg-black/[0.07] text-black/35'}`}>
+                {done ? '✓' : i + 1}
+              </span>
+              <span className={`text-sm ${now ? 'font-bold text-brand-ink' : done ? 'text-black/55' : 'text-black/35'}`}>
+                {pickup && s === 'delivered' ? 'Collected' : STEP_LABEL[s] ?? s}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {pickup
+        ? (
+          <p className="border-t border-black/5 bg-brand-yellow/10 px-4 py-3 text-xs text-black/55">
+            We’ll message you here the moment it’s ready. Bring your order number.
+          </p>
+        ) : (
+          <p className="border-t border-black/5 bg-black/[0.02] px-4 py-3 text-xs text-black/50">
+            {delivery.delivery_address
+              ? <>Going to <span className="font-medium text-black/70">{delivery.delivery_address}</span>.</>
+              : 'Going to your saved address.'}
+            {' '}There’s no live map for our own vehicles — message us below if you need it sooner.
+          </p>
+        )}
+    </div>
+  );
+}
+
 /**
  * Track tab: finds the customer's current in-progress delivery and shows the
  * live rider map for it. Falls back to a simulated demo in preview mode and a
@@ -294,6 +379,21 @@ export function Track({ onClose }: { onClose: () => void }) {
 
   // Preview mode: show the simulated demo so the map is demonstrable.
   if (!live) return <TrackingMap pickup={DEMO_PICKUP} dropoff={DEMO_DROPOFF} onClose={onClose} />;
+
+  // The operator is carrying this one. There is no rider pinging a location, so
+  // a map would be a still picture pretending to be live. The honest thing to
+  // show is what has it and how far along it is.
+  if (delivery?.carrier) {
+    return (
+      <div className="space-y-3">
+        <CarrierPanel delivery={delivery} onClose={onClose} />
+        <ChatButton orderId={delivery.id} role="customer" title="Chat with the shop" />
+        <OrderItemsCard delivery={delivery} onChange={() => void load()} />
+        {delivery.payment_method === 'rider_qr' && <PayRider orderId={delivery.id} />}
+        {delivery.payment_method === 'cod' && <PayOnDelivery delivery={delivery} />}
+      </div>
+    );
+  }
 
   if (status === 'ok' && delivery?.pickup && delivery.dropoff) {
     return (

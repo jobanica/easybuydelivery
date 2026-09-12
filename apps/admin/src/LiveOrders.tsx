@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { listActiveOrdersAdmin, adminCancelOrder } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
-import { listDeliveryOptions, adminSetDelivery, type DeliveryOption } from '@ebd/supabase';
+import {
+  listDeliveryOptions, adminSetDelivery, adminAdvanceOrder, operatorFlow,
+  type DeliveryOption,
+} from '@ebd/supabase';
 import { Th, Td, Muted, ErrorNote, Card, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
 
@@ -121,7 +124,13 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
                   <span className="mt-0.5 block text-xs text-black/40">{when.ago}</span>
                 </Td>
                 <Td><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${serviceColor[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span></Td>
-                <Td className="capitalize">{o.status.replaceAll('_', ' ')}</Td>
+                <Td>
+                  <span className="capitalize">{o.status.replaceAll('_', ' ')}</span>
+                  {/* Nobody else is going to move this one along. */}
+                  {!o.rider && (o.fulfilment === 'pickup' || o.delivery_handler === 'in_house') && (
+                    <AdvanceOrder order={o} onDone={reload} />
+                  )}
+                </Td>
                 <Td>
                   {o.fulfilment === 'pickup' ? (
                     <span className="rounded-full bg-brand-purple/15 px-2 py-0.5 text-xs font-medium text-brand-purple">🏪 Pick-up</span>
@@ -163,6 +172,55 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
   return embedded ? table : <Card title="Live orders">{table}</Card>;
 }
 
+
+const NEXT_LABEL: Record<string, string> = {
+  accepted: 'Confirm order',
+  preparing: 'Start preparing',
+  picked_up: 'Loaded',
+  on_the_way: 'Set off',
+  delivered: 'Delivered',
+};
+
+/**
+ * Move an order the operator is carrying to its next step.
+ *
+ * A rider drives their own deliveries from the rider app; an in-house run or a
+ * collection has no rider, so nobody was driving these at all. They sat at
+ * whatever status they were left on, and the customer — who reads that same
+ * field — saw an order that never moved. Each press tells them in the chat.
+ */
+function AdvanceOrder({ order, onDone }: {
+  order: { id: string; status: string; service_type: string; fulfilment?: string };
+  onDone: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const flow = operatorFlow(order.fulfilment, order.service_type);
+  const at = flow.indexOf(order.status);
+  const next = at >= 0 && at < flow.length - 1 ? flow[at + 1] : null;
+  if (!next) return null;
+
+  const label = order.fulfilment === 'pickup' && next === 'delivered'
+    ? 'Collected' : NEXT_LABEL[next] ?? next;
+
+  return (
+    <>
+      <button disabled={busy}
+        onClick={async () => {
+          if (!supabase) return;
+          setBusy(true); setErr(null);
+          try { await adminAdvanceOrder(supabase, order.id, next); await onDone(); }
+          catch (e) { setErr(errMessage(e)); }
+          finally { setBusy(false); }
+        }}
+        className="mt-1 block rounded-lg bg-brand-green px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">
+        {busy ? '…' : `→ ${label}`}
+      </button>
+      {err && <span className="mt-1 block text-[11px] text-red-600">{err}</span>}
+    </>
+  );
+}
 
 /**
  * Who carries this order, chosen once the operator can see what was bought.

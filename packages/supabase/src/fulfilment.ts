@@ -125,3 +125,34 @@ export async function adminSetDelivery(
   if (error) throw error;
   return data as DeliveryAssignment;
 }
+
+/**
+ * Move an order the operator is carrying themselves to its next step.
+ *
+ * A rider drives their own deliveries forward from the rider app. Nobody was
+ * driving the operator's own — an in-house run or a collection has no rider, so
+ * without this the order sits at whatever it was last set to while the customer
+ * watches nothing happen.
+ */
+export async function adminAdvanceOrder(
+  db: SupabaseClient, orderId: string, next: string,
+): Promise<{ status: string; carrier: string }> {
+  const { data, error } = await db.rpc('admin_advance_order', {
+    p_order_id: orderId, p_next: next,
+  });
+  if (error) throw error;
+  return data as { status: string; carrier: string };
+}
+
+/**
+ * The steps an operator-carried order walks through, mirroring
+ * operator_order_flow() in the database. A collection has no journey: it is
+ * confirmed, prepared, and picked up.
+ */
+export function operatorFlow(
+  fulfilment: string | null | undefined, serviceType: string,
+): string[] {
+  if (fulfilment === 'pickup') return ['pending', 'accepted', 'preparing', 'delivered'];
+  if (serviceType === 'padala') return ['pending', 'accepted', 'picked_up', 'on_the_way', 'delivered'];
+  return ['pending', 'accepted', 'preparing', 'picked_up', 'on_the_way', 'delivered'];
+}

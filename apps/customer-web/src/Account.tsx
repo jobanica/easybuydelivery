@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getMyCustomer, listCustomerOrders, listAddresses, addAddress, deleteAddress, setDefaultAddress, cancelOrder,
-  orderGoodsAmount, orderGoodsIsFinal,
+  orderGoodsAmount, orderGoodsIsFinal, orderCarrier,
   type MyCustomer, type CustomerOrder, type CustomerAddress,
 } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -12,7 +12,8 @@ import type { AreaSelection } from '@ebd/supabase';
 import { PayRider } from './PayRider.tsx';
 import { peso } from './ui.tsx';
 import { REQUIRE_ACCOUNT, APP_VERSION } from './config.ts';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, PRIVACY_URL, TERMS_URL } from '@ebd/shared';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, PRIVACY_URL, TERMS_URL, orderStatusLabel } from '@ebd/shared';
+import { ChatButton } from './Chat.tsx';
 import { DeleteAccount } from './DeleteAccount.tsx';
 import { FixPin } from './FixPin.tsx';
 import { SaveDeliveredAddress } from './SaveDeliveredAddress.tsx';
@@ -100,13 +101,31 @@ export function Account() {
             <p className="text-sm text-black/40">No orders yet.</p>
           ) : (
             <ul className="divide-y divide-black/5">
-              {orders.map((o) => (
+              {orders.map((o) => {
+                const carrier = orderCarrier(o);
+                const live = !['delivered', 'cancelled'].includes(o.status);
+                return (
                 <li key={o.id} className="py-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="flex items-center gap-2">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${serviceTint[o.service_type] ?? 'bg-black/5'}`}>{o.service_type}</span>
-                        <span className="text-xs capitalize text-black/50">{o.status.replaceAll('_', ' ')}</span>
+                        <span className="text-xs text-black/50">{orderStatusLabel(o.status, carrier)}</span>
+                        {/* Who is bringing it. A rider says so with their name
+                            and a map; the operator's own van had been saying
+                            nothing at all. */}
+                        {carrier && live && (
+                          <span className="flex items-center gap-1 rounded-full bg-brand-green/15 px-2 py-0.5 text-[11px] font-semibold text-green-800">
+                            {carrier.kind === 'pickup' ? '🏪 You collect' : (
+                              <>
+                                {carrier.image
+                                  ? <img src={carrier.image} alt="" className="h-3.5 w-3.5 rounded-full object-cover" />
+                                  : <span>🚚</span>}
+                                {carrier.name}
+                              </>
+                            )}
+                          </span>
+                        )}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-black/45">
                         {fmtDate(o.created_at)}
@@ -136,20 +155,33 @@ export function Account() {
                   {o.payment_method === 'rider_qr' && !['delivered', 'cancelled'].includes(o.status) && (
                     <PayRider orderId={o.id} />
                   )}
-                  <OrderDetails orderId={o.id} />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <OrderDetails orderId={o.id} />
+                    {/* The operator talks to the customer here — quoting a
+                        delivery fee, saying the van has set off. Before this the
+                        chat only appeared once a rider was on a map, so on an
+                        in-house run nobody could read a word of it. */}
+                    {live && (
+                      <ChatButton orderId={o.id} role="customer"
+                        title={carrier ? 'Chat with the shop' : 'Chat with your rider'} />
+                    )}
+                  </div>
                   {['pending', 'accepted', 'preparing'].includes(o.status) && (
                     <>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {o.status === 'pending' && <CancelOrderButton orderId={o.id} onCancelled={load} />}
-                        <FixPin orderId={o.id} serviceType={o.service_type} onDone={load} />
-                        {o.service_type === 'food' && (
+                        {carrier?.kind !== 'pickup' && (
+                          <FixPin orderId={o.id} serviceType={o.service_type} onDone={load} />
+                        )}
+                        {o.service_type === 'food' && !carrier && (
                           <AddToOrder orderId={o.id} status={o.status} onAdded={load} />
                         )}
                       </div>
                     </>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </Card>
