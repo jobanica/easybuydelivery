@@ -41,7 +41,13 @@ export async function listOrders(
 
   if (filters.serviceType) q = q.eq('service_type', filters.serviceType);
   if (filters.status) q = q.eq('status', filters.status);
-  if (filters.search?.trim()) q = q.ilike('customer_contact', `%${filters.search.trim()}%`);
+  // Operators look people up both ways — by the number on the order and by the
+  // name they gave. Commas and parens would break out of the or() filter, so
+  // they are stripped rather than escaped.
+  if (filters.search?.trim()) {
+    const term = filters.search.trim().replace(/[(),*]/g, ' ').trim();
+    if (term) q = q.or(`customer_contact.ilike.%${term}%,customer_name.ilike.%${term}%`);
+  }
   if (filters.fromDay) q = q.gte('created_at', `${filters.fromDay}T00:00:00${MANILA_OFFSET}`);
   if (filters.toDay) {
     // Inclusive of the last day: everything before midnight that starts the next.
