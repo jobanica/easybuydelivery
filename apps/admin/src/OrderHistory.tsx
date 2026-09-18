@@ -5,6 +5,7 @@ import { errMessage } from '@ebd/shared';
 import { supabase } from './lib/supabase.ts';
 import { useDayRange } from './DateRange.tsx';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
+import { PrintReceipt } from './PrintReceipt.tsx';
 
 interface OrderRow {
   id: string;
@@ -328,6 +329,8 @@ function OrderDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                 </a>
               </div>
             )}
+            <PrintReceipt order={detail.order} items={detail.items} />
+
             {detail.events.length > 0 && (
               <div>
                 <p className="mb-1 font-medium">Timeline</p>

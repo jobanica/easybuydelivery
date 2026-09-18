@@ -7,6 +7,7 @@ import { commission, distanceDeliveryFee,
 import { supabase } from './lib/supabase.ts';
 import { Card, Muted, peso } from './ui.tsx';
 import { DeliveryOptions } from './DeliveryOptions.tsx';
+import { PrinterSettings } from './PrinterSettings.tsx';
 
 const SAMPLE: AppSettings = {
   is_open: true, closed_message: null, schedule: null, default_delivery_fee: 50, per_store_fee: 25,
@@ -102,6 +103,8 @@ export function Settings() {
       </Card>
 
       <DeliveryOptions />
+
+      <PrinterSettings />
 
       {/* Services */}
       <Card title="Services">

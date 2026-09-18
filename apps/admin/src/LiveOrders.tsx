@@ -7,6 +7,7 @@ import {
 } from '@ebd/supabase';
 import { Th, Td, Muted, ErrorNote, Card, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
+import { PrintReceipt } from './PrintReceipt.tsx';
 
 interface RiderRef { id: string; name: string; mobile_number: string | null }
 interface OrderRow {
@@ -156,10 +157,14 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
                 <Td>{peso(o.delivery_fee)}</Td>
                 <Td className="font-medium">{peso(o.commission_amount)}</Td>
                 <Td>
-                  <button onClick={() => cancel(o)} disabled={busyId === o.id}
-                    className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">
-                    {busyId === o.id ? 'Cancelling…' : 'Cancel'}
-                  </button>
+                  <div className="flex flex-col items-start gap-1.5">
+                    {/* Printed at the counter as the order is handed over. */}
+                    <PrintReceipt order={o as unknown as Record<string, unknown>} label="🖨 Receipt" />
+                    <button onClick={() => cancel(o)} disabled={busyId === o.id}
+                      className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">
+                      {busyId === o.id ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  </div>
                 </Td>
               </tr>
             );

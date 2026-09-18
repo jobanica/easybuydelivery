@@ -36,6 +36,13 @@ export interface AppSettings {
   service_shop?: boolean;
   /** Max active (not delivered/cancelled) orders a rider may hold. 0 = unlimited. */
   max_active_orders_per_rider: number;
+  /**
+   * What the top and bottom of a printed receipt say. Undefined on databases
+   * before migration 0083; null means the line is left off the paper.
+   */
+  receipt_address?: string | null;
+  receipt_contact?: string | null;
+  receipt_footer?: string | null;
   /** Where riders send their daily commission settlement (GCash/Maya). */
   settlement_gcash_number: string | null;
   settlement_gcash_name: string | null;
