@@ -1,15 +1,16 @@
 /**
  * Who works here, and what each of them can open.
  *
- * There are two layers. RLS draws the hard lines (see 0011_staff_rls.sql and
- * 0079_owner_and_permissions.sql): the owner sits above everyone, staff may
- * touch operational tables, and settings and the staff list follow an explicit
- * permission. This file is the layer the console reads to decide which sections
- * to show — the same decision, made client-side so the nav is honest.
+ * There are two layers. RLS draws the hard lines (see 0011_staff_rls.sql,
+ * 0079_owner_and_permissions.sql and 0082_co_owners.sql): owners sit above
+ * everyone, staff may touch operational tables, and settings and the staff list
+ * follow an explicit permission. This file is the layer the console reads to
+ * decide which sections to show — the same decision, made client-side so the
+ * nav is honest.
  *
  * Access can be decided two ways. A role carries a sensible default set, which
  * is how everyone hired before per-person permissions existed still works. Or
- * the owner ticks the sections one person may open, and that list wins outright.
+ * an owner ticks the sections one person may open, and that list wins outright.
  */
 
 export type StaffRole = 'admin' | 'manager' | 'dispatcher' | 'support';
@@ -53,7 +54,7 @@ export const SECTION_NOTE: Record<AdminSection, string> = {
   areas: 'Where you deliver, and the fee bands.',
   users: 'The customer list and who has installed the app.',
   settings: 'Fees, commission, markup, and switching services on or off.',
-  staff: 'See the staff list. Only you can actually change it.',
+  staff: 'See the staff list. Only an owner can actually change it.',
 };
 
 /** Sections each role may open when nobody has ticked anything for them. */
@@ -113,8 +114,11 @@ export function canAccess(access: StaffAccess, section: AdminSection): boolean {
 
 /**
  * Hiring, firing, changing a role, and deciding what anyone may see belong to
- * the owner alone — the database enforces the same rule, so a console that
+ * the owners alone — the database enforces the same rule, so a console that
  * offered these to anyone else would only be lying about what would happen.
+ *
+ * A business may have several owners. They are peers: each can hire and set
+ * access, and none can change another's account.
  */
 export function canManageStaff(access: StaffAccess): boolean {
   return access.isOwner === true;

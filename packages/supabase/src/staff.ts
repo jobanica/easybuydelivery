@@ -15,8 +15,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export interface StaffMember {
   id: string;
   full_name: string | null;
+  /** The address they sign in with — what an operator actually recognises. */
+  email: string | null;
   role: StaffRole;
-  /** The operator who owns the business. Exactly one, and untouchable. */
+  /** An operator who owns the business. Owners are peers, not superiors. */
   is_owner: boolean;
   /** Sections the owner ticked. null = never ticked, so the role decides. */
   permissions: AdminSection[] | null;
@@ -49,22 +51,50 @@ export async function getMyAccess(db: SupabaseClient, userId: string): Promise<M
   };
 }
 
-/** All users holding a staff role, the owner first. */
+/**
+ * Everyone who works here, owners first.
+ *
+ * Goes through `list_staff()` rather than reading `profiles` directly, because
+ * the email lives in `auth.users` and nothing signed in as a normal user may
+ * read that table. Without it, anyone whose display name was never set showed
+ * in the console as eight characters of their uuid — which is not a person.
+ *
+ * Falls back to the plain profile read when the function isn't there yet, so a
+ * console running ahead of migration 0082 still lists staff.
+ */
 export async function listStaff(db: SupabaseClient): Promise<StaffMember[]> {
-  const { data, error } = await db
+  const { data, error } = await db.rpc('list_staff');
+  if (!error) {
+    return ((data ?? []) as Partial<StaffMember>[]).map(toStaffMember);
+  }
+  // 42883 = the function does not exist; PGRST202 = it isn't in the schema cache.
+  if (error.code !== '42883' && error.code !== 'PGRST202') throw error;
+
+  const fallback = await db
     .from('profiles')
     .select('*')
     .in('role', STAFF_ROLES)
     .order('role');
-  if (error) throw error;
-  const rows = (data ?? []) as Partial<StaffMember>[];
-  return rows.map((r) => ({
+  if (fallback.error) throw fallback.error;
+  return ((fallback.data ?? []) as Partial<StaffMember>[])
+    .map(toStaffMember)
+    .sort((a, b) => Number(b.is_owner) - Number(a.is_owner));
+}
+
+function toStaffMember(r: Partial<StaffMember>): StaffMember {
+  return {
     id: r.id as string,
     full_name: r.full_name ?? null,
+    email: r.email ?? null,
     role: r.role as StaffRole,
     is_owner: r.is_owner === true,
     permissions: r.permissions ?? null,
-  })).sort((a, b) => Number(b.is_owner) - Number(a.is_owner));
+  };
+}
+
+/** What to call this person on screen: their email, then a name, then the id. */
+export function staffLabel(m: StaffMember): string {
+  return m.email ?? m.full_name ?? m.id.slice(0, 8);
 }
 
 /** Change a user's role. Owner only, enforced by the database. */

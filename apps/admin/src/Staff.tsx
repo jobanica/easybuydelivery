@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  listStaff, setUserRole, setStaffPermissions, revokeStaff, createStaff, type StaffMember,
+  listStaff, setUserRole, setStaffPermissions, revokeStaff, createStaff, staffLabel,
+  type StaffMember,
 } from '@ebd/supabase';
 import {
   STAFF_ROLES, ROLE_LABEL, ALL_SECTIONS, SECTION_LABEL, SECTION_NOTE,
@@ -12,9 +13,10 @@ import { useAdminAccess } from './AdminGate.tsx';
 import { Card, Muted, ErrorNote } from './ui.tsx';
 
 const SAMPLE: StaffMember[] = [
-  { id: 's1', full_name: 'owner@easybuy.ph', role: 'admin', is_owner: true, permissions: null },
-  { id: 's2', full_name: 'manager@easybuy.ph', role: 'manager', is_owner: false, permissions: null },
-  { id: 's3', full_name: 'dispatch@easybuy.ph', role: 'dispatcher', is_owner: false, permissions: ['dashboard', 'orders'] },
+  { id: 's1', full_name: null, email: 'owner@easybuy.ph', role: 'admin', is_owner: true, permissions: null },
+  { id: 's0', full_name: null, email: 'partner@easybuy.ph', role: 'admin', is_owner: true, permissions: null },
+  { id: 's2', full_name: null, email: 'manager@easybuy.ph', role: 'manager', is_owner: false, permissions: null },
+  { id: 's3', full_name: 'Dispatch', email: 'dispatch@easybuy.ph', role: 'dispatcher', is_owner: false, permissions: ['dashboard', 'orders'] },
 ];
 
 const roleChip: Record<StaffRole, string> = {
@@ -29,9 +31,10 @@ const inp = 'rounded-lg border border-black/10 px-3 py-2 text-sm outline-none fo
 /**
  * The staff list, and the one place where what each of them can open is decided.
  *
- * Only the owner can change anything here — the database enforces it, so this
+ * Only an owner can change anything here — the database enforces it, so this
  * page shows everyone else the list and nothing else rather than offering
- * buttons that would fail.
+ * buttons that would fail. Owners are peers: each can hire and set access, and
+ * none can touch another's account.
  */
 export function Staff() {
   const me = useAdminAccess();
@@ -75,7 +78,7 @@ export function Staff() {
         ? <AddStaff onAdded={load} onError={setError} />
         : (
           <p className="rounded-xl border border-brand-yellow bg-brand-yellow/20 px-3 py-2.5 text-sm">
-            Only the owner can add staff or change what anyone can see. You're looking at the list.
+            Only an owner can add staff or change what anyone can see. You're looking at the list.
           </p>
         )}
 
@@ -115,9 +118,12 @@ function StaffRow({ member, editable, isMe, onRole, onAccess, onRevoke }: {
   return (
     <div className="rounded-xl ring-1 ring-black/5">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {member.full_name ?? member.id.slice(0, 8)}
+        <span className="min-w-0 flex-1 truncate">
+          <span className="text-sm font-medium">{staffLabel(member)}</span>
           {isMe && <span className="ml-1.5 text-xs font-normal text-black/40">(you)</span>}
+          {member.full_name && member.email && member.full_name !== member.email && (
+            <span className="block truncate text-xs text-black/45">{member.full_name}</span>
+          )}
         </span>
 
         {member.is_owner ? (
@@ -159,7 +165,8 @@ function StaffRow({ member, editable, isMe, onRole, onAccess, onRevoke }: {
         <div className="border-t border-black/5 px-3 py-3">
           {member.is_owner ? (
             <p className="text-sm text-black/50">
-              You own this business. Every section is yours, and nobody can take that away or change your account.
+              An owner of this business. Every section is theirs, and nobody — not even another
+              owner — can change their account or take it away.
             </p>
           ) : (
             <AccessChecklist value={sections} custom={custom} readOnly={!editable}
