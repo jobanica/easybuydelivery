@@ -507,19 +507,40 @@ export interface MenuCategoryInput {
   storeId: string;
   title: string;
   sortOrder?: number;
+  /** The department this shelf goes in. Omit for a top-level category. */
+  parentId?: string | null;
 }
 
 /** Create a menu category (section) for a store, e.g. "Rice Meals", "Drinks". */
 export async function createMenuCategory(db: SupabaseClient, input: MenuCategoryInput) {
   const title = input.title.trim();
   if (!title) throw new Error('category title is required');
+  const row: Record<string, unknown> = {
+    store_id: input.storeId, title, sort_order: input.sortOrder ?? 0,
+  };
+  if (input.parentId) row.parent_id = input.parentId;
   const { data, error } = await db
     .from('menu_categories')
-    .insert({ store_id: input.storeId, title, sort_order: input.sortOrder ?? 0 })
+    .insert(row)
     .select('id')
     .single();
   if (error) throw error;
   return (data as { id: string }).id;
+}
+
+/**
+ * File a category under a department, or pull it back out to the top level.
+ *
+ * The database keeps this two levels deep and makes the shelf inherit its
+ * department's food/non-food answer, so both are its business, not the caller's.
+ */
+export async function setCategoryParent(
+  db: SupabaseClient, categoryId: string, parentId: string | null,
+) {
+  const { error } = await db.from('menu_categories')
+    .update({ parent_id: parentId })
+    .eq('id', categoryId);
+  if (error) throw error;
 }
 
 /** Remove a menu category; its items are kept but become uncategorised. */

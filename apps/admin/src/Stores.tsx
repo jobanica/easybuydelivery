@@ -10,6 +10,7 @@ import {
   setMenuItemAvailability,
   createMenuCategory,
   deleteMenuCategory,
+  setCategoryParent,
   uploadStoreLogo,
   uploadMenuItemImage,
   updateMenuItem,
@@ -88,7 +89,7 @@ interface ItemRow {
   /** What the customer is quoted — shelf price plus the resolved mark-up. */
   markup?: number; customer_price?: number;
 }
-interface CatRow { id: string; title: string; sort_order: number; kind?: 'food' | 'non_food'; image_url?: string | null }
+interface CatRow { id: string; title: string; sort_order: number; kind?: 'food' | 'non_food'; image_url?: string | null; parent_id?: string | null }
 interface GroupRow { id: string; menu_item_id: string; name: string; required: boolean; multi_select: boolean; sort_order: number }
 interface OptRow { id: string; menu_item_id: string; group_id: string | null; option_name: string; price_delta: number }
 
@@ -403,6 +404,82 @@ function LocationEditor({ store, onSaved }: { store: StoreRow; onSaved: () => vo
   );
 }
 
+/**
+ * One category: its logo, its name, where it sits, and the way to delete it.
+ *
+ * Food or non-food is the department's answer alone — a shelf inherits it,
+ * because a shelf that disagreed with the department it sits in could never be
+ * reached. Moving a category into a department is the same control that takes
+ * it back out again.
+ */
+function CategoryRow({ cat, depts, isOwnShop, onReload, onRemove }: {
+  cat: CatRow;
+  depts: CatRow[];
+  isOwnShop: boolean;
+  onReload: () => Promise<void>;
+  onRemove: () => void;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  const nonFood = cat.kind === 'non_food';
+  const isDept = !cat.parent_id;
+  // A category with shelves under it cannot itself be filed away, so it is not
+  // offered the choice — the database would refuse anyway.
+  const canMove = depts.some((d) => d.id !== cat.id);
+
+  async function move(parentId: string) {
+    if (!supabase) return;
+    setErr(null);
+    try { await setCategoryParent(supabase, cat.id, parentId || null); await onReload(); }
+    catch (e) { setErr(errMessage(e)); }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-black/5">
+        {/* A supplier's logo makes the shelf recognisable at a glance. */}
+        <ImageUpload url={cat.image_url ?? null} size="h-10 w-10" rounded="rounded-lg"
+          onUpload={async (file) => { if (supabase) { await uploadCategoryImage(supabase, cat.id, file); await onReload(); } }} />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{cat.title}</span>
+
+        {isOwnShop && canMove && (
+          <select value={cat.parent_id ?? ''} onChange={(e) => void move(e.target.value)}
+            title="Which department this sits in"
+            className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] text-black/60">
+            <option value="">Department</option>
+            {depts.filter((d) => d.id !== cat.id).map((d) => (
+              <option key={d.id} value={d.id}>in {d.title}</option>
+            ))}
+          </select>
+        )}
+
+        {isOwnShop && (isDept ? (
+          <button
+            onClick={async () => {
+              if (!supabase) return;
+              await setCategoryKind(supabase, cat.id, nonFood ? 'food' : 'non_food');
+              await onReload();
+            }}
+            title="Switch between Food and Non-food"
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
+            {nonFood ? 'Non-food' : 'Food'}
+          </button>
+        ) : (
+          <span title="Follows its department"
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold opacity-50 ${
+              nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
+            {nonFood ? 'Non-food' : 'Food'}
+          </span>
+        ))}
+
+        <button onClick={onRemove} title="Delete category"
+          className="shrink-0 text-black/30 hover:text-red-600">×</button>
+      </div>
+      {err && <p className="mt-1 px-3 text-[11px] text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop?: boolean }) {
   const [cats, setCats] = useState<CatRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -410,6 +487,8 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [catTitle, setCatTitle] = useState('');
+  // Which department a new category goes in. '' = a department of its own.
+  const [catParent, setCatParent] = useState('');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [catId, setCatId] = useState(''); // category for the new item ('' = uncategorised)
@@ -429,7 +508,10 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
   async function addCategory(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !catTitle.trim()) return;
-    await createMenuCategory(supabase, { storeId, title: catTitle.trim(), sortOrder: cats.length });
+    await createMenuCategory(supabase, {
+      storeId, title: catTitle.trim(), sortOrder: cats.length,
+      parentId: catParent || null,
+    });
     setCatTitle('');
     await load();
   }
@@ -451,10 +533,18 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
 
   // Group items under their category, with an "Uncategorised" bucket last.
   const knownCat = new Set(cats.map((c) => c.id));
+  // Departments first, each followed by its own shelves, so the editor reads in
+  // the same order the customer walks through.
+  const orderedCats = cats.filter((c) => !c.parent_id)
+    .flatMap((d) => [d, ...cats.filter((c) => c.parent_id === d.id)]);
   const sections: { cat: CatRow | null; rows: ItemRow[] }[] = [
-    ...cats.map((c) => ({ cat: c, rows: items.filter((i) => i.category_id === c.id) })),
+    ...orderedCats.map((c) => ({ cat: c, rows: items.filter((i) => i.category_id === c.id) })),
     { cat: null, rows: items.filter((i) => !i.category_id || !knownCat.has(i.category_id)) },
   ];
+
+  // A department is a category with nothing above it. Only those can take
+  // shelves, so only those are offered as a destination.
+  const departments = cats.filter((c) => !c.parent_id);
 
   return (
     <div className="border-t border-black/5 bg-black/[0.015] p-4">
@@ -462,37 +552,31 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
       <div className="mb-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/40">Categories</p>
         <div className="mb-2 space-y-1.5">
-          {cats.map((c) => {
-            const nonFood = c.kind === 'non_food';
-            return (
-              <div key={c.id} className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-black/5">
-                {/* A supplier's logo makes the shelf recognisable at a glance. */}
-                <ImageUpload url={c.image_url ?? null} size="h-10 w-10" rounded="rounded-lg"
-                  onUpload={async (file) => { if (supabase) { await uploadCategoryImage(supabase, c.id, file); await load(); } }} />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.title}</span>
-                {isOwnShop && (
-                  <button
-                    onClick={async () => {
-                      if (!supabase) return;
-                      await setCategoryKind(supabase, c.id, nonFood ? 'food' : 'non_food');
-                      await load();
-                    }}
-                    title="Switch between Food and Non-food"
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      nonFood ? 'bg-brand-purple/15 text-brand-purple' : 'bg-brand-green/15 text-green-800'}`}>
-                    {nonFood ? 'Non-food' : 'Food'}
-                  </button>
-                )}
-                <button onClick={() => removeCategory(c.id)} title="Delete category"
-                  className="shrink-0 text-black/30 hover:text-red-600">×</button>
-              </div>
-            );
-          })}
+          {/* Departments first, each with its shelves indented under it. A shop
+              that files nothing reads as one flat list, exactly as before. */}
+          {cats.filter((c) => !c.parent_id).map((dept) => (
+            <div key={dept.id} className="space-y-1.5">
+              <CategoryRow cat={dept} depts={departments} isOwnShop={isOwnShop}
+                onReload={load} onRemove={() => removeCategory(dept.id)} />
+              {cats.filter((c) => c.parent_id === dept.id).map((child) => (
+                <div key={child.id} className="pl-6">
+                  <CategoryRow cat={child} depts={departments} isOwnShop={isOwnShop}
+                    onReload={load} onRemove={() => removeCategory(child.id)} />
+                </div>
+              ))}
+            </div>
+          ))}
           {cats.length === 0 && <span className="text-xs text-black/40">No categories yet.</span>}
         </div>
-        <form onSubmit={addCategory} className="flex gap-2">
-          <input className={inp + ' flex-1'} placeholder="New category (e.g. Rice Meals, Drinks)"
+        <form onSubmit={addCategory} className="flex flex-wrap gap-2">
+          <input className={inp + ' min-w-[10rem] flex-1'} placeholder="New category (e.g. Rice Meals, Drinks)"
             value={catTitle} onChange={(e) => setCatTitle(e.target.value)} />
+          {departments.length > 0 && (
+            <select className={inp} value={catParent} onChange={(e) => setCatParent(e.target.value)}>
+              <option value="">Its own department</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>Inside {d.title}</option>)}
+            </select>
+          )}
           <button className="rounded-lg bg-brand-green px-3 py-2 text-sm font-medium text-white">Add category</button>
         </form>
       </div>
@@ -567,7 +651,9 @@ function MenuEditor({ storeId, isOwnShop = false }: { storeId: string; isOwnShop
         <input className={inp + ' w-24'} placeholder="Price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
         <select className={inp} value={catId} onChange={(e) => setCatId(e.target.value)}>
           <option value="">No category</option>
-          {cats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          {orderedCats.map((c) => (
+            <option key={c.id} value={c.id}>{c.parent_id ? `\u2014 ${c.title}` : c.title}</option>
+          ))}
         </select>
         <button className="rounded-lg bg-brand-purple px-3 py-2 text-sm font-medium text-white">Add item</button>
       </form>
@@ -654,7 +740,11 @@ function ItemEditor({ item, groups, options, cats, onSaved, sources }:
         <label className="text-xs font-medium text-black/60">Category
           <select className={inp + ' mt-1 w-full'} value={cat} onChange={(e) => setCat(e.target.value)}>
             <option value="">No category</option>
-            {cats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+            {cats.filter((c) => !c.parent_id)
+              .flatMap((d) => [d, ...cats.filter((c) => c.parent_id === d.id)])
+              .map((c) => (
+                <option key={c.id} value={c.id}>{c.parent_id ? `\u2014 ${c.title}` : c.title}</option>
+              ))}
           </select></label>
       </div>
       <div className="flex items-center gap-3">

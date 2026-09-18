@@ -36,7 +36,7 @@ interface Choice { name: string; priceDelta: number }
 interface CustomGroup { id: string; name: string; required: boolean; multi: boolean; choices: Choice[] }
 interface MenuItem { id: string; name: string; price: number; description?: string; image_url?: string | null; category_id: string | null; groups: CustomGroup[] }
 type ShopKind = 'food' | 'non_food';
-interface Category { id: string; title: string; kind?: ShopKind; image_url?: string | null }
+interface Category { id: string; title: string; kind?: ShopKind; image_url?: string | null; parent_id?: string | null }
 interface Store { id: string; name: string; category: string; address?: string | null; items: MenuItem[]; categories: Category[]; lat: number | null; lng: number | null; logo_url?: string | null; opens_at?: string | null; closes_at?: string | null; open_days?: number[] | null; loaded: boolean }
 
 /** Build the per-item customization groups from a listMenu() result. */
@@ -50,8 +50,14 @@ function buildStoreMenu(menu: Awaited<ReturnType<typeof listMenu>>): { categorie
     groupsByItem.set(g.menu_item_id, arr);
   }
   return {
-    categories: ((menu.categories ?? []) as { id: string; title: string; kind?: ShopKind; image_url?: string | null }[])
-      .map((c) => ({ id: c.id, title: c.title, kind: c.kind, image_url: c.image_url ?? null })),
+    categories: ((menu.categories ?? []) as { id: string; title: string; kind?: ShopKind; image_url?: string | null; parent_id?: string | null }[])
+      .map((c) => ({
+        id: c.id, title: c.title, kind: c.kind,
+        image_url: c.image_url ?? null,
+        // Absent until migration 0081; everything then reads as a department,
+        // which is exactly how the shop behaved before departments existed.
+        parent_id: c.parent_id ?? null,
+      })),
     // `customer_price` already carries the operator's mark-up; the shelf price
     // behind it is the rider's business, not the customer's.
     items: (menu.items as unknown as { id: string; name: string; price: number; customer_price: number; description?: string; image_url?: string | null; category_id?: string | null }[])
@@ -106,6 +112,9 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   // Which half of the own shop's shelves the customer is browsing. Null means
   // they have not chosen yet, which is the first thing the shop asks.
   const [shopKind, setShopKind] = useState<ShopKind | null>(null);
+  // Which department they have walked into. Null means they are still standing
+  // in front of the row of them.
+  const [shopDept, setShopDept] = useState<string | null>(null);
   // The shop sells sacks of rice and cases of softdrinks; plenty of customers
   // would rather collect. Restaurants never ask — they only ever deliver.
   const [collect, setCollect] = useState(false);
@@ -253,10 +262,10 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   useAreaBackfill({ addresses: saved.addresses, chosenId: chosenAddressId, area, reload: saved.reload });
 
   // Reset menu filters whenever the open restaurant changes.
-  useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); }, [openStoreId]);
-  useEffect(() => { setMenuCat(''); setMenuSearch(''); }, [shopKind]);
+  useEffect(() => { setMenuCat(''); setMenuSearch(''); setCustomizingId(null); setShopDept(null); }, [openStoreId]);
+  useEffect(() => { setMenuCat(''); setMenuSearch(''); setShopDept(null); }, [shopKind]);
   // Coming back to the shop starts at the question again, not wherever they left.
-  useEffect(() => { if (!shopMode) { setShopKind(null); setCollect(false); } }, [shopMode]);
+  useEffect(() => { if (!shopMode) { setShopKind(null); setCollect(false); setShopDept(null); } }, [shopMode]);
 
   // Lazily load a restaurant's menu the first time it's opened.
   const [menuLoading, setMenuLoading] = useState(false);
@@ -307,9 +316,13 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   const shownCategories = kindCatIds ? shopCats.filter((c) => kindCatIds.has(c.id)) : shopCats;
 
   // Menu items filtered by the chosen half, the selected category + search box.
+  // In the shop the "selected category" may be a department the operator never
+  // put shelves in, in which case its own products are what's on screen.
+  const shownCatId = menuCat || (shopMode && shopDept && !shopCats.some((c) => c.parent_id === shopDept)
+    ? shopDept : '');
   const menuItems = (openStore?.items ?? []).filter((it) => {
     if (kindCatIds && !(it.category_id && kindCatIds.has(it.category_id))) return false;
-    if (menuCat && it.category_id !== menuCat) return false;
+    if (shownCatId && it.category_id !== shownCatId) return false;
     if (menuSearch.trim() && !it.name.toLowerCase().includes(menuSearch.trim().toLowerCase())) return false;
     return true;
   });
@@ -319,14 +332,44 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
   // shampoo is not, so the shelves come first and the products come after one
   // is chosen. Searching goes straight past them — someone typing a name has
   // already said which shelf they want.
-  const shopShelves = shopMode ? shownCategories : [];
+  //
+  // Shelves now stand in departments: Meat Products holds the brands, Grocery
+  // holds something else entirely. A department with nothing under it is itself
+  // a shelf and opens straight onto its products, so a shop that never files
+  // anything behaves exactly as it did before departments existed.
+  const childrenOf = (id: string) => shownCategories.filter((c) => c.parent_id === id);
+  const shopDepartments = shopMode ? shownCategories.filter((c) => !c.parent_id) : [];
+  const openDept = shopDepartments.find((c) => c.id === shopDept) ?? null;
+  const deptShelves = openDept ? childrenOf(openDept.id) : [];
+
   const countInCat = (id: string) => (openStore?.items ?? [])
     .filter((it) => it.category_id === id).length;
-  const browsingShelves = shopShelves.length > 0 && !menuCat && !menuSearch.trim();
-  const openShelf = shopShelves.find((c) => c.id === menuCat) ?? null;
+  /** A department is worth as much as everything on its shelves. */
+  const countUnder = (id: string): number =>
+    countInCat(id) + childrenOf(id).reduce((n, k) => n + countInCat(k.id), 0);
 
-  /** Back out of a shelf to the row of shelves, whatever got us in there. */
-  const backToShelves = () => { setMenuCat(''); setMenuSearch(''); };
+  const searching = Boolean(menuSearch.trim());
+  // Which row of tiles, if any, stands in front of the products right now.
+  const shelfRow: Category[] | null = !shopMode || searching || menuCat ? null
+    : !openDept ? (shopDepartments.length > 0 ? shopDepartments : null)
+      : deptShelves.length > 0 ? deptShelves
+        : null;
+  const browsingShelves = shelfRow !== null;
+  // The one whose products are on screen: a chosen shelf, or a childless
+  // department standing in for one.
+  const openShelf = shownCategories.find((c) => c.id === menuCat)
+    ?? (openDept && deptShelves.length === 0 ? openDept : null);
+
+  /** One step back out: a search, then a shelf, then the department. */
+  const backToShelves = () => {
+    if (menuSearch.trim()) { setMenuSearch(''); return; }
+    if (menuCat) { setMenuCat(''); return; }
+    setShopDept(null);
+  };
+  /** Tapping a tile: a department is walked into, a shelf is opened. */
+  const pickTile = (c: Category) => {
+    if (!openDept) setShopDept(c.id); else setMenuCat(c.id);
+  };
   const customizingItem = (openStore?.items ?? []).find((it) => it.id === customizingId) ?? null;
 
   // Cart grouped by store (one order → one rider visits each store).
@@ -464,9 +507,11 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
         <StoreDetail
           store={openStore}
           categories={shownCategories}
-          shelves={browsingShelves ? shopShelves : null}
-          shelfCount={countInCat}
+          shelves={shelfRow}
+          shelfCount={openDept ? countInCat : countUnder}
+          onPickShelf={pickTile}
           openShelf={openShelf}
+          deptLabel={openDept && deptShelves.length > 0 ? openDept.title : null}
           kindLabel={shopKind && hasBothKinds ? (shopKind === 'food' ? 'Food' : 'Non-food') : null}
           onChangeKind={hasBothKinds ? () => setShopKind(null) : null}
           fees={fees}
@@ -476,10 +521,11 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           menuSearch={menuSearch} setMenuSearch={setMenuSearch}
           onBack={
             !shopMode ? () => setOpenStoreId(null)
-              // Inside a shelf, back is the way out to the shelves. Standing at
-              // the shelves, it is the way back to food vs non-food — and when
-              // the shop only stocks one half, there is nowhere further back.
-              : !browsingShelves ? backToShelves
+              // Inside a shelf or a department, back is one step out. Standing
+              // at the row of departments, it is the way back to food vs
+              // non-food — and when the shop only stocks one half, there is
+              // nowhere further back to go.
+              : (!browsingShelves || openDept) ? backToShelves
                 : hasBothKinds ? () => setShopKind(null) : null
           }
           onAdd={(it) => addToCart(openStore, it)}
@@ -834,7 +880,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
 }
 
 /** Restaurant detail: hero, info card, category tabs, 2-column menu grid. */
-function StoreDetail({ store, categories, shelves, shelfCount, openShelf, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
+function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, openShelf, deptLabel, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
   store: Store;
   /** The categories to tab through — narrowed to one half inside the own shop. */
   categories?: Category[];
@@ -842,8 +888,12 @@ function StoreDetail({ store, categories, shelves, shelfCount, openShelf, kindLa
   shelves?: Category[] | null;
   /** How many products sit on a shelf, so an empty one says so before it's opened. */
   shelfCount?: (categoryId: string) => number;
+  /** Walking into a department, or opening a shelf — the caller knows which. */
+  onPickShelf?: (c: Category) => void;
   /** The shelf currently being browsed, named above its products. */
   openShelf?: Category | null;
+  /** The department whose shelves are on screen, named above them. */
+  deptLabel?: string | null;
   /** "Food" / "Non-food" when the shop is split, so the customer can see which half they are in. */
   kindLabel?: string | null;
   onChangeKind?: (() => void) | null;
@@ -937,33 +987,45 @@ function StoreDetail({ store, categories, shelves, shelfCount, openShelf, kindLa
 
       {/* The shop's shelves. Chosen first, so products never arrive in a heap. */}
       {shelves ? (
-        shelves.length === 0 ? (
-          <p className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-black/45 shadow-sm ring-1 ring-black/5">
-            Nothing stocked here yet.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {shelves.map((c) => {
-              const n = shelfCount?.(c.id) ?? 0;
-              return (
-                <button key={c.id} onClick={() => setMenuCat(c.id)}
-                  className="flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
-                  <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
-                    {c.image_url
-                      ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
-                      : <div className="flex h-full w-full items-center justify-center text-4xl">🗂️</div>}
-                  </div>
-                  <div className="p-3">
-                    <p className="text-sm font-bold leading-tight">{c.title}</p>
-                    <p className="mt-0.5 text-xs text-black/45">
-                      {n === 0 ? 'Coming soon' : `${n} item${n === 1 ? '' : 's'}`}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )
+        <>
+          {/* Which department these shelves belong to, and the way back out. */}
+          {deptLabel && (
+            <div className="flex items-center gap-2">
+              <h3 className="min-w-0 flex-1 truncate text-lg font-black">{deptLabel}</h3>
+              <button onClick={onBack ?? undefined}
+                className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm ring-1 ring-black/5">
+                All departments
+              </button>
+            </div>
+          )}
+          {shelves.length === 0 ? (
+            <p className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-black/45 shadow-sm ring-1 ring-black/5">
+              Nothing stocked here yet.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {shelves.map((c) => {
+                const n = shelfCount?.(c.id) ?? 0;
+                return (
+                  <button key={c.id} onClick={() => onPickShelf?.(c)}
+                    className="flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-black/[0.04]">
+                      {c.image_url
+                        ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+                        : <div className="flex h-full w-full items-center justify-center text-4xl">🗂️</div>}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm font-bold leading-tight">{c.title}</p>
+                      <p className="mt-0.5 text-xs text-black/45">
+                        {n === 0 ? 'Coming soon' : `${n} item${n === 1 ? '' : 's'}`}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
       ) : (
         <>
           {/* Which shelf these products came off, and the way back to the rest. */}
@@ -972,7 +1034,7 @@ function StoreDetail({ store, categories, shelves, shelfCount, openShelf, kindLa
               <h3 className="min-w-0 flex-1 truncate text-lg font-black">{openShelf.title}</h3>
               <button onClick={onBack ?? undefined}
                 className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm ring-1 ring-black/5">
-                All categories
+                Back
               </button>
             </div>
           )}
