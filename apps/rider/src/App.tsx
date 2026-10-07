@@ -27,7 +27,7 @@ import {
   errMessage,
 } from '@ebd/shared';
 import {
-  subscribeToNewOrders, signOut,
+  subscribeToNewOrders, subscribeToMyOrders, signOut,
   getRiderProfile, updateRiderProfile, uploadRiderPhoto, type RiderProfile,
   getAppSettings, uploadSettlementReceipt, type AppSettings,
 } from '@ebd/supabase';
@@ -44,6 +44,7 @@ import { usePushRegistration } from './usePushRegistration.ts';
 import { useNewOrderAlert } from './useNewOrderAlert.ts';
 import { isAlertMuted, setAlertMuted, playNewOrderAlert } from './alert.ts';
 import { usePlatformStatus, ClosedBanner } from './PlatformStatus.tsx';
+import { CancelledAlert } from './CancelledAlert.tsx';
 import { supabase } from './lib/supabase.ts';
 import { APP_VERSION } from './config.ts';
 import { DeleteAccount } from './DeleteAccount.tsx';
@@ -97,6 +98,18 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
     if (!supabase) return;
     return subscribeToNewOrders(supabase, () => void refresh());
   }, [refresh]);
+
+  // The pool subscription above only fires on somebody else's new order, which
+  // is why a job cancelled out from under this rider used to vanish at an
+  // arbitrary later moment. Watch their own rows too.
+  const [myOrdersChanged, setMyOrdersChanged] = useState(0);
+  useEffect(() => {
+    if (!supabase || !riderId) return;
+    return subscribeToMyOrders(supabase, riderId, () => {
+      setMyOrdersChanged((n) => n + 1);
+      void refresh();
+    });
+  }, [refresh, riderId]);
 
   const locked = isLockedOut(ledger, today);
   const overdue = overdueBalance(ledger, today);
@@ -174,6 +187,12 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 
       <main className="mx-auto max-w-lg px-5 py-4">
         <ClosedBanner status={platform} workLeft={pool.length + active.length} />
+        {/* A job that disappears without explanation is how a rider ends up
+            paying for goods nobody is coming to collect. */}
+        <div className="mb-4">
+          <CancelledAlert refreshKey={myOrdersChanged}
+            data={{ listCancelled: () => data.getCancelledOrders() }} />
+        </div>
         {error && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         {tab === 'dashboard' && (

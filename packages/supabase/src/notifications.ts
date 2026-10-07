@@ -36,6 +36,34 @@ export function subscribeToNewOrders(
   return () => { void db.removeChannel(channel); };
 }
 
+/**
+ * Watch a rider's own orders change under them.
+ *
+ * The pool subscription above only fires on INSERT of a pending order, which
+ * means a rider's list refreshed when somebody *else's* order arrived and at no
+ * other time. An order cancelled out from under them therefore vanished at an
+ * arbitrary later moment with no explanation — or sat on screen for as long as
+ * the app stayed open, being worked on after it had been called off.
+ *
+ * This watches UPDATEs on the rows that are actually theirs, so the app finds
+ * out when something happens to a job they are carrying.
+ */
+export function subscribeToMyOrders(
+  db: SupabaseClient,
+  riderId: string,
+  onChange: (order: { id: string; status: string }) => void,
+): () => void {
+  const channel = db
+    .channel(`rider:${riderId}:orders`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `rider_id=eq.${riderId}` },
+      (payload) => onChange(payload.new as { id: string; status: string }),
+    )
+    .subscribe();
+  return () => { void db.removeChannel(channel); };
+}
+
 /** Upsert a rider's device push token (FCM/APNs). */
 export async function saveRiderPushToken(
   db: SupabaseClient,

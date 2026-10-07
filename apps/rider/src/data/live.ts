@@ -2,6 +2,7 @@ import { manilaDay, type EarningRecord, type LedgerEntry, type OrderStatus } fro
 import {
   listOpenOrders,
   listRiderActiveOrders,
+  listRiderCancelledOrders,
   listRiderLedger,
   listRiderEarnings,
   acceptOrder,
@@ -105,6 +106,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async getActiveOrders() {
       return (await listRiderActiveOrders(db, riderId)).map((r) => toRiderOrder(r as Record<string, unknown>));
+    },
+    async getCancelledOrders() {
+      return (await listRiderCancelledOrders(db, riderId)) as unknown as Record<string, unknown>[];
     },
     async getLedger() {
       return (await listRiderLedger(db, riderId)).map((r): LedgerEntry => {

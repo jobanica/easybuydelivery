@@ -89,3 +89,43 @@ export function playNewOrderAlert(): void {
       .vibrate?.([180, 90, 180]);
   } catch { /* ignore */ }
 }
+
+/** One two-note tone, falling. The opposite shape to a new request. */
+function thud(at: number): void {
+  if (!ctx) return;
+  for (const [i, freq] of [660, 440].entries()) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    const start = at + i * 0.2;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.35, start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.26);
+  }
+}
+
+/**
+ * Announce that a job has been called off.
+ *
+ * Deliberately the inverse of a new request: falling where that rises, so a
+ * rider with the phone in their pocket knows which of the two it was without
+ * looking. A longer buzz, too — this one is worth stopping for, because the
+ * alternative is paying for goods nobody is coming to collect.
+ */
+export function playCancelAlert(): void {
+  if (isAlertMuted()) return;
+  try {
+    if (ctx && ctx.state !== 'closed') {
+      if (ctx.state === 'suspended') void ctx.resume();
+      thud(ctx.currentTime);
+    }
+  } catch { /* fall through to the buzz */ }
+  try {
+    (navigator as Navigator & { vibrate?: (p: number | number[]) => boolean })
+      .vibrate?.([400, 120, 400]);
+  } catch { /* ignore */ }
+}

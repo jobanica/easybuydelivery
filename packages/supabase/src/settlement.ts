@@ -23,6 +23,36 @@ export async function listRiderActiveOrders(db: SupabaseClient, riderId: string)
   return data ?? [];
 }
 
+/**
+ * Orders cancelled out from under this rider, recently enough to still matter.
+ *
+ * A cancelled order drops out of the active list by design — it is not work any
+ * more. But dropping silently is how a rider ends up at a counter paying for
+ * goods nobody is going to collect, so the app needs to be able to say what
+ * went, and why, rather than simply showing one fewer card than before.
+ *
+ * `cancelled_at` arrives with migration 0084; before it, the column is absent
+ * and this returns nothing rather than erroring, which is the same silence the
+ * rider had before and no worse.
+ */
+export async function listRiderCancelledOrders(
+  db: SupabaseClient, riderId: string, sinceHours = 24,
+) {
+  const since = new Date(Date.now() - sinceHours * 3600_000).toISOString();
+  const { data, error } = await db
+    .from('orders')
+    .select('id, service_type, status, notes, cancelled_at, created_at, goods_cost, delivery_fee, customer_name, delivery_address, order_stores(store:stores(name))')
+    .eq('rider_id', riderId)
+    .eq('status', 'cancelled')
+    .gte('cancelled_at', since)
+    .order('cancelled_at', { ascending: false });
+  if (error) {
+    if (error.code === '42703') return [];
+    throw error;
+  }
+  return data ?? [];
+}
+
 /** Manila is UTC+8 year-round (no DST), so a business day is a fixed offset. */
 const MANILA_OFFSET = '+08:00';
 

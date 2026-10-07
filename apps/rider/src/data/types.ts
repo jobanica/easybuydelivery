@@ -77,6 +77,8 @@ export interface RiderData {
   setOnline(online: boolean): Promise<boolean>;
   getOpenOrders(): Promise<RiderOrder[]>;
   getActiveOrders(): Promise<RiderOrder[]>;
+  /** Orders cancelled out from under this rider in the last day. */
+  getCancelledOrders(): Promise<Record<string, unknown>[]>;
   getLedger(): Promise<LedgerEntry[]>;
   /** Completed deliveries between two business days (inclusive), for earnings. */
   getEarnings(fromDay: string, toDay: string): Promise<EarningRecord[]>;

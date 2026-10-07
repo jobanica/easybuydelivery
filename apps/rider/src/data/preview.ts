@@ -149,6 +149,18 @@ export function createPreviewData(): RiderData {
     async setOnline(v) { online = v; return online; },
     async getOpenOrders() { return [...open]; },
     async getActiveOrders() { return [...active]; },
+    async getCancelledOrders() {
+      // One cancelled job, so the notice can be seen without a live database.
+      return [{
+        id: 'cancelled-demo',
+        service_type: 'pabili',
+        notes: 'Cancelled by admin: customer changed their mind',
+        goods_cost: 819,
+        customer_name: 'Maria Santos',
+        delivery_address: 'Purok 3, Pulongmasle, Guagua',
+        order_stores: [{ store: { name: 'Puregold' } }],
+      }] as unknown as Record<string, unknown>[];
+    },
     async getLedger() { return [...ledger]; },
     async getEarnings(fromDay, toDay) { return filterEarnings(earnings, { from: fromDay, to: toDay }); },
     async declineOrder(orderId) { declined.add(orderId); },
