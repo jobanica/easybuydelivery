@@ -61,7 +61,11 @@ The unified queue. One row per order regardless of surface (web/mobile).
 - **Pabili:** `estimated_amount`, `budget_cap`, `actual_amount`
 - **Padala:** `pickup_lat/lng`, `pickup_contact`, `dropoff_lat/lng`, `dropoff_contact`,
   `item_description`, `fee_payer` (`sender` | `receiver`)
-- `delivery_lat/lng`, `customer_contact`, `notes`, `created_at`
+- `delivery_lat/lng`, `customer_contact`, `customer_name`, `notes`, `created_at`
+- `delivered_at` — stamped when the order reaches `delivered`; the business day
+  the rider's earnings and commission are booked against
+- `customer_name` is denormalized from `customers.name` on insert (riders can't
+  read the customers table), so the pool shows who the order is for
 
 ### `order_items`
 Food/Pabili line items.
