@@ -58,13 +58,10 @@ as $$
 declare
   n        int;
   v_reason text := nullif(btrim(p_reason), '');
-  v_rider  uuid;
 begin
   if not is_staff() then
     raise exception 'not authorised';
   end if;
-
-  select rider_id into v_rider from orders where id = p_order_id;
 
   update orders set
     status = 'cancelled',
