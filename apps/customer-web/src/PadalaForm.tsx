@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { type FeePayer, errMessage } from '@ebd/shared';
-import { buildPadalaOrderRow, createPadalaOrder, type PadalaRequestInput } from '@ebd/supabase';
+import { buildPadalaOrderRow, createPadalaOrder, pushAboutOrder, type PadalaRequestInput } from '@ebd/supabase';
 import { resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG, type DeliveryFeeModel, type DistanceFeeConfig } from '@ebd/shared';
 import { getAppSettings } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -168,7 +168,11 @@ export function PadalaForm() {
       if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(form.customerContact, custName.trim());
-        setCreatedId(await createPadalaOrder(supabase, toInput(customerId)));
+        const orderId = await createPadalaOrder(supabase, toInput(customerId));
+        setCreatedId(orderId);
+        // Wake the riders who could take it. The pool subscription only
+        // reaches an app that is open; this reaches a phone in a pocket.
+        void pushAboutOrder(supabase, orderId, 'new_order').catch(() => {});
       } else {
         buildPadalaOrderRow(toInput('preview-customer'));
         setCreatedId('preview-only');

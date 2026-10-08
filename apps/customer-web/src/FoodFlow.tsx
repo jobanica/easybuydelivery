@@ -18,7 +18,7 @@ import {
   type FeeConfig,
   errMessage,
 } from '@ebd/shared';
-import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, getAppSettings } from '@ebd/supabase';
+import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, pushAboutOrder, getAppSettings } from '@ebd/supabase';
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import { AddressChooser, useSavedAddresses, useAreaBackfill } from './AddressChooser.tsx';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
@@ -438,7 +438,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
       if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(contact.trim(), custName.trim() || undefined);
-        setCreatedId(await createFoodOrder(supabase, {
+        const orderId = await createFoodOrder(supabase, {
           customerId,
           customerContact: contact.trim(),
           customerName: custName.trim() || undefined,
@@ -463,7 +463,11 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           // gateway behind it, so orders were marked settled while no money had
           // moved. It is paid when someone actually hands it over.
           paid: false,
-        }, fees.config));
+        }, fees.config);
+        setCreatedId(orderId);
+        // Wake the riders who could take it. The pool subscription only
+        // reaches an app that is open; this reaches a phone in a pocket.
+        void pushAboutOrder(supabase, orderId, 'new_order').catch(() => {});
       } else {
         buildFoodOrder({
           customerId: 'preview-customer', customerContact: contact.trim() || '09171234567',

@@ -4,7 +4,7 @@ import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
   type DeliveryFeeModel, type DistanceFeeConfig,
   errMessage,
 } from '@ebd/shared';
-import { buildPabiliOrderRow, createPabiliOrder, getAppSettings, pabiliItemsSummary,
+import { buildPabiliOrderRow, createPabiliOrder, pushAboutOrder, getAppSettings, pabiliItemsSummary,
   type PabiliRequestInput, type PabiliItemInput, type PabiliStoreInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
@@ -210,7 +210,11 @@ export function PabiliForm() {
       if (await riders.recheck() === 0) { setError(NO_RIDERS_MESSAGE); return; }
       if (supabase && isSupabaseConfigured) {
         const customerId = await ensureContact(form.customerContact, custName.trim());
-        setCreatedId(await createPabiliOrder(supabase, toInput(customerId), { ...DEFAULT_FEE_CONFIG, perStoreFee }));
+        const orderId = await createPabiliOrder(supabase, toInput(customerId), { ...DEFAULT_FEE_CONFIG, perStoreFee });
+        setCreatedId(orderId);
+        // Wake the riders who could take it. The pool subscription only
+        // reaches an app that is open; this reaches a phone in a pocket.
+        void pushAboutOrder(supabase, orderId, 'new_order').catch(() => {});
       } else {
         buildPabiliOrderRow(toInput('preview-customer'));
         setCreatedId('preview-only');

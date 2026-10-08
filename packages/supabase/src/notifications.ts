@@ -77,3 +77,59 @@ export async function saveRiderPushToken(
       { onConflict: 'rider_id,token' });
   if (error) throw error;
 }
+
+/**
+ * Store a browser push subscription for this rider.
+ *
+ * Not one opaque token but an endpoint and two keys: web push encrypts each
+ * payload to the device that will read it, so the server cannot send without
+ * them. The endpoint doubles as the identity, which is why it goes in `token`.
+ */
+export async function saveRiderWebPush(
+  db: SupabaseClient,
+  riderId: string,
+  sub: { endpoint: string; p256dh: string; auth: string },
+) {
+  const { error } = await db
+    .from('rider_push_tokens')
+    .upsert({
+      rider_id: riderId,
+      token: sub.endpoint,
+      platform: 'web',
+      p256dh: sub.p256dh,
+      auth: sub.auth,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'rider_id,token' });
+  if (error) throw error;
+}
+
+/** Forget this device's subscription — the rider turned notifications off. */
+export async function removeRiderWebPush(
+  db: SupabaseClient, riderId: string, endpoint: string,
+) {
+  const { error } = await db
+    .from('rider_push_tokens')
+    .delete()
+    .eq('rider_id', riderId)
+    .eq('token', endpoint);
+  if (error) throw error;
+}
+
+/**
+ * Ask the server to push about this order.
+ *
+ * Invoked from whoever caused the event — the operator's console on a
+ * cancellation — rather than from a database trigger, so there is no service
+ * key sitting in the database and no webhook to configure by hand. The function
+ * checks the caller is entitled to tell anyone about this order before it
+ * sends, so being client-invoked costs nothing in safety.
+ */
+export async function pushAboutOrder(
+  db: SupabaseClient, orderId: string, kind: 'cancelled' | 'new_order',
+): Promise<{ sent: number; failed: number }> {
+  const { data, error } = await db.functions.invoke('push-riders', {
+    body: { orderId, kind },
+  });
+  if (error) throw error;
+  return data as { sent: number; failed: number };
+}

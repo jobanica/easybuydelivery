@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listActiveOrdersAdmin, adminCancelOrder } from '@ebd/supabase';
+import { listActiveOrdersAdmin, adminCancelOrder, pushAboutOrder } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import {
   listDeliveryOptions, adminSetDelivery, adminAdvanceOrder, operatorFlow,
@@ -72,6 +72,11 @@ export function LiveOrders({ embedded = false }: { embedded?: boolean }) {
     try {
       const ok = await adminCancelOrder(supabase, o.id, reason.trim() || undefined);
       if (!ok) window.alert('This order could not be cancelled (already delivered?).');
+      // Wake the rider's phone. The chat message and the in-app notice only
+      // reach someone with the app open; this is the one that reaches a rider
+      // halfway to a shop. A failure here must not look like a failed cancel —
+      // the order is already called off either way.
+      if (ok) await pushAboutOrder(supabase, o.id, 'cancelled').catch(() => {});
       await reload();
     } catch (e) { setError(errMessage(e)); }
     finally { setBusyId(null); }

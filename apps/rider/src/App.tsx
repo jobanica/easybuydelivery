@@ -45,6 +45,7 @@ import { useNewOrderAlert } from './useNewOrderAlert.ts';
 import { isAlertMuted, setAlertMuted, playNewOrderAlert } from './alert.ts';
 import { usePlatformStatus, ClosedBanner } from './PlatformStatus.tsx';
 import { CancelledAlert } from './CancelledAlert.tsx';
+import { useWebPush } from './useWebPush.ts';
 import { supabase } from './lib/supabase.ts';
 import { APP_VERSION } from './config.ts';
 import { DeleteAccount } from './DeleteAccount.tsx';
@@ -259,7 +260,7 @@ export function App({ riderId, riderName }: { riderId?: string; riderName?: stri
 
         {tab === 'settings' && (
           <SettingsView live={data.live} online={online} busy={onlineBusy} onToggleOnline={toggleOnline}
-            profile={profile} onProfileSaved={loadProfile} />
+            profile={profile} onProfileSaved={loadProfile} riderId={riderId} />
         )}
       </main>
 
@@ -1883,9 +1884,10 @@ function SettingsCard({ title, children }: { title: string; children: React.Reac
 
 const settingsInp = 'w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/30';
 
-function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSaved }: {
+function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSaved, riderId }: {
   live: boolean; online: boolean; busy: boolean; onToggleOnline: () => void;
   profile: RiderProfile | null; onProfileSaved: () => Promise<void>;
+  riderId?: string;
 }) {
   const canEdit = live && !!supabase;
   return (
@@ -1896,7 +1898,7 @@ function SettingsView({ live, online, busy, onToggleOnline, profile, onProfileSa
       {canEdit && profile && <ProfileSection profile={profile} onSaved={onProfileSaved} />}
       {canEdit && profile && <PayoutSection profile={profile} onSaved={onProfileSaved} />}
       {canEdit && profile && <ServicesSection profile={profile} onSaved={onProfileSaved} />}
-      {canEdit && profile && <PushSection profile={profile} onSaved={onProfileSaved} />}
+      {canEdit && profile && <PushSection profile={profile} onSaved={onProfileSaved} riderId={riderId} />}
 
       <SoundSection />
       <LocationSection />
@@ -2068,24 +2070,75 @@ function ServicesSection({ profile, onSaved }: { profile: RiderProfile; onSaved:
   );
 }
 
-function PushSection({ profile, onSaved }: { profile: RiderProfile; onSaved: () => Promise<void> }) {
+/**
+ * Notifications that arrive with the app shut.
+ *
+ * The switch does the real thing — registers a service worker and takes out a
+ * browser push subscription — rather than only setting a flag, which is what it
+ * used to do. The flag is kept in step so the profile does not claim one thing
+ * while the device does another.
+ *
+ * Every way this can fail is a different sentence, because "it didn't work" is
+ * useless to someone standing in the street: a browser that cannot do it at
+ * all, a connection that is not secure, and a rider who already said no are
+ * three different problems with three different answers. The last one cannot be
+ * undone from here — browsers will not re-ask — so it points at the only place
+ * that can fix it.
+ */
+function PushSection({ profile, onSaved, riderId }: {
+  profile: RiderProfile; onSaved: () => Promise<void>; riderId?: string;
+}) {
   const { busy, run } = useSaver(onSaved);
-  function toggle() {
+  const { state, enable, disable } = useWebPush(riderId);
+
+  async function toggle() {
+    const turningOn = state !== 'on';
+    if (turningOn) await enable(); else await disable();
+    // Keep the stored preference honest about what the device is doing.
     void run(() => updateRiderProfile(supabase!, {
       name: profile.name, mobile: profile.mobile_number, vehicle: profile.vehicle,
       photoUrl: profile.photo_url, payoutNumber: profile.payout_number,
-      services: profile.services_accepted, pushEnabled: !profile.push_enabled,
+      services: profile.services_accepted, pushEnabled: turningOn,
     }));
   }
+
+  const blocked = state === 'unsupported' || state === 'insecure' || state === 'denied';
+
   return (
     <SettingsCard title="Notifications">
       <label className="flex items-center justify-between">
         <span>
-          <span className="block text-sm font-medium">New-order push alerts</span>
-          <span className="block text-xs text-black/45">Get notified when orders enter the pool.</span>
+          <span className="block text-sm font-medium">Alerts when the app is closed</span>
+          <span className="block text-xs text-black/45">
+            New orders in the pool, and — more importantly — if a job you are carrying gets cancelled.
+          </span>
         </span>
-        <Switch on={profile.push_enabled} disabled={busy} onChange={toggle} />
+        <Switch on={state === 'on'} disabled={busy || state === 'working' || blocked}
+          onChange={() => void toggle()} />
       </label>
+
+      {state === 'denied' && (
+        <p className="mt-3 rounded-xl bg-brand-yellow/20 px-3 py-2 text-xs ring-1 ring-brand-yellow">
+          You previously blocked notifications, and the browser won’t ask again. Turn them back on in
+          your browser’s site settings for this page, then come back here.
+        </p>
+      )}
+      {state === 'unsupported' && (
+        <p className="mt-3 rounded-xl bg-black/[0.04] px-3 py-2 text-xs text-black/55">
+          This browser can’t do notifications. Chrome on Android can — and it works best if you add
+          Easy Buy Rider to your home screen first.
+        </p>
+      )}
+      {state === 'insecure' && (
+        <p className="mt-3 rounded-xl bg-black/[0.04] px-3 py-2 text-xs text-black/55">
+          Notifications need a secure (https) connection.
+        </p>
+      )}
+      {state === 'on' && (
+        <p className="mt-3 text-xs text-black/45">
+          This device will buzz even with the app shut. Turning it off here stops it on this device only.
+        </p>
+      )}
     </SettingsCard>
   );
 }

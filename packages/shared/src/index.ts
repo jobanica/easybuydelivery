@@ -17,4 +17,5 @@ export * from './types.ts';
 export * from './legal.ts';
 export * from './errors.ts';
 export * from './escpos.ts';
+export * from './push.ts';
 export * from './receipt.ts';
