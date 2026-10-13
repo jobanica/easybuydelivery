@@ -104,6 +104,10 @@ export interface RiderData {
   correctDeliveryPin(
     orderId: string, at: { lat: number; lng: number }, address?: string,
   ): Promise<RiderPinCorrectionResult>;
+  /** Padala only: put the pickup pin where the parcel is; re-quotes the fee. */
+  correctPickupPin(
+    orderId: string, at: { lat: number; lng: number }, address?: string,
+  ): Promise<RiderPinCorrectionResult>;
   /** Offer something else instead — stays off the bill until the customer agrees. */
   proposeReplacement(itemId: string, name: string, qty: number, unitPrice: number): Promise<void>;
   /** Extra-stop requests the customer has made on this order. */

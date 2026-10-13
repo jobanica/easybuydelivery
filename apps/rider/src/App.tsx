@@ -1206,11 +1206,17 @@ function AddressLine({ label, address, icon }: { label: string; address: string;
  * distance. The database re-quotes it and tells the customer in the chat; the
  * rider never types a peso figure.
  */
-function FixDropoffPin({ order, data, onChange }: {
+function FixDropoffPin({ order, data, onChange, end = 'dropoff' }: {
   order: RiderOrder; data: RiderData; onChange: () => Promise<void>;
+  /** Which end of the run this moves. Padala is the only one with a loose pickup. */
+  end?: 'dropoff' | 'pickup';
 }) {
-  const current = order.deliveryLat != null && order.deliveryLng != null
-    ? { lat: order.deliveryLat, lng: order.deliveryLng } : null;
+  const isPickup = end === 'pickup';
+  const current = isPickup
+    ? (order.pickupLat != null && order.pickupLng != null
+      ? { lat: order.pickupLat, lng: order.pickupLng } : null)
+    : (order.deliveryLat != null && order.deliveryLng != null
+      ? { lat: order.deliveryLat, lng: order.deliveryLng } : null);
   const [open, setOpen] = useState(false);
   const [pin, setPin] = useState<LatLng | null>(current);
   const [address, setAddress] = useState('');
@@ -1224,11 +1230,13 @@ function FixDropoffPin({ order, data, onChange }: {
     if (!pin) return;
     setBusy(true); setErr(null);
     try {
-      const res = await data.correctDeliveryPin(order.id, pin, address.trim() || undefined);
+      const res = isPickup
+        ? await data.correctPickupPin(order.id, pin, address.trim() || undefined)
+        : await data.correctDeliveryPin(order.id, pin, address.trim() || undefined);
       if (!res.updated) { setErr(res.message ?? 'That pin could not be used.'); return; }
       const fee = res.old_fee != null && res.new_fee != null && res.old_fee !== res.new_fee
         ? ` Delivery fee ${peso(res.old_fee)} → ${peso(res.new_fee)}.` : '';
-      setDone(`Pin moved.${fee} The customer has been told in the chat.`);
+      setDone(`Pin moved.${fee} The ${isPickup ? 'sender' : 'customer'} has been told in the chat.`);
       setOpen(false);
       await onChange();
     } catch (e) {
@@ -1246,24 +1254,28 @@ function FixDropoffPin({ order, data, onChange }: {
     return (
       <button type="button" onClick={() => { setPin(current); setOpen(true); }}
         className="mt-2 w-full rounded-lg border border-brand-purple/40 py-2 text-xs font-semibold text-brand-purple">
-        📍 Wrong drop-off pin? Fix it
+        {isPickup ? '📍 Parcel isn\u2019t here? Fix the pickup pin' : '📍 Wrong drop-off pin? Fix it'}
       </button>
     );
   }
 
   return (
     <div className="mt-2 rounded-xl bg-brand-purple/[0.06] p-3 ring-1 ring-brand-purple/20">
-      <p className="text-sm font-bold text-brand-purple">Put the pin where they actually are</p>
+      <p className="text-sm font-bold text-brand-purple">
+        {isPickup ? 'Put the pin where the parcel actually is' : 'Put the pin where they actually are'}
+      </p>
       <p className="mb-2 mt-0.5 text-[11px] text-black/55">
-        The delivery fee is worked out by distance, so moving the pin re-prices it. The customer sees
-        the change in the chat.
+        The delivery fee is worked out by distance, so moving the pin re-prices it. The
+        {isPickup ? ' sender' : ' customer'} sees the change in the chat.
       </p>
       <PinPicker value={pin} onChange={setPin} />
       <input value={address} onChange={(e) => setAddress(e.target.value)}
-        placeholder="Correct address (optional)"
+        placeholder={isPickup ? 'Correct pickup address (optional)' : 'Correct address (optional)'}
         className="mt-2 w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs" />
       {moved != null && moved >= 20 && (
-        <p className="mt-1.5 text-[11px] text-black/50">Moving it {formatDistance(moved)} from the customer's pin.</p>
+        <p className="mt-1.5 text-[11px] text-black/50">
+          Moving it {formatDistance(moved)} from the {isPickup ? "sender's" : "customer's"} pin.
+        </p>
       )}
       {err && <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{err}</p>}
       <div className="mt-2 flex gap-2">
@@ -1366,6 +1378,11 @@ function DeliveryCard({ order, data, onChange, payoutNumber, riderPos }:
         )}
 
         {order.pickupAddress && <AddressLine label="Pick up at" address={order.pickupAddress} icon="🛒" />}
+        {/* Padala's pickup is a bare pin the sender dropped from memory, with no
+            shop behind it — so it is the one end nothing else could correct. */}
+        {order.service_type === 'padala' && order.status !== 'delivered' && order.status !== 'cancelled' && (
+          <FixDropoffPin order={order} data={data} onChange={onChange} end="pickup" />
+        )}
         {order.deliveryAddress && <AddressLine label="Deliver to" address={order.deliveryAddress} icon="📍" />}
         {order.status !== 'delivered' && order.status !== 'cancelled' && (
           <FixDropoffPin order={order} data={data} onChange={onChange} />

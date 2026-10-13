@@ -116,7 +116,7 @@ export function createPreviewData(): RiderData {
       buyStores: [],
       store_contact: null, stores: [],
       items: [{ id: 'it-8', store_id: null, menuItemId: null, buyStoreIndex: null, status: 'ok' as const, replacesItemId: null, name: 'Documents envelope', qty: 1, unitPrice: 0, markup: 0, notes: null }],
-      pickupLat: null, pickupLng: null, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: '88 Rizal Ave., Brgy. Poblacion — grey gate, 2nd house after the bakery', arrivedAt: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
+      pickupLat: 14.206, pickupLng: 121.252, deliveryAddress: '12 Sampaguita St., Brgy. San Jose (blue gate beside the sari-sari store)', pickupAddress: '88 Rizal Ave., Brgy. Poblacion — grey gate, 2nd house after the bakery', arrivedAt: null, deliveryLat: 14.2, deliveryLng: 121.26, notes: null,
       paymentReceiptUrl: null, paymentReference: null, paymentConfirmedAt: null,
       isTransfer: false, transferReason: null, transferHadGoods: false, transferredFromName: null, transferredFromContact: null,
     },
@@ -193,6 +193,11 @@ export function createPreviewData(): RiderData {
       active = active.map((o) => (o.id === orderId
         ? { ...o, deliveryLat: at.lat, deliveryLng: at.lng } : o));
       return { updated: true, moved_m: 0, old_fee: 50, new_fee: 50 };
+    },
+    async correctPickupPin(orderId, at) {
+      active = active.map((o) => (o.id === orderId
+        ? { ...o, pickupLat: at.lat, pickupLng: at.lng } : o));
+      return { updated: true, moved_m: 0, old_fee: 50, new_fee: 65 };
     },
     async correctItemPrice(itemId, unitPrice) {
       active = active.map((o) => rebill({

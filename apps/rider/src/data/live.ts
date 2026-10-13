@@ -18,6 +18,7 @@ import {
   riderCorrectItemPrice,
   riderSetBuyStoreLocation,
   riderCorrectDeliveryPin,
+  riderCorrectPickupPin,
   listOrderAddons,
   respondToAddon as respondToAddonRpc,
   declineOrder as declineOrderRpc,
@@ -163,6 +164,9 @@ export function createLiveData(db: SupabaseClient, riderId: string): RiderData {
     },
     async correctDeliveryPin(orderId, at, address) {
       return riderCorrectDeliveryPin(db, orderId, at, address);
+    },
+    async correctPickupPin(orderId, at, address) {
+      return riderCorrectPickupPin(db, orderId, at, address);
     },
     async proposeReplacement(itemId, name, qty, unitPrice) {
       await riderProposeReplacement(db, itemId, name, qty, unitPrice);

@@ -194,6 +194,29 @@ export async function riderCorrectDeliveryPin(
   return (data ?? { updated: false }) as RiderPinCorrectionResult;
 }
 
+/**
+ * The rider moves a Padala pickup pin to where the parcel actually is, and the
+ * delivery fee is re-quoted from the real distance.
+ *
+ * Padala had neither of the existing controls: its pickup is a bare pin on the
+ * order with no store row behind it, so the drop-off fix (which moves the other
+ * end) and the Pabili shop fix (which needs a shop) both missed it. A sender
+ * pins a collection point from memory and gets it wrong as often as anyone;
+ * under per-km pricing the rider rides the difference unpaid.
+ */
+export async function riderCorrectPickupPin(
+  db: SupabaseClient,
+  orderId: string,
+  at: { lat: number; lng: number },
+  address?: string,
+): Promise<RiderPinCorrectionResult> {
+  const { data, error } = await db.rpc('rider_correct_pickup_pin', {
+    p_order_id: orderId, p_lat: at.lat, p_lng: at.lng, p_address: address ?? null,
+  });
+  if (error) throw error;
+  return (data ?? { updated: false }) as RiderPinCorrectionResult;
+}
+
 export async function respondToItemChange(db: SupabaseClient, itemId: string, accept: boolean): Promise<void> {
   const { error } = await db.rpc('customer_respond_item_change', { p_item_id: itemId, p_accept: accept });
   if (error) throw error;
