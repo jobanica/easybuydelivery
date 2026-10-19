@@ -78,8 +78,17 @@ async function handle(req: Request): Promise<Response> {
     Deno.env.get('SUPABASE_ANON_KEY')!,
     { global: { headers: { Authorization: auth } } },
   );
+  // It checks the permission *and* that the rider has an account to reset, so
+  // a refusal leaves no row claiming a reset that could not have happened.
   const { error: logErr } = await asCaller.rpc('log_rider_password_reset', { p_rider_id: riderId });
   if (logErr) {
+    if (/no sign-in account/i.test(logErr.message)) {
+      return withCors(
+        'That rider has no sign-in account yet, so there is no password to reset. '
+        + 'They need to sign up in the rider app first.',
+        { status: 400 },
+      );
+    }
     return withCors(
       /not allowed/i.test(logErr.message)
         ? 'You do not have permission to reset a rider’s password.'
