@@ -151,3 +151,59 @@ export async function deleteRider(db: SupabaseClient, riderId: string): Promise<
   if (error) throw error;
   return (data ?? { deleted: false }) as DeleteRiderResult;
 }
+
+/** What a rider signs in with, and when their password was last set for them. */
+export interface RiderLogin {
+  rider_id: string;
+  email: string | null;
+  last_reset_at: string | null;
+  last_reset_by: string | null;
+}
+
+/**
+ * Sign-in details for the riders, so the operator can tell someone which
+ * address to use. The email lives in auth.users, which no ordinary session may
+ * read, so it comes back through a definer function gated on the same
+ * permission as the Riders page.
+ *
+ * Returns nothing rather than throwing on a database without migration 0088,
+ * so the page still lists riders while the migration is pending.
+ */
+export async function listRiderLogins(db: SupabaseClient): Promise<RiderLogin[]> {
+  const { data, error } = await db.rpc('rider_login_details', { p_rider_id: null });
+  if (error) {
+    if (error.code === '42883' || error.code === 'PGRST202') return [];
+    throw error;
+  }
+  return (data ?? []) as RiderLogin[];
+}
+
+export interface TemporaryPassword {
+  riderName: string;
+  email: string | null;
+  /** Shown once. Nothing readable is kept, here or in the database. */
+  password: string;
+}
+
+/**
+ * Give a rider a temporary password and hand it back once.
+ *
+ * There is deliberately no way to read a rider's *existing* password: Supabase
+ * keeps a bcrypt hash, so the original is not stored anywhere to be shown, and
+ * keeping a readable copy would expose a credential most riders also use for
+ * their email and their GCash. A reset answers the real question — a rider who
+ * cannot get in — without that.
+ *
+ * Setting a password is the power to act as that rider, so the Edge Function
+ * checks the permission against the database and records the reset before it
+ * returns anything.
+ */
+export async function resetRiderPassword(
+  db: SupabaseClient, riderId: string, password?: string,
+): Promise<TemporaryPassword> {
+  const { data, error } = await db.functions.invoke('reset-rider-password', {
+    body: { riderId, password: password?.trim() || undefined },
+  });
+  if (error) throw error;
+  return data as TemporaryPassword;
+}

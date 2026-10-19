@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { listActiveRiders, setRiderLocked, setRiderSuspended, deleteRider, type ActiveRider } from '@ebd/supabase';
+import { listActiveRiders, setRiderLocked, setRiderSuspended, deleteRider, listRiderLogins,
+  type ActiveRider, type RiderLogin } from '@ebd/supabase';
 import { supabase } from './lib/supabase.ts';
 import { Card, Th, Td, Muted, ErrorNote, peso } from './ui.tsx';
 import { errMessage } from '@ebd/shared';
 import { SAMPLE_RIDERS, onDutyFor } from './OnDuty.tsx';
 import { RefusalHistory, PinCorrectionLog } from './Refusals.tsx';
+import { ResetPassword } from './ResetPassword.tsx';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -22,14 +24,22 @@ const activityLabel: Record<string, string> = {
 
 export function Riders() {
   const [rows, setRows] = useState<ActiveRider[]>([]);
+  // Sign-in addresses, so the operator can say which one to use. Loaded
+  // separately because it crosses into auth.users through a definer function.
+  const [logins, setLogins] = useState<Record<string, RiderLogin>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     if (!supabase) { setRows(SAMPLE_RIDERS); setLoading(false); return; }
     setLoading(true);
-    try { setRows(await listActiveRiders(supabase, today)); setError(null); }
-    catch (e) { setError(errMessage(e)); }
+    try {
+      setRows(await listActiveRiders(supabase, today));
+      setError(null);
+      const byId: Record<string, RiderLogin> = {};
+      for (const l of await listRiderLogins(supabase)) byId[l.rider_id] = l;
+      setLogins(byId);
+    } catch (e) { setError(errMessage(e)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
@@ -98,6 +108,9 @@ export function Riders() {
                   <Td>
                     <span className="block font-medium">{r.name}</span>
                     <span className="block text-xs text-black/40">{r.mobile_number} · {r.vehicle ?? '—'}</span>
+                    {logins[r.id]?.email && (
+                      <span className="block text-xs text-black/40">{logins[r.id]!.email}</span>
+                    )}
                   </Td>
                   <Td>
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${activityChip[r.activity]}`}>{activityLabel[r.activity]}</span>
@@ -133,6 +146,9 @@ export function Riders() {
                         className="rounded-lg border border-red-400 px-3 py-1.5 text-xs font-semibold text-red-700">
                         Delete
                       </button>
+                    </span>
+                    <span className="mt-1.5 block">
+                      <ResetPassword rider={r} login={logins[r.id]} onDone={load} />
                     </span>
                     {r.is_suspended && r.suspend_reason && (
                       <span className="mt-1 block text-xs text-black/40">Reason: {r.suspend_reason}</span>
