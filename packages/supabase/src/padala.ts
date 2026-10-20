@@ -22,6 +22,12 @@ export interface PadalaRequestInput {
   customerContact: string;
   deliveryFee: number;
   /**
+   * Road km the fee was worked out from, when it could be measured. Null means
+   * the fee rests on the straight-line estimate, detour factor included. Kept
+   * so a later look at the order can tell a measured fee from an estimated one.
+   */
+  routeKm?: number | null;
+  /**
    * Flat convenience fee for this run — the rider's in full, so it never enters
    * the commission base. Omitting it is how padala shipped at zero while the
    * operator had a rate set.
@@ -51,6 +57,7 @@ export interface PadalaOrderRow {
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
+  route_km: number | null;
   store_fee_total: 0;
   convenience_fee: number;
   goods_cost: 0;
@@ -98,6 +105,7 @@ export function buildPadalaOrderRow(
     payment_method: input.paymentMethod ?? 'cod',
     payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
+    route_km: input.routeKm ?? null,
     store_fee_total: 0,
     convenience_fee: roundPeso(input.convenienceFee ?? 0),
     goods_cost: 0,

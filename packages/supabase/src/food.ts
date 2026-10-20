@@ -29,6 +29,12 @@ export interface FoodCheckoutInput {
   deliveryAddress?: string;
   recipientContact?: string;
   deliveryFee: number;
+  /**
+   * Road km the fee was worked out from, when it could be measured. Null means
+   * the fee rests on the straight-line estimate, detour factor included. Kept
+   * so a later look at the order can tell a measured fee from an estimated one.
+   */
+  routeKm?: number | null;
   lines: CartLine[];
   deliveryLat?: number;
   deliveryLng?: number;
@@ -53,6 +59,7 @@ export interface FoodOrderRow {
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
+  route_km: number | null;
   store_fee_total: number;
   convenience_fee: number;
   fulfilment?: 'pickup' | 'delivery';
@@ -111,6 +118,7 @@ export function buildFoodOrder(
       payment_method: input.paymentMethod ?? 'cod',
       payment_status: input.paid ? 'paid' : 'unpaid',
       delivery_fee: summary.deliveryFee,
+      route_km: input.routeKm ?? null,
       store_fee_total: summary.storeFeeTotal,
       convenience_fee: summary.convenienceFee,
       goods_cost: summary.goodsCost,

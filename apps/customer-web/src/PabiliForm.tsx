@@ -7,6 +7,7 @@ import { validateBudget, resolveDeliveryFee, DEFAULT_DISTANCE_FEE_CONFIG,
 import { buildPabiliOrderRow, createPabiliOrder, pushAboutOrder, getAppSettings, pabiliItemsSummary,
   type PabiliRequestInput, type PabiliItemInput, type PabiliStoreInput } from '@ebd/supabase';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { useRouteKm } from './useRouteKm.ts';
 import { Field, Row, inputCls, peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
 import { AreaPicker, kmBetween } from './AreaPicker.tsx';
@@ -85,8 +86,9 @@ export function PabiliForm() {
   const [serviceArea, setServiceArea] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
   // Delivery pricing comes from the operator's settings — recalculated from the
   // pinned distance under per-km pricing, never typed by the customer.
-  const [feeCfg, setFeeCfg] = useState<{ model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig }>(
-    { model: 'flat', flatFee: 50, distance: DEFAULT_DISTANCE_FEE_CONFIG });
+  const [feeCfg, setFeeCfg] = useState<{
+    model: DeliveryFeeModel; flatFee: number; distance: DistanceFeeConfig; detour?: number;
+  }>({ model: 'flat', flatFee: 50, distance: DEFAULT_DISTANCE_FEE_CONFIG });
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
@@ -97,6 +99,7 @@ export function PabiliForm() {
         model: s.delivery_fee_model,
         flatFee: s.default_delivery_fee,
         distance: { baseFare: s.delivery_base_fare, baseKm: s.delivery_base_km, perKm: s.delivery_per_km },
+        detour: s.route_detour_factor,
       });
         if (s.service_center_lat != null && s.service_center_lng != null && Number(s.service_radius_km) > 0) {
           setServiceArea({ lat: s.service_center_lat, lng: s.service_center_lng, radiusKm: Number(s.service_radius_km) });
@@ -105,10 +108,19 @@ export function PabiliForm() {
     }).catch(() => {});
   }, []);
 
+  // What the rider will actually ride, shop to door, by road.
+  const route = useRouteKm([buyAt], dropoff, feeCfg.model === 'per_km');
   const deliveryFee = useMemo(() => resolveDeliveryFee({
     model: feeCfg.model, flatFee: feeCfg.flatFee, distanceConfig: feeCfg.distance,
-    storeLocations: [buyAt], dropoff,
-  }), [feeCfg, buyAt, dropoff]);
+    storeLocations: [buyAt], dropoff, routeKm: route.km, detourFactor: feeCfg.detour,
+  }), [feeCfg, buyAt, dropoff, route.km]);
+
+  // What the number in front of the customer is based on. A fee that changes
+  // once the route comes back should say why it changed, not just change.
+  const feeBasis = feeCfg.model !== 'per_km' ? 'flat rate'
+    : route.measuring ? 'checking the road…'
+    : route.km != null ? `${route.km.toFixed(1)} km by road`
+    : 'by distance';
   // Per-km pricing needs both pins to measure the leg.
   const needsPinsForFee = feeCfg.model === 'per_km' && (!buyAt || !dropoff);
   // A bare "—" left customers who had picked their saved address wondering why
@@ -155,6 +167,7 @@ export function PabiliForm() {
       customerId,
       customerContact: form.customerContact,
       deliveryFee,
+      routeKm: route.km,
       convenienceFee,
       itemsDescription: pabiliItemsSummary(form.items),
       // The picker indexes the rows on screen, blanks included; the order only
@@ -353,7 +366,7 @@ export function PabiliForm() {
             <span className={feeBlockerShort ? 'text-xs font-medium text-yellow-800' : 'font-semibold'}>
               {feeBlockerShort ?? peso(deliveryFee)}
             </span>
-            <span className="text-xs text-black/40">{feeCfg.model === 'per_km' ? 'by distance' : 'flat rate'}</span>
+            <span className="text-xs text-black/40">{feeBasis}</span>
           </div>
         </Field>
         <Field label="Your name *">
@@ -374,7 +387,7 @@ export function PabiliForm() {
       <PaymentChoice value={form.pay} onChange={(v) => set('pay', v)} />
 
       <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-black/5">
-        <Row label={feeCfg.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+        <Row label={feeCfg.model === 'per_km' ? `Delivery fee (${feeBasis})` : 'Delivery fee'}
           value={feeBlocker ?? peso(deliveryFee)} muted={Boolean(feeBlocker)} />
         {storeFee > 0 && <Row label={`Store fee (${namedStores.length} stores)`} value={peso(storeFee)} />}
         {convenienceFee > 0 && <Row label="Convenience fee" value={peso(convenienceFee)} />}

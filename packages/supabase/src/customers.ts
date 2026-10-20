@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { remeasureAfterPinMove } from './routing.ts';
 
 export interface MyCustomer {
   id: string;
@@ -191,7 +192,9 @@ export async function riderCorrectDeliveryPin(
     p_order_id: orderId, p_lat: at.lat, p_lng: at.lng, p_address: address ?? null,
   });
   if (error) throw error;
-  return (data ?? { updated: false }) as RiderPinCorrectionResult;
+  // The database re-quoted from the straight line; measure the road it is
+  // standing in for, and charge for that instead.
+  return remeasureAfterPinMove(db, orderId, (data ?? { updated: false }) as RiderPinCorrectionResult);
 }
 
 /**
@@ -214,7 +217,7 @@ export async function riderCorrectPickupPin(
     p_order_id: orderId, p_lat: at.lat, p_lng: at.lng, p_address: address ?? null,
   });
   if (error) throw error;
-  return (data ?? { updated: false }) as RiderPinCorrectionResult;
+  return remeasureAfterPinMove(db, orderId, (data ?? { updated: false }) as RiderPinCorrectionResult);
 }
 
 export async function respondToItemChange(db: SupabaseClient, itemId: string, accept: boolean): Promise<void> {

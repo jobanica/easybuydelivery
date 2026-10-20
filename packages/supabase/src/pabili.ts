@@ -17,6 +17,7 @@ import {
   type PaymentMethod,
 } from '@ebd/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { remeasureAfterPinMove } from './routing.ts';
 
 export interface PabiliStoreInput {
   name: string;
@@ -44,6 +45,12 @@ export interface PabiliRequestInput {
   customerId: string;
   customerContact: string;
   deliveryFee: number;
+  /**
+   * Road km the fee was worked out from, when it could be measured. Null means
+   * the fee rests on the straight-line estimate, detour factor included. Kept
+   * so a later look at the order can tell a measured fee from an estimated one.
+   */
+  routeKm?: number | null;
   /** Operator-set convenience fee (from app settings; not customer-editable). */
   convenienceFee?: number;
   /** Free-text list of what to buy (kept as the human-readable summary). */
@@ -84,6 +91,7 @@ export interface PabiliOrderRow {
   payment_method: PaymentMethod;
   payment_status: 'unpaid' | 'paid';
   delivery_fee: number;
+  route_km: number | null;
   convenience_fee: number;
   store_fee_total: number;
   buy_stores: PabiliStoreInput[];
@@ -135,6 +143,7 @@ export function buildPabiliOrderRow(
     payment_method: input.paymentMethod ?? 'cod',
     payment_status: input.paid ? 'paid' : 'unpaid',
     delivery_fee: input.deliveryFee,
+    route_km: input.routeKm ?? null,
     convenience_fee: input.convenienceFee ?? 0,
     store_fee_total: storeFees,
     buy_stores: stores,
@@ -263,5 +272,10 @@ export async function riderSetBuyStoreLocation(
     p_order_id: orderId, p_index: index, p_lat: at.lat, p_lng: at.lng,
   });
   if (error) throw error;
-  return (data ?? { updated: false }) as BuyStorePinResult;
+  const res = (data ?? { updated: false }) as BuyStorePinResult;
+  // Only the first store's pin drives the fee, and only then is there a road
+  // worth re-measuring.
+  return res.repriced
+    ? remeasureAfterPinMove(db, orderId, res)
+    : res;
 }

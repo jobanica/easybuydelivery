@@ -14,7 +14,7 @@ const SAMPLE: AppSettings = {
   convenience_fee: 0, convenience_fee_food: 0, convenience_fee_pabili: 0, convenience_fee_padala: 0,
   commission_rate: 0.15, markup_operator_share: 1, delivery_fee_model: 'flat',
   settlement_cutoff: '00:00', sms_notify_stores: false,
-  delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10,
+  delivery_base_fare: 50, delivery_base_km: 2, delivery_per_km: 10, route_detour_factor: 1.35,
   service_food: true, service_pabili: true, service_padala: true, service_shop: true,
   max_active_orders_per_rider: 0,
   settlement_gcash_number: null, settlement_gcash_name: null, settlement_qr_url: null,
@@ -271,8 +271,9 @@ export function Settings() {
       {/* Distance-based delivery fee */}
       <Card title="Distance-based delivery fee">
         <p className="mb-3 text-sm text-black/60">
-          Used when <b>Delivery fee model</b> is set to <b>Per km</b>. The fee is measured from the
-          store’s pinned location to the customer’s drop-off:
+          Used when <b>Delivery fee model</b> is set to <b>Per km</b>. The fee is measured along the
+          <b> road</b> from the store’s pinned location to the customer’s drop-off — not in a straight
+          line, because a rider has to take the bridge like everyone else:
           <br />
           <span className="mt-1 inline-block rounded bg-black/[0.04] px-2 py-1 font-mono text-xs">
             fee = base fare + per-km × max(0, distance − base distance)
@@ -291,6 +292,22 @@ export function Settings() {
             <input type="number" min={0} step={0.5} className={inp} value={s.delivery_per_km}
               onChange={(e) => set('delivery_per_km', Number(e.target.value))} />
           </Field>
+        </div>
+
+        <div className="mt-4 rounded-lg bg-black/[0.03] px-3 py-3">
+          <Field label="Straight-line correction (× )">
+            <input type="number" min={1} max={3} step={0.05} className={`${inp} max-w-28`}
+              value={s.route_detour_factor ?? 1.35}
+              onChange={(e) => set('route_detour_factor', Number(e.target.value))} />
+          </Field>
+          <p className="mt-2 text-xs text-black/55">
+            Only used when the road can’t be measured — the routing service is down, or the pins are
+            somewhere it has no map for. The straight line is multiplied by this instead.
+            <b> 1.35</b> is what we measured locally: over forty routed deliveries the real ride was
+            a median 1.29× the straight line and up to 3.3× it, and 1.35 is the single multiplier
+            that came closest to the routed total. Set it to <b>1.0</b> to switch the correction off
+            and charge the straight line as-is.
+          </p>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-brand-purple/[0.06] px-3 py-2">

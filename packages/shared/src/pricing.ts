@@ -73,11 +73,25 @@ export function distanceDeliveryFee(
 }
 
 /**
+ * How much longer the road is than the straight line, when nobody has measured
+ * the road. Not a guess: the median over forty routed deliveries around
+ * Floridablanca and Guagua, where a river and one bridge decide most of it.
+ * Mirrors `app_settings.route_detour_factor`, which is what the server uses.
+ */
+export const DEFAULT_DETOUR_FACTOR = 1.35;
+
+/**
  * Resolve the delivery fee for a trip. Under the 'per_km' model the fee is
  * driven by the farthest store→drop-off leg (a rider visiting several stores
  * still ends up covering at least that distance; extra stops are billed via the
  * per-store fee). Any other model — or a missing drop-off / un-pinned store —
  * falls back to the flat fee, so checkout never blocks on geodata.
+ *
+ * Pass `routeKm` once the road distance has actually been measured (see
+ * `routeDistanceKm`). Without it the straight line stands in, multiplied by
+ * `detourFactor` — because a rider charged for the crow's flight rides the
+ * river detour for free, and around here that detour is the difference between
+ * ₱68 and ₱119 on a single order.
  */
 export function resolveDeliveryFee(args: {
   model: DeliveryFeeModel;
@@ -85,14 +99,25 @@ export function resolveDeliveryFee(args: {
   distanceConfig: DistanceFeeConfig;
   storeLocations: readonly (LatLng | null | undefined)[];
   dropoff: LatLng | null | undefined;
+  /** Measured road distance for the farthest leg, in km. */
+  routeKm?: number | null;
+  /** What to multiply the straight line by when `routeKm` is unknown. */
+  detourFactor?: number;
 }): number {
-  const { model, flatFee, distanceConfig, storeLocations, dropoff } = args;
-  if (model !== 'per_km' || !isLatLng(dropoff)) return roundPeso(flatFee);
+  const { model, flatFee, distanceConfig, storeLocations, dropoff, routeKm } = args;
+  if (model !== 'per_km') return roundPeso(flatFee);
+  if (Number.isFinite(routeKm) && (routeKm as number) > 0) {
+    return distanceDeliveryFee(routeKm as number, distanceConfig);
+  }
+  if (!isLatLng(dropoff)) return roundPeso(flatFee);
   const legsKm = storeLocations
     .filter(isLatLng)
     .map((s) => haversineMeters(s, dropoff) / 1000);
   if (legsKm.length === 0) return roundPeso(flatFee);
-  return distanceDeliveryFee(Math.max(...legsKm), distanceConfig);
+  const factor = Number.isFinite(args.detourFactor)
+    ? Math.max(1, args.detourFactor as number)
+    : DEFAULT_DETOUR_FACTOR;
+  return distanceDeliveryFee(Math.max(...legsKm) * factor, distanceConfig);
 }
 
 function isLatLng(p: LatLng | null | undefined): p is LatLng {

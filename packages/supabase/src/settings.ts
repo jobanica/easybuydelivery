@@ -28,6 +28,12 @@ export interface AppSettings {
   delivery_base_fare: number;
   delivery_base_km: number;
   delivery_per_km: number;
+  /**
+   * What to multiply a straight-line distance by when road routing is
+   * unavailable, because riders do not fly. Undefined on databases before
+   * migration 0090; 1.0 disables the correction.
+   */
+  route_detour_factor?: number;
   /** Per-service on/off switches. */
   service_food: boolean;
   service_pabili: boolean;

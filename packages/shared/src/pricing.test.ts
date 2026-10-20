@@ -124,10 +124,60 @@ test('resolveDeliveryFee: per_km charges on the farthest store leg', () => {
   const near = { lat: 14.591, lng: 121.000 }; // ~1 km
   const fee = resolveDeliveryFee({
     model: 'per_km', flatFee: 50, distanceConfig: rates,
-    storeLocations: [near, store], dropoff: dropoff3km,
+    storeLocations: [near, store], dropoff: dropoff3km, detourFactor: 1,
   });
   // farthest leg ≈ 3 km → 50 + 10 × (3 − 2) ≈ 60 (allow ±1 for geo rounding)
   assert.ok(Math.abs(fee - 60) <= 1, `expected ~60, got ${fee}`);
+});
+
+test('resolveDeliveryFee: a measured road distance beats the straight line', () => {
+  // The order from the screenshot: 1.92 km apart, 4.56 km by road, because the
+  // only bridge over the Porac river is a long way south.
+  const straight = resolveDeliveryFee({
+    model: 'per_km', flatFee: 50, distanceConfig: rates,
+    storeLocations: [{ lat: 14.986286, lng: 120.545558 }],
+    dropoff: { lat: 14.997231, lng: 120.531712 },
+    detourFactor: 1,
+  });
+  const routed = resolveDeliveryFee({
+    model: 'per_km', flatFee: 50, distanceConfig: rates,
+    storeLocations: [{ lat: 14.986286, lng: 120.545558 }],
+    dropoff: { lat: 14.997231, lng: 120.531712 },
+    routeKm: 4.559,
+  });
+  assert.ok(Math.abs(straight - 50 - 10 * (1.922 - 2)) < 1.5, `straight was ${straight}`);
+  assert.equal(routed, 75.59); // 50 + 10 × (4.559 − 2)
+  assert.ok(routed > straight);
+});
+
+test('resolveDeliveryFee: the detour factor stands in until the road is measured', () => {
+  const args = {
+    model: 'per_km' as const, flatFee: 50, distanceConfig: rates,
+    storeLocations: [store], dropoff: dropoff3km,
+  };
+  const corrected = resolveDeliveryFee(args);                      // default 1.35
+  const raw = resolveDeliveryFee({ ...args, detourFactor: 1 });
+  assert.ok(corrected > raw, `${corrected} should beat ${raw}`);
+  // 3 km of straight line is charged as ~4.05 km of road.
+  assert.ok(Math.abs(corrected - (50 + 10 * (3 * 1.35 - 2))) <= 1.5, `got ${corrected}`);
+});
+
+test('resolveDeliveryFee: a measured distance does not need pins at all', () => {
+  // Pin corrections re-measure server-side; the fee must not fall back to flat
+  // just because the caller had no coordinates to hand.
+  const fee = resolveDeliveryFee({
+    model: 'per_km', flatFee: 55, distanceConfig: rates,
+    storeLocations: [], dropoff: null, routeKm: 6,
+  });
+  assert.equal(fee, 90); // 50 + 10 × (6 − 2)
+});
+
+test('resolveDeliveryFee: a flat-rate operator is never charged by distance', () => {
+  const fee = resolveDeliveryFee({
+    model: 'flat', flatFee: 50, distanceConfig: rates,
+    storeLocations: [store], dropoff: dropoff3km, routeKm: 40,
+  });
+  assert.equal(fee, 50);
 });
 
 test('resolveDeliveryFee: falls back to flat when drop-off missing', () => {

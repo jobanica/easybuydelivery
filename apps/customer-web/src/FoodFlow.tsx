@@ -22,6 +22,7 @@ import { listAvailableStores, listMenu, buildFoodOrder, createFoodOrder, pushAbo
 import { useRiderAvailability, NoRidersNotice, NO_RIDERS_MESSAGE } from './RiderAvailability.tsx';
 import { AddressChooser, useSavedAddresses, useAreaBackfill } from './AddressChooser.tsx';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { useRouteKm } from './useRouteKm.ts';
 import { SAMPLE_STORES, type SampleStore } from './food/sampleData.ts';
 import { peso, PaymentChoice, type PayChoice } from './ui.tsx';
 import { LocationPicker, type LatLngValue } from './LocationPicker.tsx';
@@ -94,6 +95,8 @@ interface FeeSettings {
   model: DeliveryFeeModel;
   flatFee: number;
   distance: DistanceFeeConfig;
+  /** Straight-line correction for when the road cannot be measured. */
+  detour?: number;
   config: FeeConfig; // perStoreFee, commissionRate, convenienceFee
 }
 const DEFAULT_FEE_SETTINGS: FeeSettings = {
@@ -191,6 +194,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
                 baseKm: settings.delivery_base_km,
                 perKm: settings.delivery_per_km,
               },
+              detour: settings.route_detour_factor,
               config: {
                 perStoreFee: settings.per_store_fee,
                 commissionRate: settings.commission_rate,
@@ -237,12 +241,24 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
     return stores.filter((s) => ids.has(s.id)).map((s) => ({ lat: s.lat, lng: s.lng }));
   }, [cart, stores]);
 
+  // The longest kitchen-to-door leg, by road. A restaurant two streets away on
+  // the map can be a ride around a one-way system to reach.
+  const storePins = useMemo(
+    () => cartStoreLocations.map((s) => (s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null)),
+    [cartStoreLocations],
+  );
+  const route = useRouteKm(storePins, dropoff, fees.model === 'per_km' && !collect);
   const deliveryFee = useMemo(() => resolveDeliveryFee({
     model: fees.model, flatFee: fees.flatFee, distanceConfig: fees.distance,
-    storeLocations: cartStoreLocations.map((s) => (s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null)),
-    dropoff,
-  }), [fees, cartStoreLocations, dropoff]);
+    storeLocations: storePins, dropoff, routeKm: route.km, detourFactor: fees.detour,
+  }), [fees, storePins, dropoff, route.km]);
 
+  // What the number in front of the customer is based on. A fee that changes
+  // once the route comes back should say why it changed, not just change.
+  const feeBasis = fees.model !== 'per_km' ? 'flat rate'
+    : route.measuring ? 'checking the road…'
+    : route.km != null ? `${route.km.toFixed(1)} km by road`
+    : 'by distance';
   const summary = useMemo(() => summarizeCart(cart, deliveryFee, fees.config), [cart, deliveryFee, fees.config]);
   const storeCount = distinctStoreCount(cart);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
@@ -452,6 +468,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           // the operator once they see what was bought, so it leaves here at
           // zero with no carrier, and is quoted in the chat.
           deliveryFee: collect ? 0 : deliveryFee,
+          routeKm: collect ? null : route.km,
           fulfilment: collect ? 'pickup' : 'delivery',
           deliveryHandler: shopMode && !collect ? null : undefined,
           lines: cart,
@@ -819,7 +836,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
               ) : shopMode ? (
                 <Row label="Delivery fee" value="We'll confirm" />
               ) : (
-                <Row label={fees.model === 'per_km' ? 'Delivery fee (by distance)' : 'Delivery fee'}
+                <Row label={fees.model === 'per_km' ? `Delivery fee (${feeBasis})` : 'Delivery fee'}
                   value={needsDropoff ? '—' : peso(summary.deliveryFee)} />
               )}
               {summary.storeFeeTotal > 0 && <Row label={`Store fee (${storeCount - 1} added)`} value={peso(summary.storeFeeTotal)} />}
