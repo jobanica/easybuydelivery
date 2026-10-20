@@ -47,13 +47,10 @@ function commission(deliveryFee: number, storeCount: number, opts: {
 
 ## Convenience fee
 
-A separate admin-set fee charged to the customer per order (platform/service
-fee), on top of the commission, going to the operator.
-
-> **Open decision (#2):** is the convenience fee *inside* the 15% base
-> — `(DF + store fees + convenience fee) × 15%` — or a *flat pass-through*
-> straight to the admin outside the commission math? **Recommend flat
-> pass-through** (simpler and more common) unless the operator says otherwise.
+A separate admin-set fee charged to the customer per order. It goes to the
+**rider in full** — the operator takes **no commission** on it, so it never
+enters the commission base. The customer pays it as part of their total; the
+rider keeps it.
 
 ## Admin-configurable fees
 
