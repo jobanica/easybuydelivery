@@ -46,12 +46,23 @@ export async function routeDistanceKm(
   db: SupabaseClient,
   origins: readonly (RoutePoint | null | undefined)[],
   dropoff: RoutePoint | null | undefined,
+  /**
+   * The shops this trip starts from, for the server to look the pins up itself.
+   *
+   * The browser fetches the shop list once on open and never again, so a tab
+   * left running since before a shop was pinned carries no pin for it — and no
+   * pin meant no quote and a silent fall back to the flat fee. Sending ids as
+   * well lets the server answer from what it knows rather than what the tab
+   * happens to remember.
+   */
+  storeIds: readonly string[] = [],
 ): Promise<RouteQuote> {
   const from = origins.filter(usable);
-  if (!usable(dropoff) || from.length === 0) return { km: null, by: null };
+  const ids = storeIds.filter(Boolean);
+  if (!usable(dropoff) || (from.length === 0 && ids.length === 0)) return { km: null, by: null };
 
   const { data, error } = await db.functions.invoke('route-distance', {
-    body: { origins: from, dropoff },
+    body: { origins: from, storeIds: ids, dropoff },
   });
   if (error) {
     console.warn('route-distance unavailable, using the straight-line estimate', error);

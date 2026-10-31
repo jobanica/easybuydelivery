@@ -25,7 +25,16 @@ test('routeDistanceKm asks for the pins it was given and returns the road distan
   const { db, calls } = stub({ routed: true, km: 4.559, by: 'osrm' });
   const res = await routeDistanceKm(db, [shop], door);
   assert.deepEqual(res, { km: 4.559, by: 'osrm' });
-  assert.deepEqual(calls, [{ origins: [shop], dropoff: door }]);
+  assert.deepEqual(calls, [{ origins: [shop], storeIds: [], dropoff: door }]);
+});
+
+test('routeDistanceKm asks by shop id when this tab holds no pin', async () => {
+  // The case that cost ₱36: a tab open since before the shop was pinned. The
+  // server knows where its own shops are, so ids alone must still get a quote.
+  const { db, calls } = stub({ routed: true, km: 3.068, by: 'osrm' });
+  const res = await routeDistanceKm(db, [null, undefined], door, ['shop-1']);
+  assert.equal(res.km, 3.068);
+  assert.deepEqual(calls, [{ origins: [], storeIds: ['shop-1'], dropoff: door }]);
 });
 
 test('routeDistanceKm drops unusable pins and never asks about nothing', async () => {

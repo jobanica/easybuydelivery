@@ -33,17 +33,22 @@ export function useRouteKm(
   origins: readonly (RoutePoint | null | undefined)[],
   dropoff: RoutePoint | null | undefined,
   enabled = true,
+  /** The shops this trip starts from, so the server can supply pins we lack. */
+  storeIds: readonly string[] = [],
 ): RouteKm {
   const [state, setState] = useState<RouteKm>({ km: null, measuring: false, failed: false });
 
   // The pins as a string, so a re-rendered array of the same coordinates does
   // not spend a routing request.
   const pins = origins.map(key).filter(Boolean).sort().join('|');
+  const ids = [...storeIds].filter(Boolean).sort().join('|');
   const to = key(dropoff);
   const latest = useRef(0);
 
   useEffect(() => {
-    if (!enabled || !supabase || !to || !pins) {
+    // Ids alone are enough: the server knows where its own shops are, even when
+    // this tab was opened before one of them was put on the map.
+    if (!enabled || !supabase || !to || (!pins && !ids)) {
       setState({ km: null, measuring: false, failed: false });
       return;
     }
@@ -58,7 +63,10 @@ export function useRouteKm(
           return { lat: Number(lat), lng: Number(lng) };
         };
         const res = await routeDistanceKm(
-          supabase!, pins.split('|').map(parse), parse(to),
+          supabase!,
+          pins ? pins.split('|').map(parse) : [],
+          parse(to),
+          ids ? ids.split('|') : [],
         );
         if (latest.current !== mine) return; // a pin moved; this answer is stale
         setState({ km: res.km, measuring: false, failed: res.km === null });
@@ -66,7 +74,7 @@ export function useRouteKm(
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [pins, to, enabled]);
+  }, [pins, ids, to, enabled]);
 
   return state;
 }

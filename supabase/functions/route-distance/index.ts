@@ -158,18 +158,49 @@ async function handle(req: Request): Promise<Response> {
   const auth = req.headers.get('Authorization');
   if (!auth) return withCors('not authenticated', { status: 401 });
 
-  const { orderId, origins, dropoff } = await req.json().catch(() => ({}));
+  const { orderId, origins, storeIds, dropoff } = await req.json().catch(() => ({}));
 
   // --- Quote mode: a price to show someone before they commit to it. --------
   if (!orderId) {
     const to = ok(dropoff) ? dropoff as Point : null;
+    if (!to) return withCors('a dropoff is required when there is no orderId', { status: 400 });
+
     const from = Array.isArray(origins) ? (origins as Point[]).filter(ok) : [];
-    if (!to || from.length === 0) {
-      return withCors('origins and dropoff are required when there is no orderId', { status: 400 });
+
+    // Where a shop actually is, looked up here rather than taken on trust.
+    //
+    // The browser loads the shop list once when the app opens and never again,
+    // so a tab left open since before a shop was pinned holds no pin for it —
+    // and a quote with no origin is not a long trip priced badly, it is no
+    // quote at all: the fee silently became the flat fallback. One order in
+    // forty went out at ₱50 for a 3 km ride that way. The database always knows
+    // where the shop is, so the client sends ids and this reads the pins.
+    if (Array.isArray(storeIds) && storeIds.length > 0 && storeIds.length <= 3) {
+      const admin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      );
+      const { data: shops } = await admin
+        .from('stores')
+        .select('id, lat, lng')
+        .in('id', storeIds as string[]);
+      for (const s of (shops ?? []) as Point[]) if (ok(s)) from.push({ lat: s.lat, lng: s.lng });
     }
-    const leg = await farthestLegKm(from, to);
+
+    // Two sources for the same pin would otherwise route the same leg twice.
+    const seen = new Set<string>();
+    const legs = from.filter((p) => {
+      const k = `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+      return seen.has(k) ? false : (seen.add(k), true);
+    });
+    if (legs.length === 0) {
+      return json({ routed: false, reason: 'no_origin' });
+    }
+
+    const leg = await farthestLegKm(legs, to);
     // Nothing is written and nothing private is read, so there is no order to
-    // be entitled to — this returns the length of a road, which is on the map.
+    // be entitled to — this returns the length of a road, which is on the map,
+    // and the location of a shop open for business.
     return json(leg
       ? { routed: true, km: Number(leg.km.toFixed(3)), by: leg.by }
       : { routed: false, reason: 'unrouted' });

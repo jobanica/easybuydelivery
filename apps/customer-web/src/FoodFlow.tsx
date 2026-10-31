@@ -247,7 +247,12 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
     () => cartStoreLocations.map((s) => (s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null)),
     [cartStoreLocations],
   );
-  const route = useRouteKm(storePins, dropoff, fees.model === 'per_km' && !collect);
+  // The shops the cart touches, sent alongside the pins we hold. This tab's
+  // copy of a shop can predate its pin — the list is fetched once at open and
+  // never refreshed — and a missing pin did not make the quote approximate, it
+  // made it the flat fee. Letting the server look the pins up closes that.
+  const cartStoreIds = useMemo(() => [...new Set(cart.map((l) => l.storeId))], [cart]);
+  const route = useRouteKm(storePins, dropoff, fees.model === 'per_km' && !collect, cartStoreIds);
   const deliveryFee = useMemo(() => resolveDeliveryFee({
     model: fees.model, flatFee: fees.flatFee, distanceConfig: fees.distance,
     storeLocations: storePins, dropoff, routeKm: route.km, detourFactor: fees.detour,
