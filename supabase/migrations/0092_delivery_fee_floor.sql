@@ -108,8 +108,14 @@ security definer
 set search_path = public
 as $$
 begin
-  perform apply_delivery_fee_floor(
-    case tg_table_name when 'order_stores' then new.order_id else new.id end);
+  -- Branched with IF rather than CASE: plpgsql resolves every field reference
+  -- in an expression before it picks a branch, so `new.order_id` inside a CASE
+  -- is looked up on the orders row too, where there is no such column.
+  if tg_table_name = 'order_stores' then
+    perform apply_delivery_fee_floor(new.order_id);
+  else
+    perform apply_delivery_fee_floor(new.id);
+  end if;
   return new;
 end;
 $$;
