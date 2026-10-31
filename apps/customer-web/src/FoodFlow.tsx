@@ -540,6 +540,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
           menuItems={menuItems}
           menuCat={menuCat} setMenuCat={setMenuCat}
           menuSearch={menuSearch} setMenuSearch={setMenuSearch}
+          // The arrow over the hero leaves the merchant altogether.
           onBack={
             !shopMode ? () => setOpenStoreId(null)
               // Inside a shelf or a department, back is one step out. Standing
@@ -549,6 +550,15 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
               : (!browsingShelves || openDept) ? backToShelves
                 : hasBothKinds ? () => setShopKind(null) : null
           }
+          // The worded button beside a category heading stays inside the store.
+          // In a restaurant that means dropping the category and the search to
+          // land back on the full menu — the merchant's own front page, not the
+          // list of merchants.
+          onStepBack={
+            shopMode ? backToShelves
+              : () => { setMenuSearch(''); setMenuCat(''); }
+          }
+          tabbed={!shopMode}
           onAdd={(it) => addToCart(openStore, it)}
           onCustomize={(id) => setCustomizingId(id)}
         />
@@ -901,7 +911,7 @@ export function FoodFlow({ mode = 'food' }: { mode?: 'food' | 'shop' } = {}) {
 }
 
 /** Restaurant detail: hero, info card, category tabs, 2-column menu grid. */
-function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, openShelf, deptLabel, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onAdd, onCustomize }: {
+function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, openShelf, deptLabel, kindLabel, onChangeKind, fees, menuLoading, menuItems, menuCat, setMenuCat, menuSearch, setMenuSearch, onBack, onStepBack, tabbed, onAdd, onCustomize }: {
   store: Store;
   /** The categories to tab through — narrowed to one half inside the own shop. */
   categories?: Category[];
@@ -923,8 +933,20 @@ function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, open
   menuItems: MenuItem[];
   menuCat: string; setMenuCat: (c: string) => void;
   menuSearch: string; setMenuSearch: (s: string) => void;
-  /** Null when there is nowhere to go back to — the shop is its own service. */
+  /**
+   * Leaving the store altogether — the arrow over the hero. Null when there is
+   * nowhere to go back to, because the shop is its own service.
+   */
   onBack: (() => void) | null;
+  /**
+   * One step back *inside* the store — the worded button beside a category
+   * heading. A different thing from the arrow, and it used to be the same one:
+   * both ran onBack, so tapping "Back" under a restaurant's category threw the
+   * customer out of the restaurant instead of back to its menu.
+   */
+  onStepBack?: (() => void) | null;
+  /** A menu skimmed across with tabs (a restaurant) rather than walked through. */
+  tabbed?: boolean;
   onAdd: (it: MenuItem) => void;
   onCustomize: (id: string) => void;
 }) {
@@ -1013,7 +1035,7 @@ function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, open
           {deptLabel && (
             <div className="flex items-center gap-2">
               <h3 className="min-w-0 flex-1 truncate text-lg font-black">{deptLabel}</h3>
-              <button onClick={onBack ?? undefined}
+              <button onClick={onStepBack ?? onBack ?? undefined}
                 className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm ring-1 ring-black/5">
                 All departments
               </button>
@@ -1053,15 +1075,20 @@ function StoreDetail({ store, categories, shelves, shelfCount, onPickShelf, open
           {openShelf && (
             <div className="flex items-center gap-2">
               <h3 className="min-w-0 flex-1 truncate text-lg font-black">{openShelf.title}</h3>
-              <button onClick={onBack ?? undefined}
+              <button onClick={onStepBack ?? onBack ?? undefined}
                 className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-purple shadow-sm ring-1 ring-black/5">
                 Back
               </button>
             </div>
           )}
 
-          {/* Category tabs — a restaurant's menu is short enough to skim across. */}
-          {!openShelf && (categories ?? store.categories).length > 0 && (
+          {/* Category tabs — a restaurant's menu is short enough to skim across.
+              They stay on screen while a category is picked, because picking one
+              is a filter and not a room you walked into: hiding them left the
+              worded "Back" button as the only way off a category, and that
+              button was leaving the restaurant. The shop still hides them, where
+              a shelf really is somewhere you went. */}
+          {(tabbed || !openShelf) && (categories ?? store.categories).length > 0 && (
             <div className="-mx-1 flex gap-4 overflow-x-auto border-b border-black/10 px-1">
               <CatTab active={menuCat === ''} onClick={() => setMenuCat('')}>Popular</CatTab>
               {(categories ?? store.categories).map((c) => (
